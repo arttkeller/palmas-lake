@@ -7,7 +7,7 @@ class MetaService:
     def __init__(self):
         self.access_token = os.environ.get("META_ACCESS_TOKEN")
         self.phone_number_id = os.environ.get("META_PHONE_NUMBER_ID")
-        self.base_url = "https://graph.facebook.com/v21.0"
+        self.base_url = "https://graph.facebook.com/v24.0"
 
     def send_whatsapp_message(self, to: str, text: str):
         """Send a text message via Meta WhatsApp Business API."""
