@@ -20,29 +20,30 @@ analytics_cache_service.setup_background_processing()
 # Comando especial para limpar dados de teste
 CLEAR_COMMAND = "#apagar"
 
-async def handle_clear_command(remote_jid: str) -> bool:
+async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") -> bool:
     """
     Limpa todos os dados do lead para facilitar testes.
     Apaga: lead, conversas, mensagens, eventos.
+    Suporta WhatsApp (phone) e Instagram (ig:<igsid>).
     """
     try:
         from services.supabase_client import create_client
         supabase = create_client()
         
-        # Extrair telefone do JID
-        phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+        is_instagram = lead_identifier.startswith("ig:")
         
-        print(f"🗑️ [CLEAR] Iniciando limpeza para: {phone}")
-        
-        # 1. Buscar o lead pelo telefone
-        lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
+        if is_instagram:
+            ig_id = lead_identifier[3:]
+            print(f"🗑️ [CLEAR] Iniciando limpeza para Instagram IGSID: {ig_id}")
+            lead_res = supabase.table("leads").select("id").eq("instagram_id", ig_id).execute()
+        else:
+            phone = lead_identifier.split('@')[0] if '@' in lead_identifier else lead_identifier
+            print(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone}")
+            lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
         
         if not lead_res.data:
-            print(f"🗑️ [CLEAR] Lead não encontrado para {phone}")
-            # Enviar mensagem de confirmação mesmo assim
-            uazapi_service = UazapiService()
-            uazapi_service.send_whatsapp_message(
-                remote_jid, 
+            print(f"🗑️ [CLEAR] Lead não encontrado para {lead_identifier}")
+            _send_clear_response(lead_identifier, channel,
                 "✅ Nenhum dado encontrado para limpar. Você pode começar uma nova conversa!"
             )
             return True
@@ -55,11 +56,9 @@ async def handle_clear_command(remote_jid: str) -> bool:
         
         if conv_res.data:
             for conv in conv_res.data:
-                # Deletar mensagens da conversa
                 supabase.table("messages").delete().eq("conversation_id", conv["id"]).execute()
                 print(f"🗑️ [CLEAR] Mensagens deletadas da conversa {conv['id']}")
             
-            # Deletar conversas
             supabase.table("conversations").delete().eq("lead_id", lead_id).execute()
             print(f"🗑️ [CLEAR] Conversas deletadas")
         
@@ -74,11 +73,9 @@ async def handle_clear_command(remote_jid: str) -> bool:
         supabase.table("leads").delete().eq("id", lead_id).execute()
         print(f"🗑️ [CLEAR] Lead deletado")
         
-        # 5. Enviar mensagem de confirmação
-        uazapi_service = UazapiService()
-        uazapi_service.send_whatsapp_message(
-            remote_jid, 
-            "✅ *Dados limpos com sucesso!*\n\n"
+        # 5. Enviar mensagem de confirmação pelo canal correto
+        _send_clear_response(lead_identifier, channel,
+            "✅ Dados limpos com sucesso!\n\n"
             "Todos os seus dados foram apagados:\n"
             "• Lead removido\n"
             "• Conversas apagadas\n"
@@ -86,7 +83,7 @@ async def handle_clear_command(remote_jid: str) -> bool:
             "Envie qualquer mensagem para começar uma nova conversa de teste!"
         )
         
-        print(f"🗑️ [CLEAR] Limpeza concluída para {phone}")
+        print(f"🗑️ [CLEAR] Limpeza concluída para {lead_identifier}")
         return True
         
     except Exception as e:
@@ -94,17 +91,22 @@ async def handle_clear_command(remote_jid: str) -> bool:
         traceback.print_exc()
         print(f"🗑️ [CLEAR] Erro na limpeza: {e}")
         
-        # Tentar enviar mensagem de erro
         try:
-            uazapi_service = UazapiService()
-            uazapi_service.send_whatsapp_message(
-                remote_jid, 
-                f"❌ Erro ao limpar dados: {str(e)}"
-            )
+            _send_clear_response(lead_identifier, channel, f"❌ Erro ao limpar dados: {str(e)}")
         except:
             pass
             
         return False
+
+
+def _send_clear_response(lead_identifier: str, channel: str, message: str):
+    """Envia resposta do comando #apagar pelo canal correto."""
+    if channel == "instagram":
+        recipient_id = lead_identifier[3:] if lead_identifier.startswith("ig:") else lead_identifier
+        meta_service.send_instagram_message(recipient_id, message)
+    else:
+        uazapi_svc = UazapiService()
+        uazapi_svc.send_whatsapp_message(lead_identifier, message)
 
 @router.post("/webhook/uazapi")
 async def handle_uazapi_webhook(request: Request):
@@ -261,6 +263,12 @@ async def handle_webhook(request: Request):
                 # Use ig: prefix to differentiate Instagram leads from WhatsApp
                 lead_identifier = f"ig:{sender_id}"
                 print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
+
+                # Verificar comando especial #apagar
+                if text.strip().lower() == CLEAR_COMMAND:
+                    print(f"🗑️ [CLEAR] Comando de limpeza recebido de {lead_identifier} (Instagram)")
+                    await handle_clear_command(lead_identifier, channel="instagram")
+                    continue
 
                 # Fetch Instagram profile (name + username) for the sender
                 ig_profile = meta_service.get_instagram_profile(sender_id)
