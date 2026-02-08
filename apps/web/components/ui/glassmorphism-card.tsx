@@ -30,38 +30,38 @@ export interface GlassmorphismCardProps extends React.HTMLAttributes<HTMLDivElem
 
 /**
  * Variant-specific styles for glassmorphism cards
- * Supports both light and dark themes
+ * Supports light theme
  * 
  * Requirements: 5.1, 5.5
  */
 const VARIANT_STYLES: Record<GlassmorphismVariant, string> = {
   default: cn(
     // Light theme
-    'bg-white/70 dark:bg-white/5',
+    'bg-white/70',
     'backdrop-blur-xl',
-    'border border-white/30 dark:border-white/10',
-    'shadow-lg shadow-black/5 dark:shadow-black/20'
+    'border border-white/30',
+    'shadow-lg shadow-black/5'
   ),
   elevated: cn(
     // More prominent glassmorphism
-    'bg-white/80 dark:bg-white/10',
+    'bg-white/80',
     'backdrop-blur-2xl',
-    'border border-white/40 dark:border-white/15',
-    'shadow-xl shadow-black/10 dark:shadow-black/30'
+    'border border-white/40',
+    'shadow-xl shadow-black/10'
   ),
   subtle: cn(
     // Lighter glassmorphism effect
-    'bg-white/50 dark:bg-white/[0.03]',
+    'bg-white/50',
     'backdrop-blur-lg',
-    'border border-white/20 dark:border-white/5',
-    'shadow-md shadow-black/[0.03] dark:shadow-black/10'
+    'border border-white/20',
+    'shadow-md shadow-black/[0.03]'
   ),
   solid: cn(
     // More opaque, less glass effect
-    'bg-white/90 dark:bg-gray-900/90',
+    'bg-white/90',
     'backdrop-blur-xl',
-    'border border-white/50 dark:border-white/10',
-    'shadow-xl shadow-black/10 dark:shadow-black/30'
+    'border border-white/50',
+    'shadow-xl shadow-black/10'
   ),
 };
 
@@ -69,9 +69,9 @@ const VARIANT_STYLES: Record<GlassmorphismVariant, string> = {
  * Hover state styles
  */
 const HOVER_STYLES = cn(
-  'hover:shadow-xl hover:shadow-black/10 dark:hover:shadow-black/40',
+  'hover:shadow-xl hover:shadow-black/10:shadow-black/40',
   'hover:-translate-y-0.5',
-  'hover:border-white/40 dark:hover:border-white/20',
+  'hover:border-white/40:border-white/20',
   'transition-all duration-300 ease-out'
 );
 
@@ -79,15 +79,15 @@ const HOVER_STYLES = cn(
  * Active state styles
  */
 const ACTIVE_STYLES = cn(
-  'ring-2 ring-emerald-500/50 dark:ring-emerald-400/50',
-  'border-emerald-300/50 dark:border-emerald-500/30'
+  'ring-2 ring-emerald-500/50',
+  'border-emerald-300/50'
 );
 
 /**
  * GlassmorphismCard Component
  * 
  * A reusable card component with glassmorphism styling that supports
- * both light and dark themes. Provides consistent visual design across
+ * light theme. Provides consistent visual design across
  * the application.
  * 
  * Requirements: 5.1, 5.5
@@ -189,7 +189,7 @@ export const GlassmorphismCardTitle = React.forwardRef<
     ref={ref}
     className={cn(
       'text-lg font-semibold leading-none tracking-tight',
-      'text-gray-900 dark:text-white',
+      'text-gray-900',
       className
     )}
     {...props}
@@ -208,7 +208,7 @@ export const GlassmorphismCardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn('text-sm text-gray-500 dark:text-gray-400', className)}
+    className={cn('text-sm text-gray-500', className)}
     {...props}
   />
 ));
@@ -240,7 +240,7 @@ export const GlassmorphismCardFooter = React.forwardRef<
     ref={ref}
     className={cn(
       'flex items-center p-4 md:p-6 pt-0',
-      'border-t border-black/5 dark:border-white/5',
+      'border-t border-black/5',
       className
     )}
     {...props}

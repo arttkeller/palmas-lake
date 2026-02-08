@@ -63,15 +63,6 @@ const LIGHT_THEME_PATTERNS = [
 ];
 
 /**
- * Dark theme class patterns that should be present
- */
-const DARK_THEME_PATTERNS = [
-  /dark:bg-/,                // Dark mode background
-  /dark:border-/,            // Dark mode border
-  /dark:shadow-/,            // Dark mode shadow (optional)
-];
-
-/**
  * Backdrop blur patterns for glassmorphism effect
  */
 const BACKDROP_PATTERNS = [
@@ -87,8 +78,7 @@ describe('GlassmorphismCard - Property Tests', () => {
    * **Feature: lead-filters-tags-system, Property 10: Theme Classes Applied Consistently**
    * **Validates: Requirements 5.5**
    * 
-   * For any theme change (light/dark), all glassmorphism components must have 
-   * the appropriate theme-specific CSS classes applied.
+   * All glassmorphism components must have the appropriate light theme CSS classes applied.
    */
   describe('Property 10: Theme Classes Applied Consistently', () => {
     it('should always include light theme background classes for any variant', () => {
@@ -103,24 +93,6 @@ describe('GlassmorphismCard - Property Tests', () => {
             // Assert: Contains light theme background pattern
             const hasLightBg = LIGHT_THEME_PATTERNS.some(pattern => pattern.test(classes));
             expect(hasLightBg).toBe(true);
-          }
-        ),
-        { numRuns: 100 }
-      );
-    });
-
-    it('should always include dark theme classes for any variant', () => {
-      fc.assert(
-        fc.property(
-          variantArb,
-          optionsArb,
-          (variant, options) => {
-            // Act: Get glassmorphism classes
-            const classes = getGlassmorphismClasses(variant, options);
-
-            // Assert: Contains dark theme pattern
-            const hasDarkClasses = DARK_THEME_PATTERNS.some(pattern => pattern.test(classes));
-            expect(hasDarkClasses).toBe(true);
           }
         ),
         { numRuns: 100 }
@@ -261,7 +233,7 @@ describe('GlassmorphismCard - Property Tests', () => {
       );
     });
 
-    it('should include both light and dark border classes for theme consistency', () => {
+    it('should include light border classes for theme consistency', () => {
       fc.assert(
         fc.property(
           variantArb,
@@ -269,12 +241,10 @@ describe('GlassmorphismCard - Property Tests', () => {
             // Act: Get glassmorphism classes
             const classes = getGlassmorphismClasses(variant);
 
-            // Assert: Has both light and dark border classes
+            // Assert: Has light border classes
             const hasLightBorder = /border-white\/\d+/.test(classes) || /border/.test(classes);
-            const hasDarkBorder = /dark:border-/.test(classes);
             
             expect(hasLightBorder).toBe(true);
-            expect(hasDarkBorder).toBe(true);
           }
         ),
         { numRuns: 100 }

@@ -162,7 +162,7 @@ export default function ConversionFunnel({ data }: ConversionFunnelProps) {
                             </SelectTrigger>
                             <SelectContent align="end">
                                 {Object.values(PERIODS).map((period) => (
-                                    <SelectItem key={period.key} value={period.key} className="text-gray-900 dark:text-white">
+                                    <SelectItem key={period.key} value={period.key} className="text-gray-900">
                                         {period.label}
                                     </SelectItem>
                                 ))}
@@ -187,7 +187,7 @@ export default function ConversionFunnel({ data }: ConversionFunnelProps) {
                                             <div className="flex flex-col gap-2">
                                                 <div className="text-sm font-medium text-gray-500">{stage.label}</div>
                                                 <div className="flex items-center gap-2.5">
-                                                    <span className="text-2xl font-semibold leading-none text-gray-900 dark:text-white">{value.toLocaleString()}</span>
+                                                    <span className="text-2xl font-semibold leading-none text-gray-900">{value.toLocaleString()}</span>
                                                     <span
                                                         className={cn(
                                                             'inline-flex items-center gap-1 text-xs font-medium',
@@ -431,7 +431,7 @@ export default function ConversionFunnel({ data }: ConversionFunnelProps) {
                         <div className="h-[400px] w-full flex items-center justify-center">
                             <div className="text-center space-y-3">
                                 <FunnelIcon size={48} className="mx-auto text-gray-300" />
-                                <div className="text-gray-500 dark:text-gray-400">
+                                <div className="text-gray-500">
                                     <p className="text-lg font-medium">Sem dados de histórico disponíveis</p>
                                     <p className="text-sm">Os dados do funil serão exibidos quando houver histórico de leads.</p>
                                 </div>

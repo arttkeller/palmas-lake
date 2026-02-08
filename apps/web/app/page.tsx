@@ -45,7 +45,7 @@ export default function Home() {
       </div>
 
       {/* Navigation */}
-      <nav className="fixed top-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-8 rounded-full border border-white/20 bg-white/40 px-8 py-3 backdrop-blur-md dark:bg-black/40">
+      <nav className="fixed top-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-8 rounded-full border border-white/20 bg-white/40 px-8 py-3 backdrop-blur-md">
         <span className="font-display text-lg font-bold tracking-widest">PALMAS LAKE</span>
         <div className="hidden items-center gap-6 text-sm font-medium md:flex">
           <a href="#" className="transition-colors hover:text-primary">O Empreendimento</a>

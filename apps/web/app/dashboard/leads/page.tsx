@@ -346,8 +346,8 @@ export default function LeadsPage() {
             {/* Header with Glassmorphism */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">Leads</h1>
-                    <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
+                    <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Leads</h1>
+                    <p className="text-gray-500 text-sm mt-1">
                         Acompanhe todos os leads em tempo real
                     </p>
                 </div>
@@ -377,10 +377,10 @@ export default function LeadsPage() {
                         placeholder="Buscar por nome, telefone ou email..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10 rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur-xl border-white/20 dark:border-white/10"
+                        className="pl-10 rounded-xl bg-white/70 backdrop-blur-xl border-white/20"
                     />
                 </div>
-                <Badge variant="secondary" className="text-sm rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm">
+                <Badge variant="secondary" className="text-sm rounded-full bg-white/60 backdrop-blur-sm">
                     {filteredLeads.length} leads
                 </Badge>
             </div>
@@ -389,26 +389,26 @@ export default function LeadsPage() {
             <GlassmorphismCard variant="default" className="overflow-hidden">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-white/50 dark:bg-white/5 border-b border-white/20 dark:border-white/10">
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Nome</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Canal</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Status</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Interesse</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Temperatura</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Data</TableHead>
-                            <TableHead className="font-semibold text-gray-900 dark:text-white">Sentimento</TableHead>
+                        <TableRow className="bg-white/50 border-b border-white/20">
+                            <TableHead className="font-semibold text-gray-900">Nome</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Canal</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Status</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Interesse</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Temperatura</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Data</TableHead>
+                            <TableHead className="font-semibold text-gray-900">Sentimento</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                                     Carregando leads...
                                 </TableCell>
                             </TableRow>
                         ) : filteredLeads.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500 dark:text-gray-400">
+                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                                     Nenhum lead encontrado
                                 </TableCell>
                             </TableRow>
@@ -416,14 +416,14 @@ export default function LeadsPage() {
                             filteredLeads.map((lead) => (
                                 <TableRow
                                     key={lead.id}
-                                    className="hover:bg-white/50 dark:hover:bg-white/5 cursor-pointer transition-colors border-b border-white/10 dark:border-white/5"
+                                    className="hover:bg-white/50:bg-white/5 cursor-pointer transition-colors border-b border-white/10"
                                     onClick={() => handleLeadClick(lead)}
                                 >
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-gray-900 dark:text-white">{lead.name}</span>
+                                            <span className="font-medium text-gray-900">{lead.name}</span>
                                             {lead.phone && (
-                                                <span className="text-xs text-gray-500 dark:text-gray-400">{lead.phone}</span>
+                                                <span className="text-xs text-gray-500">{lead.phone}</span>
                                             )}
                                         </div>
                                     </TableCell>
@@ -443,7 +443,7 @@ export default function LeadsPage() {
                                         />
                                     </TableCell>
                                     <TableCell>
-                                        <span className="text-sm text-gray-900 dark:text-white">
+                                        <span className="text-sm text-gray-900">
                                             {lead.created_at
                                                 ? new Date(lead.created_at).toLocaleDateString('pt-BR')
                                                 : '-'
@@ -461,7 +461,7 @@ export default function LeadsPage() {
             </GlassmorphismCard>
 
             {/* Footer info */}
-            <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-center text-sm text-gray-500">
                 ✨ Sentimento analisado automaticamente por IA • Atualização em tempo real
             </p>
 

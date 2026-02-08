@@ -48,9 +48,9 @@ function getBubbleStyleClass(senderType: SenderType): string {
     case 'user':
       return 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-br-md shadow-emerald-500/25';
     case 'ai':
-      return 'bg-purple-100/80 dark:bg-purple-500/20 text-purple-900 dark:text-purple-100 border border-purple-200/50 dark:border-purple-500/30 rounded-br-md backdrop-blur-sm';
+      return 'bg-purple-100/80 text-purple-900 border border-purple-200/50 rounded-br-md backdrop-blur-sm';
     case 'lead':
-      return 'bg-white/80 dark:bg-white/10 text-gray-900 dark:text-white border border-white/50 dark:border-white/10 rounded-bl-md backdrop-blur-xl shadow-black/5';
+      return 'bg-white/80 text-gray-900 border border-white/50 rounded-bl-md backdrop-blur-xl shadow-black/5';
   }
 }
 

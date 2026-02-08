@@ -82,8 +82,8 @@ export function RealtimeStatusIndicator({
         <div
             className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium',
-                'bg-white/80 dark:bg-neutral-800/80 backdrop-blur-sm',
-                'border border-gray-200 dark:border-neutral-700',
+                'bg-white/80 backdrop-blur-sm',
+                'border border-gray-200',
                 'shadow-sm',
                 className
             )}
@@ -110,7 +110,7 @@ export function RealtimeStatusIndicator({
 
             {showLabel && (
                 <span className={cn(
-                    status === 'connected' ? 'text-emerald-700 dark:text-emerald-400' : 'text-gray-600 dark:text-gray-400'
+                    status === 'connected' ? 'text-emerald-700' : 'text-gray-600'
                 )}>
                     {config.label}
                 </span>

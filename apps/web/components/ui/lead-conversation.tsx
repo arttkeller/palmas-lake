@@ -364,8 +364,8 @@ export function LeadConversationPreview({
           className={cn(
             'text-xs p-2 rounded-lg',
             message.sender_type === 'lead'
-              ? 'bg-gray-100 dark:bg-gray-800'
-              : 'bg-emerald-50 dark:bg-emerald-900/20 ml-4'
+              ? 'bg-gray-100'
+              : 'bg-emerald-50 ml-4'
           )}
         >
           <span className="font-medium">

@@ -171,8 +171,8 @@ function TagBadge({ tag, categoryConfig }: TagBadgeProps) {
     <div
       className={cn(
         'inline-flex items-center gap-2 px-3 py-1.5',
-        'bg-white/60 dark:bg-white/5 backdrop-blur-sm',
-        'border border-white/30 dark:border-white/10',
+        'bg-white/60 backdrop-blur-sm',
+        'border border-white/30',
         'rounded-xl',
         'text-sm'
       )}
@@ -202,8 +202,8 @@ function TagBadge({ tag, categoryConfig }: TagBadgeProps) {
         className={cn(
           'text-[10px] px-1.5 py-0.5 rounded-full font-medium',
           tag.createdBy === 'ai'
-            ? 'bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400'
-            : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+            ? 'bg-violet-100 text-violet-600'
+            : 'bg-emerald-100 text-emerald-600'
         )}
       >
         {tag.createdBy === 'ai' ? 'IA' : 'Manual'}
@@ -235,7 +235,7 @@ function ConfidenceIndicator({ confidence }: ConfidenceIndicatorProps) {
   return (
     <div className="flex items-center gap-1">
       {/* Mini progress bar */}
-      <div className="w-8 h-1.5 bg-black/10 dark:bg-white/10 rounded-full overflow-hidden">
+      <div className="w-8 h-1.5 bg-black/10 rounded-full overflow-hidden">
         <div
           className={cn('h-full rounded-full transition-all', getColorClass())}
           style={{ width: `${percentage}%` }}

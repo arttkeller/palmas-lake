@@ -92,8 +92,8 @@ export function TemperatureBadge({
       className={cn(
         // Base glassmorphism styles
         'inline-flex items-center gap-1',
-        'bg-white/50 dark:bg-white/10 backdrop-blur-xl',
-        'border border-white/30 dark:border-white/10',
+        'bg-white/50 backdrop-blur-xl',
+        'border border-white/30',
         'shadow-sm',
         // Size-specific styles
         sizeConfig.container,

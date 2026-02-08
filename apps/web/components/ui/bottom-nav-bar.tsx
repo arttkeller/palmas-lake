@@ -15,7 +15,7 @@ export type { NavItem };
 export { navigationItems };
 
 // Static className for nav to prevent hydration mismatch
-const NAV_CLASS_NAME = "w-full md:w-fit mx-auto px-2 md:px-4 py-2 md:py-3 rounded-none md:rounded-3xl bg-card/90 dark:bg-card/80 backdrop-blur-lg border-t md:border border-border/80 shadow-lg md:shadow-xl relative";
+const NAV_CLASS_NAME = "w-full md:w-fit mx-auto px-2 md:px-4 py-2 md:py-3 rounded-none md:rounded-3xl bg-card/90 backdrop-blur-lg border-t md:border border-border/80 shadow-lg md:shadow-xl relative";
 
 // Animation variants
 const itemVariants: Variants = {

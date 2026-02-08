@@ -607,7 +607,7 @@ export default function LeadsKanban() {
             {/* Header com Glassmorphism */}
             <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
                 <div>
-                    <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-400 bg-clip-text text-transparent">
+                    <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
                         Pipeline de Vendas
                     </h1>
                     <p className="text-muted-foreground text-sm mt-1">
@@ -630,12 +630,12 @@ export default function LeadsKanban() {
                             placeholder="Buscar por nome ou telefone..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-9 pr-8 w-64 h-10 text-sm rounded-xl bg-white/70 dark:bg-white/5 backdrop-blur-xl border-white/20 dark:border-white/10 shadow-lg shadow-black/5"
+                            className="pl-9 pr-8 w-64 h-10 text-sm rounded-xl bg-white/70 backdrop-blur-xl border-white/20 shadow-lg shadow-black/5"
                         />
                         {searchTerm && (
                             <button
                                 onClick={() => setSearchTerm('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-black/5 dark:hover:bg-white/10 rounded-lg transition-colors"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-black/5:bg-white/10 rounded-lg transition-colors"
                             >
                                 <X className="w-3 h-3 text-muted-foreground" />
                             </button>
@@ -651,7 +651,7 @@ export default function LeadsKanban() {
 
             {/* Subtle refresh indicator — never blocks content */}
             {isRefreshing && !loading && (
-                <div className="w-full overflow-hidden rounded-full h-0.5 bg-emerald-100 dark:bg-emerald-900/30">
+                <div className="w-full overflow-hidden rounded-full h-0.5 bg-emerald-100">
                     <div className="h-full bg-emerald-500 animate-pulse rounded-full" style={{ width: '60%' }} />
                 </div>
             )}
@@ -665,8 +665,8 @@ export default function LeadsKanban() {
                 </div>
             ) : error ? (
                 <div className="flex-1 flex flex-col items-center justify-center">
-                    <div className="bg-red-50 dark:bg-red-500/10 rounded-2xl p-6 text-center">
-                        <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+                    <div className="bg-red-50 rounded-2xl p-6 text-center">
+                        <p className="text-red-600 mb-4">{error}</p>
                         <Button variant="outline" onClick={() => fetchLeads()} className="rounded-xl">
                             Tentar Novamente
                         </Button>
@@ -693,14 +693,14 @@ export default function LeadsKanban() {
                                         <div className={cn(
                                             "w-3 h-3 rounded-full",
                                             column.color,
-                                            "ring-4 ring-white/50 dark:ring-white/20"
+                                            "ring-4 ring-white/50"
                                         )} />
                                         <h3 className="font-semibold text-sm text-foreground">
                                             {column.title}
                                         </h3>
                                         <Badge 
                                             variant="secondary" 
-                                            className="px-2 py-0.5 h-5 text-[10px] font-semibold rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border-0"
+                                            className="px-2 py-0.5 h-5 text-[10px] font-semibold rounded-full bg-white/60 backdrop-blur-sm border-0"
                                         >
                                             {column.leads.length}
                                         </Badge>
@@ -747,7 +747,7 @@ export default function LeadsKanban() {
                                                         />
                                                         {/* Legacy isHot indicator - shown only if no temperature classification */}
                                                         {!lead.temperature && lead.isHot && (
-                                                            <div className="p-1 bg-orange-100 dark:bg-orange-500/20 rounded-lg">
+                                                            <div className="p-1 bg-orange-100 rounded-lg">
                                                                 <Flame className="w-3 h-3 text-orange-500" />
                                                             </div>
                                                         )}
@@ -757,49 +757,49 @@ export default function LeadsKanban() {
                                                 {/* Details */}
                                                 <div className="space-y-2">
                                                     {lead.phone && (
-                                                        <div className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-gray-800 to-gray-900 dark:from-gray-700 dark:to-gray-800 p-2.5 rounded-xl">
+                                                        <div className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-gray-800 to-gray-900 p-2.5 rounded-xl">
                                                             <Phone className="w-3.5 h-3.5" />
                                                             <span>{lead.phone}</span>
                                                         </div>
                                                     )}
                                                     {lead.interestType && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-blue-100 dark:bg-blue-500/20 rounded-lg">
-                                                                <Home className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                                                            <div className="p-1.5 bg-blue-100 rounded-lg">
+                                                                <Home className="w-3 h-3 text-blue-600" />
                                                             </div>
                                                             <span>{lead.interest}</span>
                                                         </div>
                                                     )}
                                                     {lead.objective && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-violet-100 dark:bg-violet-500/20 rounded-lg">
-                                                                <Target className="w-3 h-3 text-violet-600 dark:text-violet-400" />
+                                                            <div className="p-1.5 bg-violet-100 rounded-lg">
+                                                                <Target className="w-3 h-3 text-violet-600" />
                                                             </div>
                                                             <span>{lead.objective === 'morar' ? 'Morar' : lead.objective === 'investir' ? 'Investir' : 'Morar + Investir'}</span>
                                                         </div>
                                                     )}
                                                     {lead.purchaseTimeline && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-green-100 dark:bg-green-500/20 rounded-lg">
-                                                                <Calendar className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                                            <div className="p-1.5 bg-green-100 rounded-lg">
+                                                                <Calendar className="w-3 h-3 text-green-600" />
                                                             </div>
                                                             <span>{lead.purchaseTimeline}</span>
                                                         </div>
                                                     )}
                                                     {lead.cityOrigin && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-gray-100 dark:bg-gray-500/20 rounded-lg">
-                                                                <MapPin className="w-3 h-3 text-gray-600 dark:text-gray-400" />
+                                                            <div className="p-1.5 bg-gray-100 rounded-lg">
+                                                                <MapPin className="w-3 h-3 text-gray-600" />
                                                             </div>
                                                             <span>{lead.cityOrigin}</span>
                                                         </div>
                                                     )}
                                                     {lead.budget && (
                                                         <div className="flex items-center gap-2 text-xs">
-                                                            <div className="p-1.5 bg-emerald-100 dark:bg-emerald-500/20 rounded-lg">
-                                                                <DollarSign className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                                            <div className="p-1.5 bg-emerald-100 rounded-lg">
+                                                                <DollarSign className="w-3 h-3 text-emerald-600" />
                                                             </div>
-                                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">{lead.budget}</span>
+                                                            <span className="font-bold text-emerald-600">{lead.budget}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -809,8 +809,8 @@ export default function LeadsKanban() {
                                                     <div className={cn(
                                                         "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold",
                                                         lead.objective === 'investir'
-                                                            ? "bg-gradient-to-r from-amber-100 to-yellow-100 dark:from-amber-500/20 dark:to-yellow-500/20 text-amber-800 dark:text-amber-300 border border-amber-300/50 dark:border-amber-500/30"
-                                                            : "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-500/20"
+                                                            ? "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 border border-amber-300/50"
+                                                            : "bg-blue-50 text-blue-700 border border-blue-200/50"
                                                     )}>
                                                         {lead.objective === 'investir' ? (
                                                             <>💰 Investidor — Atendimento Prioritário</>
@@ -823,13 +823,13 @@ export default function LeadsKanban() {
                                                 )}
 
                                                 {/* Footer */}
-                                                <div className="flex items-center justify-between pt-3 border-t border-black/5 dark:border-white/5">
+                                                <div className="flex items-center justify-between pt-3 border-t border-black/5">
                                                     <div className="flex flex-wrap gap-1.5">
                                                         {lead.tags?.slice(0, 2).map(tag => (
                                                             <Badge 
                                                                 key={tag} 
                                                                 variant="outline" 
-                                                                className="text-[10px] h-5 px-2 rounded-full bg-white/50 dark:bg-white/5 backdrop-blur-sm border-black/10 dark:border-white/10 font-medium"
+                                                                className="text-[10px] h-5 px-2 rounded-full bg-white/50 backdrop-blur-sm border-black/10 font-medium"
                                                             >
                                                                 {tag}
                                                             </Badge>
@@ -840,7 +840,7 @@ export default function LeadsKanban() {
                                             </div>
                                         </GlassmorphismCard>
                                     )) : (
-                                        <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-black/10 dark:border-white/10 rounded-xl text-muted-foreground/50 bg-white/30 dark:bg-white/5 backdrop-blur-sm">
+                                        <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-black/10 rounded-xl text-muted-foreground/50 bg-white/30 backdrop-blur-sm">
                                             <span className="text-xs">Nenhum lead nesta etapa</span>
                                         </div>
                                     )}
@@ -935,7 +935,7 @@ export default function LeadsKanban() {
                                 {/* Conversation Summary */}
                                 {conversationSummary && (
                                     <LeadDetailModalSection title="Resumo da Conversa" className="mt-4">
-                                        <p className="text-sm text-foreground/80 leading-relaxed bg-blue-50/50 dark:bg-blue-500/5 border border-blue-100 dark:border-blue-500/10 rounded-lg p-3">
+                                        <p className="text-sm text-foreground/80 leading-relaxed bg-blue-50/50 border border-blue-100 rounded-lg p-3">
                                             {conversationSummary}
                                         </p>
                                     </LeadDetailModalSection>

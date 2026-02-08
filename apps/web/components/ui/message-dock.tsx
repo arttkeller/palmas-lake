@@ -38,7 +38,7 @@ export interface MessageDockProps {
   
   // UI customization
   placeholder?: (characterName: string) => string;
-  theme?: "light" | "dark" | "auto";
+  theme?: "light";
   
   // Advanced settings
   autoFocus?: boolean;
@@ -233,7 +233,7 @@ export function MessageDock({
           width: isExpanded ? expandedWidth : collapsedWidth,
           background: isExpanded && selectedCharacter
             ? `linear-gradient(to right, ${getGradientColors(selectedCharacter)})`
-            : theme === "dark" ? "#1f2937" : "#ffffff",
+            : "#ffffff",
         }}
         transition={enableAnimations ? { 
           type: "spring" as const, 
@@ -395,9 +395,7 @@ export function MessageDock({
                 placeholder={placeholder(selectedCharacter?.name || "")}
                 className={cn(
                   "w-[300px] absolute left-14 right-0 bg-transparent border-none outline-none text-sm font-medium z-50",
-                  theme === "dark" 
-                    ? "text-gray-100 placeholder-gray-400" 
-                    : "text-gray-700 placeholder-gray-600"
+                  "text-gray-700 placeholder-gray-600"
                 )}
                 autoFocus={autoFocus}
                 initial={{ opacity: 0, x: 20 }}
@@ -474,7 +472,7 @@ export function MessageDock({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    className={theme === "dark" ? "text-gray-300" : "text-gray-600"}
+                    className="text-gray-600"
                   >
                     <line x1="3" y1="6" x2="21" y2="6" />
                     <line x1="3" y1="12" x2="21" y2="12" />
@@ -518,7 +516,7 @@ export function MessageDock({
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2"
-                    className={theme === "dark" ? "text-gray-300" : "text-gray-600"}
+                    className="text-gray-600"
                   >
                     <path d="m22 2-7 20-4-9-9-4z" />
                     <path d="M22 2 11 13" />

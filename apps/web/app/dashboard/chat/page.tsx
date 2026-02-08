@@ -378,40 +378,40 @@ export default function ChatPage() {
         <div className="h-full max-w-7xl mx-auto">
             <GlassmorphismCard variant="default" className="flex h-full overflow-hidden">
             {/* Sidebar List */}
-            <div className="w-72 border-r border-white/20 dark:border-white/10 bg-white/30 dark:bg-white/5 backdrop-blur-xl flex flex-col">
-                <div className="p-4 border-b border-white/20 dark:border-white/10">
+            <div className="w-72 border-r border-white/20 bg-white/30 backdrop-blur-xl flex flex-col">
+                <div className="p-4 border-b border-white/20">
                     <input 
                         type="text" 
                         placeholder="Buscar conversas..." 
-                        className="w-full rounded-xl border border-white/30 dark:border-white/10 bg-white/50 dark:bg-white/5 backdrop-blur-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50" 
+                        className="w-full rounded-xl border border-white/30 bg-white/50 backdrop-blur-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50" 
                     />
                 </div>
                 <div className="flex-1 overflow-y-auto">
                     {loading ? (
-                        <div className="p-4 text-gray-500 dark:text-gray-400">Carregando...</div>
+                        <div className="p-4 text-gray-500">Carregando...</div>
                     ) : error ? (
-                        <div className="p-4 text-red-500 dark:text-red-400 text-sm">{error}</div>
+                        <div className="p-4 text-red-500 text-sm">{error}</div>
                     ) : conversations.length === 0 ? (
-                        <div className="p-4 text-gray-500 dark:text-gray-400 text-sm">Nenhuma conversa encontrada</div>
+                        <div className="p-4 text-gray-500 text-sm">Nenhuma conversa encontrada</div>
                     ) : conversations.map((conv) => (
                         <div
                             key={conv.id}
                             onClick={() => setActiveConversation(conv)}
                             className={clsx(
                                 activeConversation?.id === conv.id 
-                                    ? 'bg-emerald-50/80 dark:bg-emerald-500/10 border-l-4 border-emerald-600' 
-                                    : 'hover:bg-white/50 dark:hover:bg-white/5',
+                                    ? 'bg-emerald-50/80 border-l-4 border-emerald-600' 
+                                    : 'hover:bg-white/50:bg-white/5',
                                 'cursor-pointer p-4 transition-colors'
                             )}
                         >
                             <div className="flex justify-between">
-                                <span className="font-medium text-gray-900 dark:text-white">{conv.lead_name}</span>
-                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                <span className="font-medium text-gray-900">{conv.lead_name}</span>
+                                <span className="text-xs text-gray-500">
                                     {conv.updated_at ? new Date(conv.updated_at).toLocaleTimeString('pt-BR', { hour12: false }) : '--:--:--'}
                                 </span>
                             </div>
                             <div className="mt-1 flex justify-between">
-                                <p className="text-sm text-gray-600 dark:text-gray-300 truncate">{conv.last_message}</p>
+                                <p className="text-sm text-gray-600 truncate">{conv.last_message}</p>
                                 {conv.platform === 'whatsapp' ? (
                                     <div className="h-4 w-4 bg-green-500 text-white flex items-center justify-center rounded-full text-[10px]">W</div>
                                 ) : (
@@ -427,37 +427,37 @@ export default function ChatPage() {
             {activeConversation ? (
                 <div className="flex flex-1 flex-col">
                     {/* Header */}
-                    <div className="flex h-16 items-center justify-between border-b border-white/20 dark:border-white/10 px-6 bg-white/50 dark:bg-white/5 backdrop-blur-xl">
+                    <div className="flex h-16 items-center justify-between border-b border-white/20 px-6 bg-white/50 backdrop-blur-xl">
                         <div className="flex items-center space-x-3">
                             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-500/25">
                                 {activeConversation.lead_name?.[0]}
                             </div>
                             <div>
-                                <h3 className="text-sm font-bold text-gray-900 dark:text-white">{activeConversation.lead_name}</h3>
-                                <p className="text-xs text-green-600 dark:text-green-400 flex items-center"><span className="block h-2 w-2 rounded-full bg-green-500 mr-1"></span> Online</p>
+                                <h3 className="text-sm font-bold text-gray-900">{activeConversation.lead_name}</h3>
+                                <p className="text-xs text-green-600 flex items-center"><span className="block h-2 w-2 rounded-full bg-green-500 mr-1"></span> Online</p>
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
                             <RealtimeStatusIndicator />
-                            <Phone className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer transition-colors" />
-                            <MoreVertical className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer transition-colors" />
+                            <Phone className="h-5 w-5 text-gray-400 hover:text-gray-600:text-gray-300 cursor-pointer transition-colors" />
+                            <MoreVertical className="h-5 w-5 text-gray-400 hover:text-gray-600:text-gray-300 cursor-pointer transition-colors" />
                         </div>
                     </div>
 
                     {/* Messages */}
-                    <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-slate-50/50 to-white/30 dark:from-slate-900/50 dark:to-transparent space-y-4">
+                    <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-slate-50/50 to-white/30 space-y-4">
                         {messagesLoading ? (
                             <div className="flex items-center justify-center h-full">
-                                <div className="text-gray-500 dark:text-gray-400">Carregando mensagens...</div>
+                                <div className="text-gray-500">Carregando mensagens...</div>
                             </div>
                         ) : messagesError ? (
                             <div className="flex flex-col items-center justify-center h-full space-y-4">
-                                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 max-w-md text-center">
-                                    <div className="text-red-600 dark:text-red-400 font-medium mb-2">Erro ao carregar mensagens</div>
-                                    <p className="text-sm text-red-500 dark:text-red-300">{messagesError}</p>
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
+                                    <div className="text-red-600 font-medium mb-2">Erro ao carregar mensagens</div>
+                                    <p className="text-sm text-red-500">{messagesError}</p>
                                     <button 
                                         onClick={fetchMessages}
-                                        className="mt-4 px-4 py-2 bg-red-100 dark:bg-red-800/30 hover:bg-red-200 dark:hover:bg-red-800/50 text-red-700 dark:text-red-300 rounded-lg text-sm transition-colors"
+                                        className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200:bg-red-800/50 text-red-700 rounded-lg text-sm transition-colors"
                                     >
                                         Tentar novamente
                                     </button>
@@ -465,7 +465,7 @@ export default function ChatPage() {
                             </div>
                         ) : messages.length === 0 ? (
                             <div className="flex items-center justify-center h-full">
-                                <div className="text-gray-500 dark:text-gray-400">Nenhuma mensagem ainda</div>
+                                <div className="text-gray-500">Nenhuma mensagem ainda</div>
                             </div>
                         ) : (
                             messages.map((msg) => {
@@ -485,10 +485,10 @@ export default function ChatPage() {
                                             msg.sender_type === 'user' 
                                                 ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-br-md shadow-emerald-500/25" 
                                                 : msg.sender_type === 'ai' 
-                                                    ? "bg-purple-100/80 dark:bg-purple-500/20 text-purple-900 dark:text-purple-100 border border-purple-200/50 dark:border-purple-500/30 rounded-br-md backdrop-blur-sm" 
-                                                    : "bg-white/80 dark:bg-white/10 text-gray-900 dark:text-white border border-white/50 dark:border-white/10 rounded-bl-md backdrop-blur-xl shadow-black/5"
+                                                    ? "bg-purple-100/80 text-purple-900 border border-purple-200/50 rounded-br-md backdrop-blur-sm" 
+                                                    : "bg-white/80 text-gray-900 border border-white/50 rounded-bl-md backdrop-blur-xl shadow-black/5"
                                         )}>
-                                            {isAi && <p className="mb-1 text-[10px] uppercase font-bold text-purple-700 dark:text-purple-300">AI Assistant</p>}
+                                            {isAi && <p className="mb-1 text-[10px] uppercase font-bold text-purple-700">AI Assistant</p>}
 
                                             {/* Render Logic based on Type */}
                                             {msg.message_type === 'image' || (msg.message_type as string) === 'carousel' ? (
@@ -503,14 +503,14 @@ export default function ChatPage() {
                                                     )}
                                                     {/* Fallback for carousel indication */}
                                                     {(msg.message_type as string) === 'carousel' && (
-                                                        <div className="mt-2 p-3 bg-white/80 dark:bg-white/10 rounded-xl border border-white/30 dark:border-white/10 shadow-sm backdrop-blur-sm">
+                                                        <div className="mt-2 p-3 bg-white/80 rounded-xl border border-white/30 shadow-sm backdrop-blur-sm">
                                                             <div className="flex items-center gap-2 mb-2">
-                                                                <div className="bg-purple-100 dark:bg-purple-500/20 p-1.5 rounded-full">
-                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600 dark:text-purple-400"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
+                                                                <div className="bg-purple-100 p-1.5 rounded-full">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
                                                                 </div>
-                                                                <span className="text-xs font-bold text-gray-700 dark:text-gray-300">Galeria de Imóveis Enviada</span>
+                                                                <span className="text-xs font-bold text-gray-700">Galeria de Imóveis Enviada</span>
                                                             </div>
-                                                            <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-tight">
+                                                            <p className="text-[11px] text-gray-500 leading-tight">
                                                                 O cliente recebeu um carrossel interativo com fotos e detalhes no WhatsApp.
                                                             </p>
                                                         </div>
@@ -527,7 +527,7 @@ export default function ChatPage() {
                                         
                                         {/* Mostrar reação se existir */}
                                         {reaction && isLead && (
-                                            <div className="absolute -bottom-2 -right-1 bg-white dark:bg-gray-800 rounded-full px-1 py-0.5 shadow-md border border-white/50 dark:border-white/10 text-sm">
+                                            <div className="absolute -bottom-2 -right-1 bg-white rounded-full px-1 py-0.5 shadow-md border border-white/50 text-sm">
                                                 {reaction}
                                             </div>
                                         )}
@@ -541,7 +541,7 @@ export default function ChatPage() {
                     </div>
 
                     {/* Input */}
-                    <div className="border-t border-white/20 dark:border-white/10 p-4 bg-white/50 dark:bg-white/5 backdrop-blur-xl">
+                    <div className="border-t border-white/20 p-4 bg-white/50 backdrop-blur-xl">
                         <div className="flex items-center space-x-2">
                             <input
                                 type="text"
@@ -549,7 +549,7 @@ export default function ChatPage() {
                                 onChange={(e) => setInputText(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                 placeholder="Digite uma mensagem..."
-                                className="flex-1 rounded-full border border-white/30 dark:border-white/10 bg-white/70 dark:bg-white/5 backdrop-blur-sm px-4 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                className="flex-1 rounded-full border border-white/30 bg-white/70 backdrop-blur-sm px-4 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
                             />
                             <button
                                 onClick={handleSendMessage}
@@ -561,7 +561,7 @@ export default function ChatPage() {
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-slate-50/50 to-white/30 dark:from-slate-900/50 dark:to-transparent text-gray-500 dark:text-gray-400">
+                <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-slate-50/50 to-white/30 text-gray-500">
                     Selecione uma conversa para iniciar o chat
                 </div>
             )}

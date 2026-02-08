@@ -47,8 +47,8 @@ function FilterButton({ temperature, isActive, count, onClick }: FilterButtonPro
       className={cn(
         // Base glassmorphism styles
         'px-4 py-2 rounded-xl transition-all duration-200',
-        'bg-white/50 dark:bg-white/5 backdrop-blur-xl',
-        'border border-white/20 dark:border-white/10',
+        'bg-white/50 backdrop-blur-xl',
+        'border border-white/20',
         'hover:scale-105 hover:shadow-lg',
         'flex items-center gap-2',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
@@ -59,7 +59,7 @@ function FilterButton({ temperature, isActive, count, onClick }: FilterButtonPro
           config.bgColor,
         ],
         // Text color
-        isActive ? config.color : 'text-gray-600 dark:text-gray-300'
+        isActive ? config.color : 'text-gray-600'
       )}
       aria-pressed={isActive}
       aria-label={`Filtrar por ${config.label}`}
@@ -81,8 +81,8 @@ function FilterButton({ temperature, isActive, count, onClick }: FilterButtonPro
             'min-w-[1.25rem] h-5 px-1.5 rounded-full text-xs font-semibold',
             'flex items-center justify-center',
             isActive
-              ? 'bg-white/30 dark:bg-white/20'
-              : 'bg-gray-200 dark:bg-gray-700'
+              ? 'bg-white/30'
+              : 'bg-gray-200'
           )}
         >
           {count}
@@ -172,8 +172,8 @@ export function TemperatureFilterBarCompact({
             onClick={() => onFilterChange(config.value)}
             className={cn(
               'p-2 rounded-lg transition-all duration-200',
-              'bg-white/50 dark:bg-white/5 backdrop-blur-xl',
-              'border border-white/20 dark:border-white/10',
+              'bg-white/50 backdrop-blur-xl',
+              'border border-white/20',
               'hover:scale-105',
               'focus:outline-none focus-visible:ring-2',
               isActive && [

@@ -177,8 +177,8 @@ export default function AgendamentosPage() {
             {/* Header com indicador de realtime */}
             <div className="flex items-center justify-between py-2 flex-shrink-0">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900 dark:text-white">Agendamentos</h1>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                    <h1 className="text-xl font-bold text-gray-900">Agendamentos</h1>
+                    <p className="text-xs text-gray-500">
                         Gerencie as visitas agendadas pela Maria e manualmente
                     </p>
                 </div>

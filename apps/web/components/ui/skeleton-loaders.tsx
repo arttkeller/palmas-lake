@@ -55,7 +55,7 @@ export function CardSkeleton({
   return (
     <div
       className={cn(
-        'rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800',
+        'rounded-lg border border-gray-200 bg-white shadow-sm',
         className
       )}
     >
@@ -157,7 +157,7 @@ export function ChartSkeleton({
   return (
     <div
       className={cn(
-        'rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800',
+        'rounded-lg border border-gray-200 bg-white p-4',
         className
       )}
     >
@@ -241,7 +241,7 @@ export function ListSkeleton({
       {Array.from({ length: items }).map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-4 p-4 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
+          className="flex items-center gap-4 p-4 rounded-lg border border-gray-200 bg-white"
         >
           {showAvatar && (
             <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
