@@ -18,11 +18,18 @@ class LeadBase(BaseModel):
     full_name: str
     phone: str
     email: Optional[str] = None
-    status: Optional[str] = 'new'
+    status: Optional[str] = 'novo_lead'
     notes: Optional[str] = None
 
 class LeadCreate(LeadBase):
-    pass
+    source: Optional[str] = None
+    temperature: Optional[str] = None
+    tags: Optional[List[str]] = None
+    conversation_summary: Optional[str] = None
+    interest_type: Optional[str] = None
+    classification_type: Optional[str] = None
+    budget_range: Optional[str] = None
+    city_origin: Optional[str] = None
 
 class Lead(LeadBase):
     id: str

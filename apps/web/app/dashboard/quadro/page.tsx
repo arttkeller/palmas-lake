@@ -17,6 +17,7 @@ import { TemperatureFilterBar } from '@/components/ui/temperature-filter-bar';
 import { LeadDetailModal, LeadDetailModalSection } from '@/components/ui/lead-detail-modal';
 import { LeadTagsSection } from '@/components/ui/lead-tags-section';
 import { LeadConversation } from '@/components/ui/lead-conversation';
+import { NewLeadModal } from '@/components/ui/new-lead-modal';
 import { parseTags } from '@/components/LeadModal';
 import { useLeadFilters, calculateLeadCountsByTemperature } from '@/hooks/useLeadFilters';
 import { useLeadModal } from '@/hooks/useLeadModal';
@@ -77,6 +78,7 @@ export default function LeadsKanban() {
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [allLeadsData, setAllLeadsData] = useState<any[]>([]);
+    const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
     // Stable Supabase client — avoids re-creating on every render
     const supabase = useMemo(() => createClient(), []);
     // Ref to track whether the very first load has completed (not state, so
@@ -642,7 +644,10 @@ export default function LeadsKanban() {
                         )}
                     </div>
                     <RealtimeStatusIndicator />
-                    <Button className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 border-0">
+                    <Button
+                        onClick={() => setIsNewLeadOpen(true)}
+                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 border-0"
+                    >
                         <Plus className="w-4 h-4 mr-2" />
                         Novo Lead
                     </Button>
@@ -961,6 +966,12 @@ export default function LeadsKanban() {
                         isSending={isSendingMessage}
                     />
                 }
+            />
+
+            <NewLeadModal
+                open={isNewLeadOpen}
+                onOpenChange={setIsNewLeadOpen}
+                onLeadCreated={() => fetchLeads()}
             />
         </div>
     );
