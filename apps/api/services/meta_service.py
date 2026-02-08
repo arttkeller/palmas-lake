@@ -7,11 +7,12 @@ class MetaService:
     def __init__(self):
         self.access_token = os.environ.get("META_ACCESS_TOKEN")
         self.phone_number_id = os.environ.get("META_PHONE_NUMBER_ID")
-        self.base_url = "https://graph.facebook.com/v24.0"
+        self.whatsapp_base_url = "https://graph.facebook.com/v24.0"
+        self.instagram_base_url = "https://graph.instagram.com/v24.0"
 
     def send_whatsapp_message(self, to: str, text: str):
         """Send a text message via Meta WhatsApp Business API."""
-        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        url = f"{self.whatsapp_base_url}/{self.phone_number_id}/messages"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
@@ -32,7 +33,10 @@ class MetaService:
 
     def send_instagram_message(self, recipient_id: str, text: str) -> Optional[dict]:
         """
-        Send a text message via Instagram Messaging API (Meta Graph API).
+        Send a text message via Instagram Messaging API.
+        
+        Uses graph.instagram.com (not graph.facebook.com) as required
+        by the Instagram Send API.
         
         Args:
             recipient_id: The Instagram Scoped User ID (IGSID) of the recipient
@@ -41,7 +45,7 @@ class MetaService:
         Returns:
             API response dict on success, None on failure
         """
-        url = f"{self.base_url}/me/messages"
+        url = f"{self.instagram_base_url}/me/messages"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
@@ -52,6 +56,7 @@ class MetaService:
         }
         try:
             print(f"[MetaService] Sending Instagram DM to {recipient_id}: {text[:50]}...")
+            print(f"[MetaService] URL: {url}")
             response = requests.post(url, headers=headers, json=payload)
             print(f"[MetaService] Instagram response: {response.status_code} - {response.text}")
             response.raise_for_status()
