@@ -9,17 +9,57 @@ class MetaService:
         raw_token = os.environ.get("META_ACCESS_TOKEN", "")
         self.access_token = raw_token.strip() if raw_token else ""
         self.phone_number_id = os.environ.get("META_PHONE_NUMBER_ID")
-        self.whatsapp_base_url = "https://graph.facebook.com/v24.0"
-        self.instagram_base_url = "https://graph.instagram.com/v24.0"
+        self.base_url = "https://graph.facebook.com/v24.0"
+        
+        # Page Access Token and Page ID for Instagram Messaging
+        # System User tokens don't work on graph.instagram.com, so we use
+        # graph.facebook.com with a Page Access Token derived from me/accounts
+        self.page_access_token = None
+        self.page_id = None
         
         if self.access_token:
             print(f"[MetaService] Token loaded (length={len(self.access_token)}, starts_with={self.access_token[:10]}...)")
+            self._init_page_token()
         else:
             print("[MetaService] WARNING: META_ACCESS_TOKEN is not set!")
+
+    def _init_page_token(self):
+        """
+        Fetch the Page Access Token and Page ID from me/accounts.
+        System User tokens require a Page Access Token for Instagram Messaging API.
+        """
+        try:
+            url = f"{self.base_url}/me/accounts"
+            params = {"access_token": self.access_token}
+            response = requests.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+            pages = data.get("data", [])
+            
+            if pages:
+                # Use the first page that has MESSAGING task
+                for page in pages:
+                    tasks = page.get("tasks", [])
+                    if "MESSAGING" in tasks or not tasks:
+                        self.page_access_token = page["access_token"]
+                        self.page_id = page["id"]
+                        print(f"[MetaService] Page token acquired for '{page.get('name', 'unknown')}' (ID: {self.page_id})")
+                        return
+                
+                # Fallback: use first page
+                self.page_access_token = pages[0]["access_token"]
+                self.page_id = pages[0]["id"]
+                print(f"[MetaService] Page token acquired (fallback) for '{pages[0].get('name', 'unknown')}' (ID: {self.page_id})")
+            else:
+                print("[MetaService] WARNING: No Facebook Pages found. Instagram messaging will not work.")
+                print("[MetaService] Assign a Facebook Page to the System User in Business Manager.")
+        except Exception as e:
+            print(f"[MetaService] ERROR initializing page token: {e}")
 
     def get_instagram_profile(self, user_id: str) -> Optional[Dict]:
         """
         Fetch Instagram user profile (name and username) via Graph API.
+        Uses the Page Access Token on graph.facebook.com.
         
         Args:
             user_id: The Instagram Scoped User ID (IGSID)
@@ -27,10 +67,15 @@ class MetaService:
         Returns:
             Dict with 'name' and 'username' keys, or None on failure
         """
-        url = f"{self.instagram_base_url}/{user_id}"
+        token = self.page_access_token or self.access_token
+        if not token:
+            print("[MetaService] No token available for profile fetch")
+            return None
+            
+        url = f"{self.base_url}/{user_id}"
         params = {
             "fields": "name,username",
-            "access_token": self.access_token,
+            "access_token": token,
         }
         try:
             print(f"[MetaService] Fetching Instagram profile for {user_id}...")
@@ -48,7 +93,7 @@ class MetaService:
 
     def send_whatsapp_message(self, to: str, text: str):
         """Send a text message via Meta WhatsApp Business API."""
-        url = f"{self.whatsapp_base_url}/{self.phone_number_id}/messages"
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
@@ -70,6 +115,7 @@ class MetaService:
     def send_instagram_message(self, recipient_id: str, text: str) -> Optional[dict]:
         """
         Send a text message via Instagram Messaging API.
+        Uses graph.facebook.com/{page_id}/messages with the Page Access Token.
         
         Args:
             recipient_id: The Instagram Scoped User ID (IGSID) of the recipient
@@ -78,9 +124,14 @@ class MetaService:
         Returns:
             API response dict on success, None on failure
         """
-        url = f"{self.instagram_base_url}/me/messages"
+        if not self.page_id or not self.page_access_token:
+            print("[MetaService] ERROR: No Page token/ID available. Cannot send Instagram message.")
+            print("[MetaService] Ensure a Facebook Page is assigned to the System User.")
+            return None
+        
+        url = f"{self.base_url}/{self.page_id}/messages"
         headers = {
-            "Authorization": f"Bearer {self.access_token}",
+            "Authorization": f"Bearer {self.page_access_token}",
             "Content-Type": "application/json",
         }
         payload = {
@@ -88,7 +139,7 @@ class MetaService:
             "message": {"text": text},
         }
         try:
-            print(f"[MetaService] Sending Instagram DM to {recipient_id}: {text[:50]}...")
+            print(f"[MetaService] Sending Instagram DM to {recipient_id} via page {self.page_id}: {text[:50]}...")
             response = requests.post(url, headers=headers, json=payload)
             print(f"[MetaService] Instagram response: {response.status_code} - {response.text}")
             response.raise_for_status()
