@@ -75,7 +75,8 @@ class MessageService:
     def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None):
         """
         Saves a message to the database.
-        Ensures a lead and conversation exist for the remote_jid (phone).
+        Ensures a lead and conversation exist for the remote_jid.
+        Supports both WhatsApp (phone) and Instagram (ig:<igsid>) identifiers.
         
         Implements comprehensive error handling (Requirements 3.4, 7.4, 9.5):
         - Try-catch blocks for all database operations
@@ -83,35 +84,56 @@ class MessageService:
         - Retry logic for failed operations
         
         Args:
-            remote_jid: Identificador do lead (telefone@whatsapp)
+            remote_jid: Identificador do lead (telefone@whatsapp ou ig:<igsid> para Instagram)
             content: Conteúdo da mensagem
             sender_type: 'lead', 'ai', ou 'user'
             message_type: 'text', 'image', etc.
-            whatsapp_msg_id: ID da mensagem no WhatsApp (opcional)
+            whatsapp_msg_id: ID da mensagem na plataforma (opcional)
         
         Returns:
             conversation_id se sucesso, None se falha
         """
         try:
-            # 0. Clean phone number from remote_jid (e.g. 5511999999999@s.whatsapp.net)
-            phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
-            logger.debug(f"Processing message for phone: {phone}")
+            # 0. Detect channel and extract identifier
+            is_instagram = remote_jid.startswith("ig:")
+            if is_instagram:
+                instagram_id = remote_jid[3:]
+                phone = ""
+                platform = "instagram"
+                logger.debug(f"Processing Instagram message for IGSID: {instagram_id}")
+            else:
+                instagram_id = None
+                phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+                platform = "whatsapp"
+                logger.debug(f"Processing message for phone: {phone}")
             
             # 1. Find or Create Lead (with retry logic - Requirements 9.1, 9.2, 9.3, 9.5)
             lead_id = None
             try:
-                lead_res = self.supabase.table("leads").select("id").eq("phone", phone).execute()
+                if is_instagram:
+                    lead_res = self.supabase.table("leads").select("id").eq("instagram_id", instagram_id).execute()
+                else:
+                    lead_res = self.supabase.table("leads").select("id").eq("phone", phone).execute()
                 
                 if lead_res.data:
                     lead_id = lead_res.data[0]["id"]
                     logger.debug(f"Found existing lead: {lead_id}")
                 else:
-                    # Create a simple lead with proper formatting (Requirements 9.2, 9.3)
-                    new_lead = {
-                        "full_name": f"Lead {phone}",  # Requirement 9.3: proper name formatting
-                        "phone": phone,
-                        "status": "new"  # Requirement 9.2: proper lead status
-                    }
+                    # Create a new lead with proper formatting (Requirements 9.2, 9.3)
+                    if is_instagram:
+                        new_lead = {
+                            "full_name": f"Instagram {instagram_id}",
+                            "phone": "",
+                            "instagram_id": instagram_id,
+                            "source": "instagram",
+                            "status": "novo_lead"
+                        }
+                    else:
+                        new_lead = {
+                            "full_name": f"Lead {phone}",
+                            "phone": phone,
+                            "status": "new"
+                        }
                     
                     # Retry logic for failed lead creation (Requirement 9.5)
                     max_retries = 1
@@ -121,7 +143,8 @@ class MessageService:
                             new_lead_res = self.supabase.table("leads").insert(new_lead).execute()
                             if new_lead_res.data:
                                 lead_id = new_lead_res.data[0]["id"]
-                                logger.info(f"Created new lead {lead_id} for phone {phone}")
+                                identifier = instagram_id if is_instagram else phone
+                                logger.info(f"Created new lead {lead_id} for {'instagram_id' if is_instagram else 'phone'} {identifier}")
                                 break
                         except Exception as create_error:
                             last_error = create_error
@@ -136,14 +159,14 @@ class MessageService:
                                 return None
                     
             except Exception as lead_error:
-                logger.error(f"Error finding/creating lead for phone {phone}: {lead_error}")
+                logger.error(f"Error finding/creating lead: {lead_error}")
                 # Check for schema-related errors (Requirements 7.4)
                 if "schema" in str(lead_error).lower():
                     logger.error(f"[SCHEMA ERROR] Lead query failed - verify schema 'palmaslake-agno' is correct")
                 return None
             
             if not lead_id:
-                logger.error(f"Failed to find/create lead for phone {phone}")
+                logger.error(f"Failed to find/create lead for {remote_jid}")
                 return None
 
             # 2. Check/Create Conversation (with retry logic - Requirement 9.4)
@@ -158,7 +181,7 @@ class MessageService:
                     # Create conversation (Requirement 9.4)
                     conv_data = {
                         "lead_id": lead_id,
-                        "platform": "whatsapp",
+                        "platform": platform,
                     }
                     
                     # Retry logic for failed conversation creation

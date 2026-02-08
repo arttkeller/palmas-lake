@@ -199,28 +199,92 @@ async def handle_uazapi_webhook(request: Request):
 async def verify_webhook(request: Request):
     """
     Meta (Facebook) Verification Challenge.
+    Used when configuring the webhook URL in Meta Developer dashboard.
     """
+    verify_token = os.environ.get("META_VERIFY_TOKEN", "")
+    
     params = request.query_params
     mode = params.get("hub.mode")
     token = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
 
     if mode and token:
-        if mode == "subscribe" and token == VERIFY_TOKEN:
+        if mode == "subscribe" and token == verify_token:
+            print(f"[Meta Webhook] Verification successful")
             return int(challenge)
         else:
+            print(f"[Meta Webhook] Verification failed: token mismatch")
             raise HTTPException(status_code=403, detail="Verification failed")
     return {"status": "ok"}
 
 @router.post("/webhook/meta")
 async def handle_webhook(request: Request):
     """
-    Receive incoming messages from WhatsApp/Instagram.
+    Receive incoming Instagram DM messages via Meta Webhooks.
+    Parses the Instagram Messaging payload and processes through the same AI pipeline.
     """
-    data = await request.json()
-    
-    # Basic logging of the event (Implement DB logic here)
-    print("Received Meta Webhook:", data)
+    try:
+        data = await request.json()
+        print("[Meta Webhook] Received:", data)
 
-    # Return 200 OK immediately to acknowledge receipt
+        obj_type = data.get("object")
+        if obj_type != "instagram":
+            print(f"[Meta Webhook] Ignoring non-instagram object: {obj_type}")
+            return {"status": "ignored"}
+
+        page_id = os.environ.get("META_INSTAGRAM_PAGE_ID", "")
+
+        for entry in data.get("entry", []):
+            for messaging_event in entry.get("messaging", []):
+                sender_id = messaging_event.get("sender", {}).get("id")
+                recipient_id = messaging_event.get("recipient", {}).get("id")
+                message = messaging_event.get("message", {})
+                text = message.get("text")
+                msg_id = message.get("mid")
+
+                # Ignore echo messages (sent by our page)
+                if message.get("is_echo"):
+                    print(f"[Meta Webhook] Ignoring echo message")
+                    continue
+
+                # Ignore if sender is our own page
+                if sender_id == page_id:
+                    print(f"[Meta Webhook] Ignoring message from our own page")
+                    continue
+
+                if not sender_id or not text:
+                    print(f"[Meta Webhook] Missing sender_id or text, skipping")
+                    continue
+
+                # Use ig: prefix to differentiate Instagram leads from WhatsApp
+                lead_identifier = f"ig:{sender_id}"
+                print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
+
+                # Save message to DB
+                try:
+                    from services.message_service import MessageService
+                    msg_service = MessageService()
+                    result = msg_service.save_message(
+                        lead_identifier, text, "lead",
+                        whatsapp_msg_id=msg_id
+                    )
+                    print(f"[Meta Webhook] save_message result: {result}")
+
+                    asyncio.create_task(
+                        analytics_cache_service.queue_recalculation('message_webhook')
+                    )
+                except Exception as db_err:
+                    import traceback
+                    print(f"[Meta Webhook] DB Error: {db_err}")
+                    traceback.print_exc()
+
+                # Send to buffer with instagram channel
+                await add_to_buffer(lead_identifier, text, msg_id, channel="instagram")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[Meta Webhook] Error processing: {e}")
+
+    # Always return 200 to acknowledge receipt (Meta requirement)
     return {"status": "received"}

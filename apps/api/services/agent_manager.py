@@ -16,6 +16,26 @@ from agno.models.openai import OpenAIChat
 from services.maria_tools import MariaTools
 from services.temperature_service import TemperatureService, classify_lead_temperature
 
+def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
+    """
+    Look up a lead by phone or instagram_id based on the lead_id format.
+    
+    Args:
+        supabase: Supabase client instance
+        lead_id: Lead identifier - 'ig:<igsid>' for Instagram, phone/jid for WhatsApp
+        select_fields: Comma-separated fields to select
+    
+    Returns:
+        Supabase query result
+    """
+    if lead_id.startswith("ig:"):
+        ig_id = lead_id[3:]
+        return supabase.table("leads").select(select_fields).eq("instagram_id", ig_id).execute()
+    else:
+        phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
+        return supabase.table("leads").select(select_fields).eq("phone", phone).execute()
+
+
 class AgentManager:
     def __init__(self):
         # As chaves sao pegas do ambiente automaticamente pelo Agno ou OpenAI
@@ -120,9 +140,8 @@ Mensagem atual do Cliente:
             from services.supabase_client import create_client
             supabase_client = create_client()
             
-            # Primeiro, buscar o lead pelo phone para obter o conversation_id
-            phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-            lead_res = supabase_client.table("leads").select("id").eq("phone", phone).execute()
+            # Buscar o lead pelo phone ou instagram_id para obter o conversation_id
+            lead_res = _lookup_lead(supabase_client, lead_id, "id")
             
             if lead_res.data:
                 db_lead_id = lead_res.data[0]["id"]
@@ -174,8 +193,7 @@ Mensagem atual do Cliente:
         
         # 1. Recuperar contexto do Lead e Histórico
         try:
-            phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-            lead_res = supabase.table("leads").select("*").eq("phone", phone).execute()
+            lead_res = _lookup_lead(supabase, lead_id, "*")
             
             if lead_res.data:
                 lead_data = lead_res.data[0]
@@ -251,8 +269,7 @@ Mensagem atual do Cliente:
         try:
             from services.supabase_client import create_client
             supabase_status = create_client()
-            phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-            lead_status_res = supabase_status.table("leads").select("status").eq("phone", phone).execute()
+            lead_status_res = _lookup_lead(supabase_status, lead_id, "status")
             if lead_status_res.data:
                 lead_status = lead_status_res.data[0].get("status")
                 print(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
@@ -387,12 +404,10 @@ Mensagem atual do Cliente:
             from services.supabase_client import create_client
             supabase = create_client()
             
-            phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-            
-            # Buscar o lead pelo phone para obter o ID do lead no DB e last_interaction
-            lead_res = supabase.table("leads").select("id, last_interaction").eq("phone", phone).execute()
+            # Buscar o lead pelo phone ou instagram_id para obter o ID do lead no DB e last_interaction
+            lead_res = _lookup_lead(supabase, lead_id, "id, last_interaction")
             if not lead_res.data:
-                print(f"[Sentiment] Lead with phone {phone} not found in DB.")
+                print(f"[Sentiment] Lead {lead_id} not found in DB.")
                 return
 
             db_lead_id = lead_res.data[0]["id"]
