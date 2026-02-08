@@ -42,9 +42,12 @@ class Lead(LeadBase):
     adjectives: Optional[Any] = None
     last_analysis: Optional[Any] = None
     conversation_summary: Optional[str] = None
+    source: Optional[str] = None
+    instagram_id: Optional[str] = None
 
-@router.get("/leads", response_model=List[Lead])
+@router.get("/leads")
 def get_leads():
+    """Returns all leads with all fields from the database."""
     supabase = get_db()
     response = supabase.table("leads").select("*").execute()
     return response.data
