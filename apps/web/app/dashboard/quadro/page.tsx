@@ -5,7 +5,7 @@ import { CardContent } from '@/components/ui/card';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { DollarSign, MapPin, MoreVertical, Phone, Plus, Loader2, Target, Calendar, Home, Flame, Search, X } from 'lucide-react';
+import { DollarSign, MapPin, MoreVertical, Phone, Plus, Loader2, Target, Calendar, Home, Flame, Search, X, Instagram } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
 import { Button } from '@/components/ui/button';
@@ -829,16 +829,28 @@ export default function LeadsKanban() {
 
                                                 {/* Footer */}
                                                 <div className="flex items-center justify-between pt-3 border-t border-black/5">
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {lead.tags?.slice(0, 2).map(tag => (
-                                                            <Badge 
-                                                                key={tag} 
-                                                                variant="outline" 
-                                                                className="text-[10px] h-5 px-2 rounded-full bg-white/50 backdrop-blur-sm border-black/10 font-medium"
-                                                            >
-                                                                {tag}
-                                                            </Badge>
-                                                        ))}
+                                                    <div className="flex items-center gap-2">
+                                                        {/* Channel Icon */}
+                                                        {lead.source === 'instagram' ? (
+                                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
+                                                                <Instagram className="w-3 h-3 text-white" />
+                                                            </div>
+                                                        ) : (
+                                                            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
+                                                                <Phone className="w-3 h-3 text-white" />
+                                                            </div>
+                                                        )}
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {lead.tags?.slice(0, 2).map(tag => (
+                                                                <Badge 
+                                                                    key={tag} 
+                                                                    variant="outline" 
+                                                                    className="text-[10px] h-5 px-2 rounded-full bg-white/50 backdrop-blur-sm border-black/10 font-medium"
+                                                                >
+                                                                    {tag}
+                                                                </Badge>
+                                                            ))}
+                                                        </div>
                                                     </div>
 
                                                 </div>
