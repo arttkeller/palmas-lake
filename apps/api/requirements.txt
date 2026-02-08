@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+openai
+supabase
+python-multipart
+requests
+redis
+python-dotenv
+pandas
+tenacity
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+pytz
+agno
+hypothesis
+pytest

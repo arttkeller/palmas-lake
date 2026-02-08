@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Environment variables (SECRETS - never commit)
+.env
+.env.*
+!.env.example
+
+# Google credentials (SECRETS)
+credentials.json
+token.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Next.js
+.next/
+out/
+
+# Coverage
+coverage/
+
+# Tool configs
+.agent/
+.claude/
+.hypothesis/
+.kiro/
+
+# Logs and test output
+*.log
+*_log.txt
+*error_log*
+api_log.txt
+test_result.txt
+
+# Misc
+*.pem
+.vercel
