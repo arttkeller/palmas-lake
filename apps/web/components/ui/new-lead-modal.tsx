@@ -61,6 +61,7 @@ const SOURCE_OPTIONS = [
   { value: 'facebook', label: 'Facebook' },
   { value: 'site', label: 'Site' },
   { value: 'indicacao', label: 'Indicacao' },
+  { value: 'estande', label: 'Estande' },
 ];
 
 const CLASSIFICATION_OPTIONS = [
