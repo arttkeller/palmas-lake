@@ -122,6 +122,7 @@ def _send_message(lead_id: str, text: str, channel: str):
         # Extract IGSID from the ig: prefix
         recipient_id = lead_id[3:] if lead_id.startswith("ig:") else lead_id
         print(f"[_send_message] Calling meta.send_instagram_message({recipient_id})")
+        # MetaService.send_instagram_message already removes markdown
         result = meta.send_instagram_message(recipient_id, text)
         print(f"[_send_message] Instagram send result: {result}")
     else:

@@ -43,7 +43,7 @@ class AgentManager:
         self.reasoning_effort_main = "medium"
         self.reasoning_effort_analysis = "medium"
 
-    def _load_system_prompt(self) -> str:
+    def _load_system_prompt(self, channel: str = "whatsapp") -> str:
         """Lê o prompt do arquivo MD e injeta variáveis dinâmicas"""
         try:
             # Carregar System Prompt e injetar regra de formatação WhatsApp
@@ -53,7 +53,23 @@ class AgentManager:
             except:
                 base_prompt = "Você é a Maria, assistente virtual do Palmas Lake Towers."
 
-            system_prompt = f"{base_prompt}\n\nDATA ATUAL (Horário de Brasília): {datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}\n\nIMPORTANTE DE FORMATAÇÃO WHATSAPP:\n- Use APENAS UM asterisco para negrito (ex: *texto*). NUNCA use dois asteriscos (**texto**).\n- Evite listas com hífens se possível, prefira texto fluido ou emojis.\n- 🚨 PROIBIDO usar travessão (—) ou meia-risca (–). Use vírgula, ponto ou quebre em frases separadas."
+            # Regras de formatação específicas por canal
+            if channel == "instagram":
+                formatting_rules = """
+IMPORTANTE DE FORMATAÇÃO INSTAGRAM:
+- 🚨 PROIBIDO usar asteriscos para formatação (*texto* ou **texto**). Instagram não suporta markdown.
+- Use apenas texto simples, sem formatação especial.
+- Evite listas com hífens se possível, prefira texto fluido ou emojis.
+- 🚨 PROIBIDO usar travessão (—) ou meia-risca (–). Use vírgula, ponto ou quebre em frases separadas.
+- Use emojis para dar ênfase quando necessário."""
+            else:  # whatsapp
+                formatting_rules = """
+IMPORTANTE DE FORMATAÇÃO WHATSAPP:
+- Use APENAS UM asterisco para negrito (ex: *texto*). NUNCA use dois asteriscos (**texto**).
+- Evite listas com hífens se possível, prefira texto fluido ou emojis.
+- 🚨 PROIBIDO usar travessão (—) ou meia-risca (–). Use vírgula, ponto ou quebre em frases separadas."""
+
+            system_prompt = f"{base_prompt}\n\nDATA ATUAL (Horário de Brasília): {datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}{formatting_rules}"
 
             return system_prompt
         except Exception as e:
@@ -61,14 +77,14 @@ class AgentManager:
             return "Erro crítico ao carregar personalidade da IA."
 
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
-    async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None) -> str:
+    async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp") -> str:
         try:
             # 1. Preparar Tools com contexto do lead
             maria_tools = MariaTools(lead_id) if lead_id else []
             tools_list = [maria_tools] if maria_tools else []
 
-            # 2. Carregar Prompt
-            system_prompt = self._load_system_prompt()
+            # 2. Carregar Prompt com regras específicas do canal
+            system_prompt = self._load_system_prompt(channel=channel)
             
             # 3. Configurar Agente Agno (Maria)
             # Usando GPT-5.2 conforme solicitado
@@ -254,8 +270,11 @@ Mensagem atual do Cliente:
         if lead_context_str:
             history.insert(0, {"role": "system", "content": lead_context_str})
 
-        # 4. Gerar resposta
-        response_text = await self.generate_response(history, lead_id=lead_id)
+        # 4. Determinar canal baseado no source do lead
+        channel = "instagram" if source == "instagram" else "whatsapp"
+        
+        # 5. Gerar resposta com regras específicas do canal
+        response_text = await self.generate_response(history, lead_id=lead_id, channel=channel)
         
         # 5. Análise de Sentimento (Pós-resposta)
         try:

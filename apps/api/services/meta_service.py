@@ -1,7 +1,29 @@
 
 import os
+import re
 import requests
 from typing import Optional, Dict
+
+
+def remove_markdown_for_instagram(text: str) -> str:
+    """
+    Remove markdown formatting from text for Instagram (which doesn't support it).
+    Removes **bold**, *italic*, and other markdown syntax.
+    
+    Args:
+        text: Text that may contain markdown formatting
+        
+    Returns:
+        Text with markdown removed
+    """
+    # Remove **bold** (double asterisks)
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+    # Remove *italic* (single asterisks that aren't part of **)
+    text = re.sub(r'(?<!\*)\*(?!\*)([^*]+?)(?<!\*)\*(?!\*)', r'\1', text)
+    # Remove other common markdown: `code`, _underline_, etc.
+    text = re.sub(r'`([^`]+)`', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    return text.strip()
 
 class MetaService:
     def __init__(self):
@@ -116,10 +138,11 @@ class MetaService:
         """
         Send a text message via Instagram Messaging API.
         Uses graph.facebook.com/{page_id}/messages with the Page Access Token.
+        Automatically removes markdown formatting since Instagram doesn't support it.
         
         Args:
             recipient_id: The Instagram Scoped User ID (IGSID) of the recipient
-            text: The text message to send
+            text: The text message to send (markdown will be removed automatically)
         
         Returns:
             API response dict on success, None on failure
@@ -129,6 +152,9 @@ class MetaService:
             print("[MetaService] Ensure a Facebook Page is assigned to the System User.")
             return None
         
+        # Remove markdown formatting for Instagram
+        clean_text = remove_markdown_for_instagram(text)
+        
         url = f"{self.base_url}/{self.page_id}/messages"
         headers = {
             "Authorization": f"Bearer {self.page_access_token}",
@@ -136,7 +162,7 @@ class MetaService:
         }
         payload = {
             "recipient": {"id": recipient_id},
-            "message": {"text": text},
+            "message": {"text": clean_text},
         }
         try:
             print(f"[MetaService] Sending Instagram DM to {recipient_id} via page {self.page_id}: {text[:50]}...")
