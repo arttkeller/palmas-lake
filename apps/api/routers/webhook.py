@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Request, HTTPException
 from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 from services.buffer_service import add_to_buffer
 from services.analytics_service import AnalyticsService
 from services.analytics_cache_service import AnalyticsCacheService
@@ -8,6 +9,7 @@ import os
 
 router = APIRouter()
 uazapi = UazapiService()
+meta_service = MetaService()
 
 # Analytics cache service for queueing recalculations — must include AnalyticsService
 # so that background processing can actually compute metrics
@@ -260,13 +262,21 @@ async def handle_webhook(request: Request):
                 lead_identifier = f"ig:{sender_id}"
                 print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
 
+                # Fetch Instagram profile (name + username) for the sender
+                ig_profile = meta_service.get_instagram_profile(sender_id)
+                if ig_profile:
+                    print(f"[Meta Webhook] Instagram profile: {ig_profile}")
+                else:
+                    print(f"[Meta Webhook] Could not fetch Instagram profile for {sender_id}")
+
                 # Save message to DB
                 try:
                     from services.message_service import MessageService
                     msg_service = MessageService()
                     result = msg_service.save_message(
                         lead_identifier, text, "lead",
-                        whatsapp_msg_id=msg_id
+                        whatsapp_msg_id=msg_id,
+                        ig_profile=ig_profile
                     )
                     print(f"[Meta Webhook] save_message result: {result}")
 

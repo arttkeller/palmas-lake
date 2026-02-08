@@ -201,12 +201,24 @@ Mensagem atual do Cliente:
                 full_name = lead_data.get("full_name", "Desconhecido")
                 status = lead_data.get("status", "novo")
                 temperature = lead_data.get("temperature", "frio")
+                source = lead_data.get("source", "whatsapp")
+                qualification_state = lead_data.get("qualification_state", {})
+                current_step = qualification_state.get("step", "name") if qualification_state else "name"
+                
+                # Build source-specific context
+                source_info = ""
+                if source == "instagram":
+                    source_info = """
+    <channel>Instagram DM</channel>
+    <channel_rule>Este lead veio pelo Instagram. O nome dele ja foi obtido automaticamente do perfil do Instagram. NAO pergunte o nome novamente. Comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
                 
                 lead_context_str = f"""
 <lead_context>
     <name>{full_name}</name>
     <status>{status}</status>
     <temperature>{temperature}</temperature>
+    <source>{source}</source>
+    <qualification_step>{current_step}</qualification_step>{source_info}
 </lead_context>
 """
                 

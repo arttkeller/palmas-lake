@@ -72,7 +72,7 @@ class MessageService:
             logger.error(f"Failed to initialize MessageService: {e}")
             raise MessageServiceError(f"Initialization failed: {e}")
 
-    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None):
+    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None):
         """
         Saves a message to the database.
         Ensures a lead and conversation exist for the remote_jid.
@@ -89,6 +89,7 @@ class MessageService:
             sender_type: 'lead', 'ai', ou 'user'
             message_type: 'text', 'image', etc.
             whatsapp_msg_id: ID da mensagem na plataforma (opcional)
+            ig_profile: Perfil do Instagram (dict com 'name' e 'username') para novos leads
         
         Returns:
             conversation_id se sucesso, None se falha
@@ -118,16 +119,61 @@ class MessageService:
                 if lead_res.data:
                     lead_id = lead_res.data[0]["id"]
                     logger.debug(f"Found existing lead: {lead_id}")
+                    
+                    # Update Instagram lead name if profile is available and name is still generic
+                    if is_instagram and ig_profile and ig_profile.get("name"):
+                        try:
+                            current_lead = self.supabase.table("leads").select("full_name").eq("id", lead_id).execute()
+                            if current_lead.data:
+                                current_name = current_lead.data[0].get("full_name", "")
+                                if current_name.startswith("Instagram "):
+                                    ig_name = ig_profile.get("name", "")
+                                    ig_username = ig_profile.get("username", "")
+                                    if ig_name and ig_username:
+                                        new_name = f"{ig_name} - @{ig_username}"
+                                    elif ig_username:
+                                        new_name = f"@{ig_username}"
+                                    else:
+                                        new_name = ig_name
+                                    self.supabase.table("leads").update({
+                                        "full_name": new_name,
+                                        "qualification_state": {"step": "interest"}
+                                    }).eq("id", lead_id).execute()
+                                    logger.info(f"Updated Instagram lead name: {current_name} -> {new_name}")
+                        except Exception as name_err:
+                            logger.warning(f"Error updating Instagram lead name (non-fatal): {name_err}")
                 else:
                     # Create a new lead with proper formatting (Requirements 9.2, 9.3)
                     if is_instagram:
+                        # Build lead name from Instagram profile if available
+                        ig_name = ""
+                        ig_username = ""
+                        if ig_profile:
+                            ig_name = ig_profile.get("name", "")
+                            ig_username = ig_profile.get("username", "")
+                        
+                        if ig_name and ig_username:
+                            lead_name = f"{ig_name} - @{ig_username}"
+                        elif ig_username:
+                            lead_name = f"@{ig_username}"
+                        elif ig_name:
+                            lead_name = ig_name
+                        else:
+                            lead_name = f"Instagram {instagram_id}"
+                        
                         new_lead = {
-                            "full_name": f"Instagram {instagram_id}",
+                            "full_name": lead_name,
                             "phone": "",
                             "instagram_id": instagram_id,
                             "source": "instagram",
-                            "status": "novo_lead"
+                            "status": "novo_lead",
                         }
+                        
+                        # Skip name qualification step since Instagram provides the name
+                        if ig_name:
+                            new_lead["qualification_state"] = {"step": "interest"}
+                        
+                        logger.info(f"Creating Instagram lead: {lead_name}")
                     else:
                         new_lead = {
                             "full_name": f"Lead {phone}",
