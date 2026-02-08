@@ -66,7 +66,14 @@ async def process_buffer_after_delay(lead_id: str):
                 
                 for part in parts:
                     # Send via the appropriate channel
-                    _send_message(lead_id, part, channel)
+                    try:
+                        print(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
+                        _send_message(lead_id, part, channel)
+                        print(f"[Buffer] Message sent successfully via {channel}")
+                    except Exception as send_err:
+                        import traceback
+                        print(f"[Buffer] ERROR sending message via {channel}: {send_err}")
+                        traceback.print_exc()
                     
                     # Save each part to DB
                     try:
@@ -110,9 +117,12 @@ def _send_message(lead_id: str, text: str, channel: str):
         text: Message text
         channel: "whatsapp" or "instagram"
     """
+    print(f"[_send_message] channel={channel}, lead_id={lead_id}, meta_token={'SET' if meta.access_token else 'MISSING'}")
     if channel == "instagram":
         # Extract IGSID from the ig: prefix
         recipient_id = lead_id[3:] if lead_id.startswith("ig:") else lead_id
-        meta.send_instagram_message(recipient_id, text)
+        print(f"[_send_message] Calling meta.send_instagram_message({recipient_id})")
+        result = meta.send_instagram_message(recipient_id, text)
+        print(f"[_send_message] Instagram send result: {result}")
     else:
         uazapi.send_whatsapp_message(lead_id, text)
