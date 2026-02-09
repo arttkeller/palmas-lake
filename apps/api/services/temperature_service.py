@@ -99,8 +99,9 @@ class TemperatureService:
             else:
                 return "morno"
         
-        # Default to morno if no strong signals (Requirements 5.2)
-        return "morno"
+        # Default to frio if no engagement signals detected
+        # A lead must show actual interest to be classified as morno or quente
+        return "frio"
     
     def get_status_for_temperature(self, temperature: str) -> str:
         """
