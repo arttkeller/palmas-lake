@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups
+from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.include_router(ai_specialist.router, tags=["AI Specialist"])
 if os.getenv("ENVIRONMENT") != "production":
     app.include_router(debug.router, prefix="/api", tags=["debug"])
 app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
+app.include_router(users.router, prefix="/api", tags=["users"])
 
 @app.get("/")
 def read_root():
