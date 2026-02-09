@@ -2,7 +2,8 @@
 import os
 import re
 import requests
-from typing import Optional, Dict
+import time
+from typing import Optional, Dict, Set
 
 
 def remove_markdown_for_instagram(text: str) -> str:
@@ -38,6 +39,15 @@ class MetaService:
         # graph.facebook.com with a Page Access Token derived from me/accounts
         self.page_access_token = None
         self.page_id = None
+        
+        # Cache for sent message IDs to detect echoes
+        # Format: {message_id: timestamp}
+        self._sent_message_ids: Dict[str, float] = {}
+        self._sent_ids_ttl = 300  # 5 minutes
+        
+        # Our own Instagram Scoped ID (IGSID)
+        # Learned automatically from incoming messages
+        self.instagram_scoped_id: Optional[str] = None
         
         if self.access_token:
             print(f"[MetaService] Token loaded (length={len(self.access_token)}, starts_with={self.access_token[:10]}...)")
@@ -77,6 +87,27 @@ class MetaService:
                 print("[MetaService] Assign a Facebook Page to the System User in Business Manager.")
         except Exception as e:
             print(f"[MetaService] ERROR initializing page token: {e}")
+
+    def _cleanup_sent_ids(self):
+        """Remove expired message IDs from the cache."""
+        now = time.time()
+        expired = [mid for mid, ts in self._sent_message_ids.items() if now - ts > self._sent_ids_ttl]
+        for mid in expired:
+            del self._sent_message_ids[mid]
+
+    def is_own_message(self, message_id: str) -> bool:
+        """Check if a message ID corresponds to a message we sent."""
+        self._cleanup_sent_ids()
+        return message_id in self._sent_message_ids
+
+    def learn_own_igsid(self, recipient_id: str):
+        """
+        Learn our own Instagram Scoped ID from an incoming message.
+        The recipient_id of a message sent TO us is OUR ID.
+        """
+        if not self.instagram_scoped_id and recipient_id:
+            self.instagram_scoped_id = recipient_id
+            print(f"[MetaService] Learned own IGSID: {self.instagram_scoped_id}")
 
     def get_instagram_profile(self, user_id: str) -> Optional[Dict]:
         """
@@ -169,7 +200,15 @@ class MetaService:
             response = requests.post(url, headers=headers, json=payload)
             print(f"[MetaService] Instagram response: {response.status_code} - {response.text}")
             response.raise_for_status()
-            return response.json()
+            
+            result = response.json()
+            # Capture the message ID to filter echoes later
+            if result and "message_id" in result:
+                mid = result["message_id"]
+                self._sent_message_ids[mid] = time.time()
+                print(f"[MetaService] Captured sent message ID: {mid}")
+            
+            return result
         except requests.exceptions.RequestException as e:
             print(f"[MetaService] Error sending Instagram message: {e}")
             if hasattr(e, 'response') and e.response is not None:
