@@ -20,10 +20,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/") ||
     pathname.includes(".");
 
-  // If user is authenticated and on the login page, redirect to dashboard
+  // If user is authenticated and on the login page, redirect to quadro
   if (user && pathname === "/") {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/dashboard/quadro";
     return NextResponse.redirect(url);
   }
 
