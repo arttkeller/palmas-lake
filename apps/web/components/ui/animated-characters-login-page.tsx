@@ -7,9 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, Mail, Sparkles, UserPlus, LogIn, User } from "lucide-react";
+import { Sparkles, UserPlus, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase";
+import { UserIcon } from "@/components/ui/user";
+import MailFilledIcon from "@/components/ui/mail-filled-icon";
+import { KeySquareIcon } from "@/components/ui/key-square";
+import { EyeIcon } from "@/components/ui/eye";
+import { EyeOffIcon } from "@/components/ui/eye-off";
 
 /* ─────────────────────── Pupil ─────────────────────── */
 
@@ -646,7 +651,7 @@ export default function AnimatedLoginPage() {
               <div className="space-y-2">
                 <Label htmlFor="full-name">Nome</Label>
                 <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <UserIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="full-name"
                     type="text"
@@ -665,7 +670,7 @@ export default function AnimatedLoginPage() {
             <div className="space-y-2">
               <Label htmlFor="email-address">Email</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <MailFilledIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="email-address"
                   type="email"
@@ -683,6 +688,7 @@ export default function AnimatedLoginPage() {
             <div className="space-y-2">
               <Label htmlFor="password">Senha</Label>
               <div className="relative">
+                <KeySquareIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
@@ -692,7 +698,7 @@ export default function AnimatedLoginPage() {
                   onFocus={() => setIsTyping(true)}
                   onBlur={() => setIsTyping(false)}
                   required
-                  className="h-12 pr-10 bg-background border-border/60 focus:border-primary"
+                  className="h-12 pl-10 pr-10 bg-background border-border/60 focus:border-primary"
                 />
                 <button
                   type="button"
@@ -700,9 +706,9 @@ export default function AnimatedLoginPage() {
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
+                    <EyeOffIcon size={16} />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <EyeIcon size={16} />
                   )}
                 </button>
               </div>
@@ -713,6 +719,7 @@ export default function AnimatedLoginPage() {
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirmar senha</Label>
                 <div className="relative">
+                  <KeySquareIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     id="confirm-password"
                     type={showPassword ? "text" : "password"}
@@ -722,7 +729,7 @@ export default function AnimatedLoginPage() {
                     onFocus={() => setIsTyping(true)}
                     onBlur={() => setIsTyping(false)}
                     required
-                    className="h-12 bg-background border-border/60 focus:border-primary"
+                    className="h-12 pl-10 bg-background border-border/60 focus:border-primary"
                   />
                 </div>
               </div>
