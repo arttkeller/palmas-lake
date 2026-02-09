@@ -317,11 +317,12 @@ export default function AnimatedLoginPage() {
 
         {/* Animated Characters */}
         <div className="flex-1 flex items-end justify-center relative pb-0">
-          {/* Purple tall character – Back layer */}
+          {/* Purple tall character – Back layer (leftmost) */}
           <div
             ref={purpleRef}
-            className="absolute bottom-0 left-[15%] transition-transform duration-300 ease-out"
+            className="absolute bottom-0 transition-transform duration-300 ease-out"
             style={{
+              left: "8%",
               width: "100px",
               height:
                 isTyping || isPasswordHidden
@@ -407,8 +408,9 @@ export default function AnimatedLoginPage() {
           {/* Dark character – Middle layer */}
           <div
             ref={blackRef}
-            className="absolute bottom-0 left-[35%] transition-transform duration-300 ease-out"
+            className="absolute bottom-0 transition-transform duration-300 ease-out"
             style={{
+              left: "28%",
               width: "80px",
               height: "300px",
               backgroundColor: colors.black,
@@ -482,11 +484,12 @@ export default function AnimatedLoginPage() {
             </div>
           </div>
 
-          {/* Orange semi-circle character – Front left */}
+          {/* Orange semi-circle character – Center */}
           <div
             ref={orangeRef}
-            className="absolute bottom-0 left-[52%] transition-transform duration-300 ease-out"
+            className="absolute bottom-0 transition-transform duration-300 ease-out"
             style={{
+              left: "48%",
               width: "200px",
               height: "200px",
               backgroundColor: colors.orange,
@@ -524,15 +527,16 @@ export default function AnimatedLoginPage() {
             </div>
           </div>
 
-          {/* Beige tall character – Front right */}
+          {/* Beige tall character – Rightmost */}
           <div
             ref={yellowRef}
-            className="absolute bottom-0 right-[8%] transition-transform duration-300 ease-out"
+            className="absolute bottom-0 transition-transform duration-300 ease-out"
             style={{
+              right: "5%",
               width: "90px",
               height: "220px",
               backgroundColor: colors.yellow,
-              borderRadius: "10px 10px 0 0",
+              borderRadius: "45px 45px 0 0",
               zIndex: 3,
               transform: isPasswordVisible
                 ? "skewX(0deg)"
@@ -545,7 +549,7 @@ export default function AnimatedLoginPage() {
               style={{
                 left: isPasswordVisible
                   ? "20px"
-                  : `${52 + (yellowPos.faceX || 0)}px`,
+                  : `${30 + (yellowPos.faceX || 0)}px`,
                 top: isPasswordVisible
                   ? "35px"
                   : `${40 + (yellowPos.faceY || 0)}px`,
@@ -570,7 +574,7 @@ export default function AnimatedLoginPage() {
               style={{
                 left: isPasswordVisible
                   ? "10px"
-                  : `${40 + (yellowPos.faceX || 0)}px`,
+                  : `${28 + (yellowPos.faceX || 0)}px`,
                 top: isPasswordVisible
                   ? "88px"
                   : `${88 + (yellowPos.faceY || 0)}px`,
