@@ -27,7 +27,23 @@ def remove_markdown_for_instagram(text: str) -> str:
     return text.strip()
 
 class MetaService:
+    """
+    Singleton MetaService: ensures all modules share the same instance,
+    so sent message IDs and learned IGSIDs are shared across webhook and buffer.
+    """
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+    
     def __init__(self):
+        # Only initialize once (singleton)
+        if self._initialized:
+            return
+        self._initialized = True
         # Strip whitespace/newlines from token to prevent "Cannot parse access token" errors
         raw_token = os.environ.get("META_ACCESS_TOKEN", "")
         self.access_token = raw_token.strip() if raw_token else ""
@@ -58,6 +74,8 @@ class MetaService:
             self._init_page_token()
         else:
             print("[MetaService] WARNING: META_ACCESS_TOKEN is not set!")
+        
+        print(f"[MetaService] Singleton initialized. page_id={self.page_id}, ig_biz_id={self.instagram_business_account_id}")
 
     def _init_page_token(self):
         """
