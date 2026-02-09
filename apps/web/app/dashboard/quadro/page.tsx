@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CardContent } from '@/components/ui/card';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +73,9 @@ const initialColumns: Column[] = [
 ];
 
 export default function LeadsKanban() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [columns, setColumns] = useState<Column[]>(initialColumns);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -87,6 +91,7 @@ export default function LeadsKanban() {
     // Ref to hold the latest searchTerm so fetchLeads doesn't recreate when it changes
     const searchTermRef = useRef(searchTerm);
     searchTermRef.current = searchTerm;
+    const openedLeadFromQueryRef = useRef<string | null>(null);
 
     // Lead filters hook (Requirements 2.1, 2.2, 2.3, 2.4)
     const { activeFilter, activeFilters, toggleFilter, filterLeads } = useLeadFilters();
@@ -365,7 +370,7 @@ export default function LeadsKanban() {
     };
 
     // Handle card click to open modal (Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7)
-    const handleCardClick = async (lead: Lead) => {
+    const handleCardClick = useCallback(async (lead: Lead) => {
         // Look up raw lead data from allLeadsData to get all fields including tags, adjectives, sentiment_score, etc.
         const rawLead = allLeadsData.find(item => item.id === lead.id);
 
@@ -483,7 +488,38 @@ export default function LeadsKanban() {
         } finally {
             setIsLoadingMessages(false);
         }
-    };
+    }, [allLeadsData, openModal, supabase]);
+
+    // Open lead card from query param: /dashboard/quadro?leadId=<id>
+    useEffect(() => {
+        const leadId = searchParams.get('leadId');
+
+        if (!leadId) {
+            openedLeadFromQueryRef.current = null;
+            return;
+        }
+
+        if (loading || openedLeadFromQueryRef.current === leadId) {
+            return;
+        }
+
+        const leadFromColumns = columns
+            .flatMap((column) => column.leads)
+            .find((item) => item.id === leadId);
+
+        if (!leadFromColumns) {
+            return;
+        }
+
+        openedLeadFromQueryRef.current = leadId;
+        void handleCardClick(leadFromColumns);
+
+        // Remove the query param after opening, so links can be clicked again later
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete('leadId');
+        const nextQuery = params.toString();
+        router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
+    }, [columns, handleCardClick, loading, pathname, router, searchParams]);
 
     // Handle send message from modal (Requirements 3.4)
     const handleSendMessage = async (message: string) => {
@@ -832,12 +868,18 @@ export default function LeadsKanban() {
                                                     <div className="flex items-center gap-2">
                                                         {/* Channel Icon */}
                                                         {lead.source === 'instagram' ? (
-                                                            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
-                                                                <Instagram className="w-3 h-3 text-white" />
+                                                            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+                                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
+                                                                    <Instagram className="w-3 h-3 text-white" />
+                                                                </div>
+                                                                <span>Instagram</span>
                                                             </div>
                                                         ) : (
-                                                            <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
-                                                                <Phone className="w-3 h-3 text-white" />
+                                                            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
+                                                                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
+                                                                    <Phone className="w-3 h-3 text-white" />
+                                                                </div>
+                                                                <span>WhatsApp</span>
                                                             </div>
                                                         )}
                                                         <div className="flex flex-wrap gap-1.5">

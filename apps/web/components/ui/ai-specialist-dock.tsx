@@ -12,6 +12,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, X, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { useAISpecialist } from '@/hooks/useAISpecialist';
 import {
@@ -25,6 +26,73 @@ export interface AISpecialistDockProps {
   className?: string;
   /** Position offset from bottom to account for bottom nav */
   bottomOffset?: number;
+}
+
+const CRM_LEAD_LINK_REGEX = /\[([^[\]]+)\]\((\/dashboard\/quadro\?leadId=[^)]+)\)/g;
+
+function renderLineWithLeadLinks(line: string, lineKey: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  let currentIndex = 0;
+  let match: RegExpExecArray | null;
+  const regex = new RegExp(CRM_LEAD_LINK_REGEX);
+
+  while ((match = regex.exec(line)) !== null) {
+    const [fullMatch, label, href] = match;
+
+    if (match.index > currentIndex) {
+      parts.push(
+        <span key={`${lineKey}-text-${currentIndex}`}>
+          {line.slice(currentIndex, match.index)}
+        </span>
+      );
+    }
+
+    parts.push(
+      <Link
+        key={`${lineKey}-link-${match.index}`}
+        href={href}
+        className="underline decoration-dotted underline-offset-2 hover:decoration-solid text-blue-700"
+      >
+        {label}
+      </Link>
+    );
+
+    currentIndex = match.index + fullMatch.length;
+  }
+
+  if (currentIndex < line.length) {
+    parts.push(
+      <span key={`${lineKey}-tail`}>
+        {line.slice(currentIndex)}
+      </span>
+    );
+  }
+
+  if (parts.length === 0) {
+    parts.push(<span key={`${lineKey}-plain`}>{line}</span>);
+  }
+
+  return parts;
+}
+
+function renderAssistantMessageContent(content: string): React.ReactNode {
+  const lines = content.split('\n');
+
+  return (
+    <div className="whitespace-pre-wrap break-words">
+      {lines.map((line, index) => {
+        if (line.length === 0) {
+          return <div key={`line-${index}`} className="h-2" />;
+        }
+
+        return (
+          <div key={`line-${index}`}>
+            {renderLineWithLeadLinks(line, `line-${index}`)}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /**
@@ -264,7 +332,11 @@ export function AISpecialistDock({
                         : 'bg-gray-100 text-gray-800 rounded-bl-md'
                     )}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' ? (
+                      renderAssistantMessageContent(msg.content)
+                    ) : (
+                      <span className="whitespace-pre-wrap break-words">{msg.content}</span>
+                    )}
                   </div>
                 </div>
               ))}

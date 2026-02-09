@@ -10,7 +10,7 @@ e usa Agno/OpenAI para gerar respostas contextualizadas.
 import os
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Any
 import pytz
 
 from agno.agent import Agent
@@ -76,6 +76,204 @@ class AISpecialistService:
     def _format_time_pt_br(self, dt: datetime) -> str:
         """Formata horário em formato brasileiro (HH:MM)."""
         return dt.strftime("%H:%M")
+
+    def _normalize_temperature_pt(self, raw_temperature: Optional[str]) -> str:
+        """Normaliza temperatura para rótulo em português."""
+        if not raw_temperature:
+            return "frio"
+
+        temp = str(raw_temperature).strip().lower()
+        mapping = {
+            "hot": "quente",
+            "warm": "morno",
+            "cold": "frio",
+            "quente": "quente",
+            "morno": "morno",
+            "frio": "frio",
+        }
+        return mapping.get(temp, "frio")
+
+    def _format_source_label(self, raw_source: Optional[str]) -> str:
+        """Converte origem do lead para rótulo amigável."""
+        if not raw_source:
+            return "WhatsApp"
+
+        source = str(raw_source).strip().lower()
+        source_mapping = {
+            "whatsapp": "WhatsApp",
+            "instagram": "Instagram",
+            "site": "Site",
+            "facebook": "Facebook",
+            "indicacao": "Indicação",
+            "indicação": "Indicação",
+        }
+        return source_mapping.get(source, source.title())
+
+    def _format_interest_focus(self, lead: dict[str, Any]) -> str:
+        """Monta foco principal do lead (objetivo/interesse)."""
+        objective = (lead.get("objective") or "").strip().lower()
+        interest_type = (lead.get("interest_type") or "").strip().lower()
+
+        objective_mapping = {
+            "morar": "Morar no imóvel",
+            "investir": "Investir",
+            "morar_investir": "Morar e investir",
+        }
+        interest_mapping = {
+            "apartamento": "Apartamento",
+            "sala_comercial": "Sala comercial",
+            "office": "Office",
+            "flat": "Flat",
+            "loft": "Loft",
+        }
+
+        if objective in objective_mapping:
+            return objective_mapping[objective]
+        if interest_type in interest_mapping:
+            return interest_mapping[interest_type]
+        return "Interesse não informado"
+
+    def _rank_leads_by_interest(self, leads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Ordena leads por potencial (temperatura) e recência."""
+        temp_priority = {
+            "quente": 3,
+            "hot": 3,
+            "morno": 2,
+            "warm": 2,
+            "frio": 1,
+            "cold": 1,
+        }
+
+        return sorted(
+            leads,
+            key=lambda lead: (
+                temp_priority.get(str(lead.get("temperature", "")).strip().lower(), 0),
+                str(lead.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+
+    def _build_top_interest_leads(self, leads: list[dict[str, Any]], limit: int = 5) -> str:
+        """Constrói lista priorizada de leads com maior potencial (máx. 5)."""
+        if not leads:
+            return "        Nenhum lead encontrado."
+
+        ranked_leads = self._rank_leads_by_interest(leads)
+
+        lines: list[str] = []
+        for lead in ranked_leads[:limit]:
+            lead_id = lead.get("id", "")
+            lead_name = lead.get("full_name") or "Lead sem nome"
+            focus = self._format_interest_focus(lead)
+            source_label = self._format_source_label(lead.get("source"))
+            temperature = self._normalize_temperature_pt(lead.get("temperature"))
+            lines.append(
+                f"- id={lead_id}; nome={lead_name}; foco={focus}; "
+                f"origem={source_label}; temperatura={temperature}; "
+                f"link=/dashboard/quadro?leadId={lead_id}"
+            )
+
+        return "\n".join(lines) if lines else "        Nenhum lead encontrado."
+
+    def _is_top_leads_query(self, message: str) -> bool:
+        """Detecta perguntas sobre maiores interesses/leads."""
+        lowered = (message or "").lower()
+        keywords = (
+            "maiores interesses",
+            "interesses registrados",
+            "maiores leads",
+            "top leads",
+            "lead mais quente",
+            "leads mais quentes",
+            "maior potencial",
+        )
+        return any(keyword in lowered for keyword in keywords)
+
+    def _fetch_top_interest_leads_data(self, limit: int = 30) -> list[dict[str, Any]]:
+        """Busca leads para ranking de interesse (usado em resposta direta)."""
+        try:
+            leads_res = self.supabase.table("leads").select(
+                "id, full_name, temperature, source, interest_type, objective, created_at"
+            ).order("created_at", direction="desc").limit(limit).execute()
+            return leads_res.data if leads_res.data else []
+        except Exception as e:
+            print(f"[AISpecialistService] Error fetching top interest leads: {e}")
+            raise DatabaseQueryError(f"Erro ao consultar leads para ranking: {e}")
+
+    def _build_direct_top_leads_response(self, leads: list[dict[str, Any]], limit: int = 5) -> str:
+        """Gera resposta pronta no formato objetivo para maiores interesses."""
+        ranked_leads = self._rank_leads_by_interest(leads)[:limit]
+        if not ranked_leads:
+            return (
+                "Os maiores interesses registrados são:\n"
+                "- Nenhum lead com interesse registrado no momento.\n\n"
+                "Priorize leads quentes para aumentar a taxa de conversão.\n\n"
+                "Quer uma sugestão de mensagem para te ajudar a fechar o lead quente?"
+            )
+
+        lines: list[str] = []
+        for lead in ranked_leads:
+            lead_id = lead.get("id", "")
+            lead_name = lead.get("full_name") or "Lead sem nome"
+            focus = self._format_interest_focus(lead)
+            source = self._format_source_label(lead.get("source"))
+            temperature = self._normalize_temperature_pt(lead.get("temperature")).capitalize()
+            lines.append(
+                f"- [{lead_name}](/dashboard/quadro?leadId={lead_id}) - "
+                f"{focus} (Lead {lead_name} - {source} - {temperature})"
+            )
+
+        return (
+            "Os maiores interesses registrados são:\n"
+            f"{chr(10).join(lines)}\n\n"
+            "Priorize leads quentes para aumentar a taxa de conversão.\n\n"
+            "Quer uma sugestão de mensagem para te ajudar a fechar o lead quente?"
+        )
+
+    def _post_process_top_leads_response(self, content: str, user_message: str = "") -> str:
+        """
+        Garante formato objetivo para respostas sobre maiores leads/interesses.
+        """
+        if not content:
+            return content
+
+        trigger_text = f"{user_message} {content}".lower()
+        trigger_terms = (
+            "maiores interesses",
+            "maiores leads",
+            "maior potencial",
+            "interesses registrados",
+        )
+        if not any(term in trigger_text for term in trigger_terms):
+            return content
+
+        lines = [line.rstrip() for line in content.splitlines()]
+        filtered_lines: list[str] = []
+        bullet_count = 0
+
+        for line in lines:
+            stripped = line.lstrip()
+            is_bullet = stripped.startswith("-") or stripped.startswith("*") or stripped.startswith("•")
+            if is_bullet:
+                if bullet_count >= 5:
+                    continue
+                bullet_count += 1
+            filtered_lines.append(line)
+
+        if not any("os maiores interesses registrados são" in line.lower() for line in filtered_lines):
+            filtered_lines.insert(0, "Os maiores interesses registrados são:")
+
+        normalized_response = "\n".join(filtered_lines).strip()
+
+        conversion_line = "Priorize leads quentes para aumentar a taxa de conversão."
+        cta_line = "Quer uma sugestão de mensagem para te ajudar a fechar o lead quente?"
+
+        if conversion_line.lower() not in normalized_response.lower():
+            normalized_response = f"{normalized_response}\n\n{conversion_line}"
+        if cta_line.lower() not in normalized_response.lower():
+            normalized_response = f"{normalized_response}\n\n{cta_line}"
+
+        return normalized_response
     
     def _build_events_context(self) -> str:
         """
@@ -263,7 +461,9 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             now = self._get_current_datetime()
             
             # Get leads summary
-            leads_res = self.supabase.table("leads").select("id, status, temperature").execute()
+            leads_res = self.supabase.table("leads").select(
+                "id, full_name, status, temperature, source, interest_type, objective, created_at"
+            ).execute()
             leads = leads_res.data if leads_res.data else []
             
             # Count by status
@@ -287,6 +487,8 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
                 last_msg = conv.get('last_message', '')[:50]
                 recent_convs_str += f"- {lead_name}: {last_msg}...\n"
             
+            top_interest_leads = self._build_top_interest_leads(leads, limit=5)
+
             context = f"""
 <dados_crm>
     <data_atual>{self._format_date_pt_br(now)}</data_atual>
@@ -304,6 +506,10 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
     <conversas_recentes>
 {recent_convs_str if recent_convs_str else "        Nenhuma conversa recente."}
     </conversas_recentes>
+
+    <maiores_interesses>
+{top_interest_leads}
+    </maiores_interesses>
 </dados_crm>
 """
             return context
@@ -317,6 +523,10 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
         Processa perguntas sobre o CRM usando IA.
         """
         try:
+            if self._is_top_leads_query(message):
+                leads_data = self._fetch_top_interest_leads_data(limit=30)
+                return self._build_direct_top_leads_response(leads_data, limit=5)
+
             crm_context = self._build_crm_context()
             
             system_prompt = f"""Você é um assistente especializado no CRM do Palmas Lake.
@@ -328,9 +538,17 @@ Sua função é responder perguntas sobre leads, conversas e o pipeline de venda
 ## REGRAS DE RESPOSTA:
 
 1. Sempre responda em português brasileiro
-2. Use linguagem profissional mas amigável
-3. Seja conciso mas informativo
+2. Use linguagem profissional, humanizada e objetiva
+3. Prefira frases curtas e diretas
 4. Quando mencionar números, seja preciso
+5. Nunca liste mais de 5 leads em uma resposta
+6. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
+   - Comece com: "Os maiores interesses registrados são:"
+   - Liste no máximo 5 leads priorizando temperatura: quente > morno > frio
+   - Cada item deve ter o nome clicável neste formato: [Nome do Lead](/dashboard/quadro?leadId=ID)
+   - Inclua foco/interesse, origem e temperatura em cada item
+   - Finalize com: "Priorize leads quentes para aumentar a taxa de conversão."
+   - Em seguida pergunte: "Quer uma sugestão de mensagem para te ajudar a fechar o lead quente?"
 
 Responda a pergunta do usuário baseado nos dados fornecidos acima."""
 
@@ -350,7 +568,7 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             if not response or not response.content:
                 raise AIGenerationError("Resposta vazia da IA")
             
-            return response.content
+            return self._post_process_top_leads_response(response.content, message)
             
         except Exception as e:
             print(f"[AISpecialistService] Error processing CRM query: {e}")
@@ -369,17 +587,25 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             
             # Get all leads with details
             leads_res = self.supabase.table("leads").select(
-                "id, full_name, phone, status, temperature, source, created_at"
+                "id, full_name, phone, status, temperature, source, created_at, interest_type, objective"
             ).order("created_at", direction="desc").limit(20).execute()
             leads = leads_res.data if leads_res.data else []
             
             leads_str = ""
-            for lead in leads[:10]:
+            for lead in leads[:5]:
+                lead_id = lead.get('id', '')
                 name = lead.get('full_name', 'Sem nome')
                 status = lead.get('status', 'novo')
-                temp = lead.get('temperature', 'frio')
-                source = lead.get('source', 'desconhecido')
-                leads_str += f"- {name}: status={status}, temperatura={temp}, origem={source}\n"
+                temp = self._normalize_temperature_pt(lead.get('temperature'))
+                source = self._format_source_label(lead.get('source'))
+                focus = self._format_interest_focus(lead)
+                leads_str += (
+                    f"- id={lead_id}; nome={name}; status={status}; "
+                    f"temperatura={temp}; origem={source}; foco={focus}; "
+                    f"link=/dashboard/quadro?leadId={lead_id}\n"
+                )
+
+            top_interest_leads = self._build_top_interest_leads(leads, limit=5)
             
             context = f"""
 <dados_leads>
@@ -389,6 +615,10 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
     <leads_recentes>
 {leads_str if leads_str else "        Nenhum lead cadastrado."}
     </leads_recentes>
+
+    <maiores_interesses>
+{top_interest_leads}
+    </maiores_interesses>
 </dados_leads>
 """
             return context
@@ -402,6 +632,10 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
         Processa perguntas sobre leads usando IA.
         """
         try:
+            if self._is_top_leads_query(message):
+                leads_data = self._fetch_top_interest_leads_data(limit=30)
+                return self._build_direct_top_leads_response(leads_data, limit=5)
+
             leads_context = self._build_leads_context()
             
             system_prompt = f"""Você é um assistente especializado em leads do Palmas Lake CRM.
@@ -413,10 +647,18 @@ Sua função é responder perguntas sobre leads, seus status e temperaturas.
 ## REGRAS DE RESPOSTA:
 
 1. Sempre responda em português brasileiro
-2. Use linguagem profissional mas amigável
-3. Seja conciso mas informativo
+2. Use linguagem profissional, humanizada e objetiva
+3. Prefira frases curtas e diretas
 4. Explique os status: novo_lead, qualificado, visita_agendada, visita_realizada, proposta_enviada
 5. Explique as temperaturas: quente (alta probabilidade), morno (engajado), frio (baixo interesse)
+6. Nunca liste mais de 5 leads em uma resposta
+7. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
+   - Comece com: "Os maiores interesses registrados são:"
+   - Liste no máximo 5 leads priorizando temperatura: quente > morno > frio
+   - Cada item deve ter o nome clicável neste formato: [Nome do Lead](/dashboard/quadro?leadId=ID)
+   - Inclua foco/interesse, origem e temperatura em cada item
+   - Finalize com: "Priorize leads quentes para aumentar a taxa de conversão."
+   - Em seguida pergunte: "Quer uma sugestão de mensagem para te ajudar a fechar o lead quente?"
 
 Responda a pergunta do usuário baseado nos dados fornecidos acima."""
 
@@ -436,7 +678,7 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             if not response or not response.content:
                 raise AIGenerationError("Resposta vazia da IA")
             
-            return response.content
+            return self._post_process_top_leads_response(response.content, message)
             
         except Exception as e:
             print(f"[AISpecialistService] Error processing leads query: {e}")
