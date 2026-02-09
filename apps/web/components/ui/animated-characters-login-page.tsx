@@ -300,9 +300,10 @@ export default function AnimatedLoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div className="flex min-h-screen w-full items-center justify-center bg-muted/30 p-4">
+      <div className="flex w-full max-w-[1000px] overflow-hidden rounded-2xl bg-background shadow-xl border border-border/40" style={{ minHeight: "600px", maxHeight: "700px" }}>
       {/* ─── Left Content Section (hidden on mobile) ─── */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-8 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-8 bg-gradient-to-br from-primary/5 via-muted/50 to-accent/5">
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-3">
           <Image
@@ -593,8 +594,8 @@ export default function AnimatedLoginPage() {
       </div>
 
       {/* ─── Right Login Section ─── */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8">
-        <div className="w-full max-w-md space-y-8">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-8 overflow-y-auto">
+        <div className="w-full max-w-sm space-y-6">
           {/* Mobile Logo */}
           <div className="lg:hidden flex justify-center">
             <Image
@@ -797,6 +798,7 @@ export default function AnimatedLoginPage() {
             )}
           </p>
         </div>
+      </div>
       </div>
     </div>
   );
