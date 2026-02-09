@@ -558,6 +558,22 @@ Mensagem atual do Cliente:
             if sentiment_data.get("conversation_summary"):
                 update_payload["conversation_summary"] = str(sentiment_data["conversation_summary"])
             
+            # Auto-qualify: if lead expressed a specific interest type, move to qualificado
+            # This ensures consistent behavior across channels (Instagram/WhatsApp)
+            if update_payload.get("interest_type"):
+                payload_status = update_payload.get("status", "")
+                early_statuses = ("novo_lead", "new", "")
+                if payload_status in early_statuses or not payload_status:
+                    # Also check DB status to avoid downgrading advanced leads
+                    try:
+                        _lead_check = supabase.table("leads").select("status").eq("id", db_lead_id).execute()
+                        db_current = (_lead_check.data[0].get("status", "") if _lead_check.data else "").lower()
+                    except Exception:
+                        db_current = ""
+                    if db_current in early_statuses or not db_current:
+                        update_payload["status"] = "qualificado"
+                        print(f"[Sentiment] Auto-qualified lead {db_lead_id}: interest_type={update_payload['interest_type']}")
+
             # Save full analysis for reference
             update_payload["last_analysis"] = sentiment_data
 
