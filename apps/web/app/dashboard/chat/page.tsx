@@ -65,8 +65,8 @@ export default function ChatPage() {
     const SCHEMA = 'palmaslake-agno';
 
     // Fetch Conversations
-    const fetchConversations = useCallback(async () => {
-        setLoading(true);
+    const fetchConversations = useCallback(async (isPolling = false) => {
+        if (!isPolling) setLoading(true);
         setError(null);
         try {
             // Use AbortController for timeout - fail fast if API is not available
@@ -97,7 +97,7 @@ export default function ChatPage() {
                     const updated = formatted.find((c: Conversation) => c.id === prev.id);
                     return updated || prev;
                 });
-                setLoading(false);
+                if (!isPolling) setLoading(false);
                 return;
             }
             // Log detailed error for non-OK status

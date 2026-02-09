@@ -236,9 +236,11 @@ async def handle_webhook(request: Request):
             print(f"[Meta Webhook] Ignoring non-instagram object: {obj_type}")
             return {"status": "ignored"}
 
-        page_id = os.environ.get("META_INSTAGRAM_PAGE_ID", "")
-
         for entry in data.get("entry", []):
+            # entry.id is our own Instagram Business Account ID or Page ID
+            # Any message where sender.id matches entry.id is from us (echo)
+            entry_id = entry.get("id", "")
+            
             for messaging_event in entry.get("messaging", []):
                 sender_id = messaging_event.get("sender", {}).get("id")
                 recipient_id = messaging_event.get("recipient", {}).get("id")
@@ -246,14 +248,21 @@ async def handle_webhook(request: Request):
                 text = message.get("text")
                 msg_id = message.get("mid")
 
-                # Ignore echo messages (sent by our page)
+                # Skip non-message events (message_edit, read receipts, etc.)
+                if not message or "mid" not in message:
+                    print(f"[Meta Webhook] Skipping non-message event")
+                    continue
+
+                # Ignore echo messages (sent by our page/bot)
                 if message.get("is_echo"):
                     print(f"[Meta Webhook] Ignoring echo message")
                     continue
 
-                # Ignore if sender is our own page
-                if sender_id == page_id:
-                    print(f"[Meta Webhook] Ignoring message from our own page")
+                # Ignore if sender is our own page/account
+                # Check against entry.id (webhook owner) and meta_service.page_id (fetched on init)
+                own_ids = {entry_id, meta_service.page_id or ""}
+                if sender_id in own_ids:
+                    print(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")
                     continue
 
                 if not sender_id or not text:
