@@ -10,34 +10,56 @@ message_buffer: Dict[str, List[tuple]] = {}
 buffer_locks: Dict[str, asyncio.Lock] = {}
 # Track which channel each lead_id uses (whatsapp or instagram)
 channel_map: Dict[str, str] = {}
+# Track recently processed message IDs to prevent duplicates (TTL managed manually)
+_processed_msg_ids: Dict[str, float] = {}  # msg_id -> timestamp
+_DEDUP_TTL = 120  # seconds to keep message IDs in memory
 
 agent = AgentManager()
 uazapi = UazapiService()
 meta = MetaService()
 
+def _cleanup_processed_ids():
+    """Remove expired message IDs from the dedup cache."""
+    import time
+    now = time.time()
+    expired = [mid for mid, ts in _processed_msg_ids.items() if now - ts > _DEDUP_TTL]
+    for mid in expired:
+        del _processed_msg_ids[mid]
+
 async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp"):
     """
     Add a message to the buffer for a lead. Messages are batched and processed
     after a 2-second delay.
-    
+
     Args:
         lead_id: Identifier for the lead (phone for WhatsApp, ig:<igsid> for Instagram)
         message_content: Text content of the message
         message_id: Platform message ID (optional)
         channel: "whatsapp" or "instagram"
     """
+    import time
+
+    # --- DEDUP CHECK: Skip if this message_id was already processed recently ---
+    if message_id:
+        _cleanup_processed_ids()
+        if message_id in _processed_msg_ids:
+            print(f"[Buffer] DUPLICATE: message_id {message_id} already in buffer/processed, skipping")
+            return
+        _processed_msg_ids[message_id] = time.time()
+    # -------------------------------------------------------------------------
+
     if lead_id not in buffer_locks:
         buffer_locks[lead_id] = asyncio.Lock()
-    
+
     # Store the channel for this lead
     channel_map[lead_id] = channel
-    
+
     async with buffer_locks[lead_id]:
         if lead_id not in message_buffer:
             message_buffer[lead_id] = []
             # Start timer for this new batch
             asyncio.create_task(process_buffer_after_delay(lead_id))
-        
+
         message_buffer[lead_id].append((message_content, message_id))
 
 async def process_buffer_after_delay(lead_id: str):

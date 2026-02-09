@@ -183,7 +183,7 @@ Mensagem atual do Cliente:
                             now = datetime.now(timezone.utc)
                             diff = (now - created_at).total_seconds()
                             
-                            if diff < 20: # Janela de 20s para evitar duplicatas
+                            if diff < 60: # Janela de 60s para evitar duplicatas (Meta pode retransmitir webhooks)
                                 print(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
                                 return "IGNORED_DUPLICATE"
         except Exception as e:

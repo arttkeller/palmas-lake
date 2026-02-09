@@ -264,6 +264,26 @@ async def handle_webhook(request: Request):
                 lead_identifier = f"ig:{sender_id}"
                 print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
 
+                # --- IDEMPOTENCY CHECK: Ignore if msg_id already exists in DB ---
+                if msg_id:
+                    try:
+                        from services.message_service import MessageService
+                        _msg_svc = MessageService()
+                        # Find the lead and conversation to check for existing message
+                        _lead_res = _msg_svc.supabase.table("leads").select("id").eq("instagram_id", sender_id).execute()
+                        if _lead_res.data:
+                            _lead_id = _lead_res.data[0]["id"]
+                            _conv_res = _msg_svc.supabase.table("conversations").select("id").eq("lead_id", _lead_id).execute()
+                            if _conv_res.data:
+                                _conv_id = _conv_res.data[0]["id"]
+                                _existing = _msg_svc.find_message_by_whatsapp_id(_conv_id, msg_id)
+                                if _existing:
+                                    print(f"[Meta Webhook] DUPLICATE: msg_id {msg_id} already exists, skipping")
+                                    continue
+                    except Exception as dup_err:
+                        print(f"[Meta Webhook] Idempotency check error (non-fatal): {dup_err}")
+                # ---------------------------------------------------------------
+
                 # Verificar comando especial #apagar
                 if text.strip().lower() == CLEAR_COMMAND:
                     print(f"🗑️ [CLEAR] Comando de limpeza recebido de {lead_identifier} (Instagram)")
