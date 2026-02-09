@@ -2,8 +2,10 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Save, Users, Shield, ShieldCheck, Trash2, Loader2 } from 'lucide-react';
+import { Save, Users, Shield, ShieldCheck, Trash2, Loader2, LogOut } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
+import { createClient } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api-config';
 
 interface CrmUser {
@@ -16,6 +18,13 @@ interface CrmUser {
 
 export default function SettingsPage() {
     const { crmUser, isAdmin, user, refreshUser } = useAuth();
+    const router = useRouter();
+    const supabase = createClient();
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut();
+        router.push('/');
+    };
 
     // Profile form state
     const [profileName, setProfileName] = useState('');
@@ -197,6 +206,13 @@ export default function SettingsPage() {
                                 </p>
                             </div>
                         </div>
+                        <button
+                            onClick={handleSignOut}
+                            className="flex w-full items-center justify-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                        >
+                            <LogOut className="h-4 w-4" />
+                            Sair da conta
+                        </button>
                     </div>
                 </div>
             </div>

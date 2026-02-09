@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, EyeOff, Mail, Sparkles, UserPlus, LogIn } from "lucide-react";
+import { Eye, EyeOff, Mail, Sparkles, UserPlus, LogIn, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase";
 
@@ -130,6 +130,7 @@ export default function AnimatedLoginPage() {
   /* ── Form state ── */
   const [mode, setMode] = useState<"login" | "register">("login");
   const [showPassword, setShowPassword] = useState(false);
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -249,6 +250,11 @@ export default function AnimatedLoginPage() {
     setIsLoading(true);
 
     if (mode === "register") {
+      if (!fullName.trim()) {
+        setError("Por favor, informe seu nome.");
+        setIsLoading(false);
+        return;
+      }
       if (password !== confirmPassword) {
         setError("As senhas não coincidem.");
         setIsLoading(false);
@@ -262,6 +268,11 @@ export default function AnimatedLoginPage() {
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName.trim(),
+          },
+        },
       });
       if (signUpError) {
         setError(signUpError.message);
@@ -270,6 +281,7 @@ export default function AnimatedLoginPage() {
           "Conta criada com sucesso! Verifique seu email para confirmar."
         );
         setMode("login");
+        setFullName("");
         setPassword("");
         setConfirmPassword("");
       }
@@ -281,7 +293,7 @@ export default function AnimatedLoginPage() {
       if (signInError) {
         setError("Email ou senha incorretos. Tente novamente.");
       } else {
-        router.push("/dashboard");
+        router.push("/dashboard/quadro");
       }
     }
 
@@ -629,6 +641,27 @@ export default function AnimatedLoginPage() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Name field (register mode only) */}
+            {mode === "register" && (
+              <div className="space-y-2">
+                <Label htmlFor="full-name">Nome</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="full-name"
+                    type="text"
+                    placeholder="Seu nome completo"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="h-12 pl-10 bg-background border-border/60 focus:border-primary"
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email-address">Email</Label>
               <div className="relative">
