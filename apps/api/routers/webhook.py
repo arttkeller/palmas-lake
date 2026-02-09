@@ -255,30 +255,31 @@ async def handle_webhook(request: Request):
 
                 # --- MECHANISM 1: Check if this is a message we sent (by MID) ---
                 if meta_service.is_own_message(msg_id):
+                    meta_service.learn_own_igsid(sender_id)
                     print(f"[Meta Webhook] Ignoring own message (matched sent MID: {msg_id})")
                     continue
                 # ----------------------------------------------------------------
 
-                # Ignore echo messages (sent by our page/bot)
+                # --- MECHANISM 2: Meta's is_echo flag ---
                 if message.get("is_echo"):
+                    meta_service.learn_own_igsid(sender_id)
                     print(f"[Meta Webhook] Ignoring echo message")
                     continue
 
-                # Ignore if sender is our own page/account
-                # Check against entry.id (webhook owner), meta_service.page_id (fetched on init)
-                # AND meta_service.instagram_scoped_id (learned from incoming messages)
-                # AND meta_service.instagram_business_account_id (official IGSID from API)
+                # --- MECHANISM 3: Sender ID matches our known IDs ---
                 own_ids = {
-                    entry_id, 
-                    meta_service.page_id or "", 
+                    entry_id,
+                    meta_service.page_id or "",
                     meta_service.instagram_scoped_id or "",
                     meta_service.instagram_business_account_id or ""
                 }
-                
+                own_ids.discard("")
+
                 # Diagnostic logging
                 print(f"[Meta Webhook] IDs: entry_id={entry_id}, sender_id={sender_id}, recipient_id={recipient_id}, page_id={meta_service.page_id}, igsid={meta_service.instagram_scoped_id}, biz_id={meta_service.instagram_business_account_id}")
-                
+
                 if sender_id in own_ids:
+                    meta_service.learn_own_igsid(sender_id)
                     print(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")
                     continue
 
@@ -286,11 +287,10 @@ async def handle_webhook(request: Request):
                     print(f"[Meta Webhook] Missing sender_id or text, skipping")
                     continue
 
-                # --- MECHANISM 2: Learn our own IGSID from incoming messages ---
+                # Learn our own IGSID from incoming messages.
                 # If we are here, it's a real message from a user TO us.
                 # So recipient_id is OUR IGSID.
                 meta_service.learn_own_igsid(recipient_id)
-                # ---------------------------------------------------------------
 
                 # Use ig: prefix to differentiate Instagram leads from WhatsApp
                 lead_identifier = f"ig:{sender_id}"

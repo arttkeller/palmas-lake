@@ -3,7 +3,13 @@ import os
 import re
 import requests
 import time
+import json
+from pathlib import Path
 from typing import Optional, Dict, Set
+
+# Persistence for learned IGSID (survives restarts)
+_STATE_DIR = Path(os.environ.get("META_STATE_DIR", os.path.dirname(os.path.abspath(__file__))))
+_STATE_FILE = _STATE_DIR / ".meta_state.json"
 
 
 def remove_markdown_for_instagram(text: str) -> str:
@@ -66,8 +72,13 @@ class MetaService:
         self._sent_ids_ttl = 300  # 5 minutes
         
         # Our own Instagram Scoped ID (IGSID)
-        # Learned automatically from incoming messages
-        self.instagram_scoped_id: Optional[str] = None
+        # Priority: 1) env var  2) persisted file  3) learn at runtime
+        env_igsid = os.environ.get("META_INSTAGRAM_SCOPED_ID")
+        if env_igsid:
+            self.instagram_scoped_id = env_igsid.strip()
+            print(f"[MetaService] IGSID from env var: {self.instagram_scoped_id}")
+        else:
+            self.instagram_scoped_id = self._load_persisted_igsid()
         
         if self.access_token:
             print(f"[MetaService] Token loaded (length={len(self.access_token)}, starts_with={self.access_token[:10]}...)")
@@ -145,14 +156,47 @@ class MetaService:
         self._cleanup_sent_ids()
         return message_id in self._sent_message_ids
 
-    def learn_own_igsid(self, recipient_id: str):
+    def learn_own_igsid(self, igsid: str):
         """
-        Learn our own Instagram Scoped ID from an incoming message.
-        The recipient_id of a message sent TO us is OUR ID.
+        Learn our own Instagram Scoped ID.
+        Called with recipient_id from incoming messages OR sender_id from caught echoes.
+        Persists to file so it survives restarts.
         """
-        if not self.instagram_scoped_id and recipient_id:
-            self.instagram_scoped_id = recipient_id
-            print(f"[MetaService] Learned own IGSID: {self.instagram_scoped_id}")
+        if not igsid:
+            return
+        if not self.instagram_scoped_id:
+            self.instagram_scoped_id = igsid
+            self._persist_igsid(igsid)
+            print(f"[MetaService] Learned and persisted own IGSID: {self.instagram_scoped_id}")
+
+    def _load_persisted_igsid(self) -> Optional[str]:
+        """Load the persisted IGSID from the state file."""
+        try:
+            if _STATE_FILE.exists():
+                data = json.loads(_STATE_FILE.read_text())
+                igsid = data.get("instagram_scoped_id")
+                if igsid:
+                    print(f"[MetaService] Loaded persisted IGSID from file: {igsid}")
+                    return igsid
+        except Exception as e:
+            print(f"[MetaService] Error loading persisted IGSID: {e}")
+        return None
+
+    def _persist_igsid(self, igsid: str):
+        """Persist the IGSID to the state file for restart survival."""
+        try:
+            _STATE_DIR.mkdir(parents=True, exist_ok=True)
+            data = {}
+            if _STATE_FILE.exists():
+                try:
+                    data = json.loads(_STATE_FILE.read_text())
+                except Exception:
+                    pass
+            data["instagram_scoped_id"] = igsid
+            _STATE_FILE.write_text(json.dumps(data))
+            print(f"[MetaService] Persisted IGSID to file: {igsid}")
+        except Exception as e:
+            print(f"[MetaService] Error persisting IGSID: {e}")
 
     def get_instagram_profile(self, user_id: str) -> Optional[Dict]:
         """
