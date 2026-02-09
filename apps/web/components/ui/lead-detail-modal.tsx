@@ -4,6 +4,7 @@ import * as React from 'react';
 import { X, User, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TemperatureBadge } from './temperature-badge';
+import { formatInterestType } from '@/lib/interest-type-format';
 import type { Lead } from '@/types/lead';
 
 type ModalTab = 'info' | 'chat';
@@ -195,7 +196,9 @@ export function LeadDetailModal({
             {lead.interest_type && (
               <div className="space-y-1">
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">Interesse</span>
-                <p className="text-sm font-medium text-foreground">🏠 {lead.interest_type}</p>
+                <p className="text-sm font-medium text-foreground">
+                  {formatInterestType(lead.interest_type, { withEmoji: true })}
+                </p>
               </div>
             )}
             {lead.objective && (

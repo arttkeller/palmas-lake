@@ -24,6 +24,7 @@ import { useLeadFilters, calculateLeadCountsByTemperature } from '@/hooks/useLea
 import { useLeadModal } from '@/hooks/useLeadModal';
 import type { LeadTemperature, NonNullLeadTemperature, LeadTag } from '@/lib/temperature-config';
 import { normalizeTemperature } from '@/lib/temperature-config';
+import { formatInterestType } from '@/lib/interest-type-format';
 import { normalizeStatus as normalizeStatusShared } from '@/lib/status-config';
 import type { Lead as LeadType } from '@/types/lead';
 import type { Message } from '@/types/chat';
@@ -797,7 +798,7 @@ export default function LeadsKanban() {
 
                                                 {/* Details */}
                                                 <div className="space-y-2">
-                                                    {lead.phone && (
+                                                    {lead.phone && lead.source !== 'whatsapp' && (
                                                         <div className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-gray-800 to-gray-900 p-2.5 rounded-xl">
                                                             <Phone className="w-3.5 h-3.5" />
                                                             <span>{lead.phone}</span>
@@ -986,7 +987,7 @@ export default function LeadsKanban() {
                                 {interestType && (
                                     <LeadDetailModalSection title="Tipo de Interesse" className="mt-4">
                                         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
-                                            {({'apartamento': '🏠 Apartamento', 'sala_comercial': '🏢 Sala Comercial', 'office': '💼 Office', 'flat': '🏨 Flat'} as Record<string, string>)[interestType.toLowerCase()] || interestType}
+                                            {formatInterestType(interestType, { withEmoji: true })}
                                         </Badge>
                                     </LeadDetailModalSection>
                                 )}

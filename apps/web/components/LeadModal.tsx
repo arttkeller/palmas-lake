@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
 import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase';
+import { formatInterestType } from '@/lib/interest-type-format';
 import type { Message } from '@/types/chat';
 
 /**
@@ -880,7 +881,7 @@ export function LeadModal({
               <span className="text-xs text-gray-500 uppercase tracking-wide font-medium">Interesse</span>
               {lead.interest_type ? (
                 <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">
-                  {({'apartamento': '🏠 Apartamento', 'sala_comercial': '🏢 Sala Comercial', 'office': '💼 Office', 'flat': '🏨 Flat'} as Record<string, string>)[lead.interest_type.toLowerCase()] || lead.interest_type}
+                  {formatInterestType(lead.interest_type, { withEmoji: true })}
                 </Badge>
               ) : (
                 <span className="text-sm text-gray-400">-</span>

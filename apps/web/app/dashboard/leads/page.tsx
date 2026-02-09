@@ -22,6 +22,7 @@ import { LeadModal, type LeadModalLead } from '@/components/LeadModal';
 import { normalizeStatus, getStatusConfig } from '@/lib/status-config';
 import { TemperatureBadge } from '@/components/ui/temperature-badge';
 import { normalizeTemperature } from '@/lib/temperature-config';
+import { formatInterestType } from '@/lib/interest-type-format';
 
 // Interface para Lead
 interface Lead {
@@ -130,18 +131,9 @@ function InterestBadge({ interestType }: { interestType: string | null }) {
         return <span className="text-gray-400 text-sm">-</span>;
     }
 
-    const interestLabels: Record<string, string> = {
-        'apartamento': '🏠 Apartamento',
-        'sala_comercial': '🏢 Sala Comercial',
-        'office': '💼 Office',
-        'flat': '🏨 Flat',
-    };
-
-    const label = interestLabels[interestType.toLowerCase()] || interestType;
-
     return (
         <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200 font-medium">
-            {label}
+            {formatInterestType(interestType, { withEmoji: true })}
         </Badge>
     );
 }
