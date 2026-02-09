@@ -20,8 +20,8 @@ interface AIMessageRequest {
   context: AIMessageContext;
 }
 
-// Backend API URL
-const BACKEND_API_URL = process.env.BACKEND_API_URL || 'http://localhost:8000';
+// Backend API URL - falls back to NEXT_PUBLIC_API_URL (used by rest of app)
+const BACKEND_API_URL = process.env.BACKEND_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 /**
  * POST /api/ai-specialist/message

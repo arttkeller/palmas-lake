@@ -17,7 +17,8 @@ import uuid
 router = APIRouter(prefix="/api/ai-specialist", tags=["AI Specialist"])
 
 # Timeout configuration (in seconds)
-AI_PROCESSING_TIMEOUT = 5
+# AI needs: DB query + OpenAI API call, so 15s is more realistic
+AI_PROCESSING_TIMEOUT = 15
 
 
 # =============================================================================
