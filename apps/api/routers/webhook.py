@@ -301,17 +301,19 @@ async def handle_webhook(request: Request):
                     try:
                         from services.message_service import MessageService
                         _msg_svc = MessageService()
-                        # Find the lead and conversation to check for existing message
-                        _lead_res = _msg_svc.supabase.table("leads").select("id").eq("instagram_id", sender_id).execute()
-                        if _lead_res.data:
-                            _lead_id = _lead_res.data[0]["id"]
-                            _conv_res = _msg_svc.supabase.table("conversations").select("id").eq("lead_id", _lead_id).execute()
-                            if _conv_res.data:
-                                _conv_id = _conv_res.data[0]["id"]
-                                _existing = _msg_svc.find_message_by_whatsapp_id(_conv_id, msg_id)
-                                if _existing:
-                                    print(f"[Meta Webhook] DUPLICATE: msg_id {msg_id} already exists, skipping")
-                                    continue
+                        # Global lookup: if ANY message already has this platform msg_id,
+                        # this webhook event is a duplicate/echo and must be ignored.
+                        _existing_res = (
+                            _msg_svc.supabase
+                            .table("messages")
+                            .select("id")
+                            .eq("metadata->>whatsapp_msg_id", msg_id)
+                            .limit(1)
+                            .execute()
+                        )
+                        if _existing_res.data:
+                            print(f"[Meta Webhook] DUPLICATE/ECHO: msg_id {msg_id} already exists in DB, skipping")
+                            continue
                     except Exception as dup_err:
                         print(f"[Meta Webhook] Idempotency check error (non-fatal): {dup_err}")
                 # ---------------------------------------------------------------

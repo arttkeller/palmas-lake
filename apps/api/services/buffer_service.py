@@ -90,16 +90,20 @@ async def process_buffer_after_delay(lead_id: str):
                     # Send via the appropriate channel
                     try:
                         print(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
-                        _send_message(lead_id, part, channel)
+                        send_result = _send_message(lead_id, part, channel)
                         print(f"[Buffer] Message sent successfully via {channel}")
                     except Exception as send_err:
                         import traceback
                         print(f"[Buffer] ERROR sending message via {channel}: {send_err}")
                         traceback.print_exc()
+                        send_result = None
                     
                     # Save each part to DB
                     try:
-                        msg_service.save_message(lead_id, part, "ai")
+                        whatsapp_msg_id = None
+                        if channel == "instagram" and isinstance(send_result, dict):
+                            whatsapp_msg_id = send_result.get("message_id")
+                        msg_service.save_message(lead_id, part, "ai", whatsapp_msg_id=whatsapp_msg_id)
                     except Exception as db_err:
                         print(f"DB Error saving AI response part: {db_err}")
                     
@@ -147,5 +151,7 @@ def _send_message(lead_id: str, text: str, channel: str):
         # MetaService.send_instagram_message already removes markdown
         result = meta.send_instagram_message(recipient_id, text)
         print(f"[_send_message] Instagram send result: {result}")
+        return result
     else:
         uazapi.send_whatsapp_message(lead_id, text)
+        return None
