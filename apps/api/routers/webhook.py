@@ -267,10 +267,16 @@ async def handle_webhook(request: Request):
                 # Ignore if sender is our own page/account
                 # Check against entry.id (webhook owner), meta_service.page_id (fetched on init)
                 # AND meta_service.instagram_scoped_id (learned from incoming messages)
-                own_ids = {entry_id, meta_service.page_id or "", meta_service.instagram_scoped_id or ""}
+                # AND meta_service.instagram_business_account_id (official IGSID from API)
+                own_ids = {
+                    entry_id, 
+                    meta_service.page_id or "", 
+                    meta_service.instagram_scoped_id or "",
+                    meta_service.instagram_business_account_id or ""
+                }
                 
                 # Diagnostic logging
-                print(f"[Meta Webhook] IDs: entry_id={entry_id}, sender_id={sender_id}, recipient_id={recipient_id}, page_id={meta_service.page_id}, igsid={meta_service.instagram_scoped_id}")
+                print(f"[Meta Webhook] IDs: entry_id={entry_id}, sender_id={sender_id}, recipient_id={recipient_id}, page_id={meta_service.page_id}, igsid={meta_service.instagram_scoped_id}, biz_id={meta_service.instagram_business_account_id}")
                 
                 if sender_id in own_ids:
                     print(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")

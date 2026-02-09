@@ -40,6 +40,10 @@ class MetaService:
         self.page_access_token = None
         self.page_id = None
         
+        # Official Instagram Business Account ID
+        # Can be set via env var (override) or fetched from API
+        self.instagram_business_account_id = os.environ.get("META_INSTAGRAM_ID")
+        
         # Cache for sent message IDs to detect echoes
         # Format: {message_id: timestamp}
         self._sent_message_ids: Dict[str, float] = {}
@@ -59,10 +63,15 @@ class MetaService:
         """
         Fetch the Page Access Token and Page ID from me/accounts.
         System User tokens require a Page Access Token for Instagram Messaging API.
+        Also fetches the linked Instagram Business Account ID.
         """
         try:
             url = f"{self.base_url}/me/accounts"
-            params = {"access_token": self.access_token}
+            # Request instagram_business_account field to get the IGSID
+            params = {
+                "access_token": self.access_token,
+                "fields": "access_token,name,id,tasks,instagram_business_account"
+            }
             response = requests.get(url, params=params)
             response.raise_for_status()
             data = response.json()
@@ -75,12 +84,30 @@ class MetaService:
                     if "MESSAGING" in tasks or not tasks:
                         self.page_access_token = page["access_token"]
                         self.page_id = page["id"]
+                        
+                        # Extract Instagram Business Account ID if available
+                        ig_account = page.get("instagram_business_account", {})
+                        if ig_account and "id" in ig_account:
+                            # Only update if not set via env var
+                            if not self.instagram_business_account_id:
+                                self.instagram_business_account_id = ig_account["id"]
+                                print(f"[MetaService] Fetched Instagram Business ID from API: {self.instagram_business_account_id}")
+                            else:
+                                print(f"[MetaService] Using env var Instagram Business ID: {self.instagram_business_account_id}")
+                        
                         print(f"[MetaService] Page token acquired for '{page.get('name', 'unknown')}' (ID: {self.page_id})")
                         return
                 
                 # Fallback: use first page
                 self.page_access_token = pages[0]["access_token"]
                 self.page_id = pages[0]["id"]
+                
+                # Extract Instagram Business Account ID from fallback page
+                ig_account = pages[0].get("instagram_business_account", {})
+                if ig_account and "id" in ig_account and not self.instagram_business_account_id:
+                    self.instagram_business_account_id = ig_account["id"]
+                    print(f"[MetaService] Fetched Instagram Business ID from API (fallback): {self.instagram_business_account_id}")
+                
                 print(f"[MetaService] Page token acquired (fallback) for '{pages[0].get('name', 'unknown')}' (ID: {self.page_id})")
             else:
                 print("[MetaService] WARNING: No Facebook Pages found. Instagram messaging will not work.")
