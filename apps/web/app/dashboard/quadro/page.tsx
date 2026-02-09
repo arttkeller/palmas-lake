@@ -312,7 +312,8 @@ export default function LeadsKanban() {
             const statusKey = mapStatus(item.status);
             const tags: string[] = [];
             if (item.email) tags.push('Email');
-            if (item.source) tags.push(item.source.charAt(0).toUpperCase() + item.source.slice(1));
+            // Source (instagram/whatsapp) is already shown as an icon in the card footer,
+            // so we skip adding it as a tag to avoid duplication.
             if (item.classification_type === 'corretor') tags.push('🏠 Corretor');
             if (item.classification_type === 'investidor') tags.push('💰 Investidor');
             if (item.is_hot) tags.push('🔥 HOT');
@@ -798,12 +799,7 @@ export default function LeadsKanban() {
 
                                                 {/* Details */}
                                                 <div className="space-y-2">
-                                                    {lead.phone && lead.source !== 'whatsapp' && (
-                                                        <div className="flex items-center gap-2 text-xs font-medium text-white bg-gradient-to-r from-gray-800 to-gray-900 p-2.5 rounded-xl">
-                                                            <Phone className="w-3.5 h-3.5" />
-                                                            <span>{lead.phone}</span>
-                                                        </div>
-                                                    )}
+                                                    {/* Phone number is shown inside the detail modal only */}
                                                     {lead.interestType && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
                                                             <div className="p-1.5 bg-blue-100 rounded-lg">
