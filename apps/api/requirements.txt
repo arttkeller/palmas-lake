@@ -13,5 +13,6 @@ google-auth-httplib2
 google-auth-oauthlib
 pytz
 agno
+sentry-sdk[fastapi]
 hypothesis
 pytest

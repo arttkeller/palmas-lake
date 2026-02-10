@@ -5,6 +5,14 @@ load_dotenv()
 import os
 from contextlib import asynccontextmanager
 
+import sentry_sdk
+
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN"),
+    traces_sample_rate=0.2,
+    environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users

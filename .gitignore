@@ -47,6 +47,9 @@ coverage/
 api_log.txt
 test_result.txt
 
+# Sentry
+.sentryclirc
+
 # Misc
 *.pem
 .vercel
