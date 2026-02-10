@@ -6,11 +6,20 @@ import os
 from contextlib import asynccontextmanager
 
 import sentry_sdk
+from sentry_sdk.integrations.openai import OpenAIIntegration
 
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN"),
-    traces_sample_rate=0.2,
+    # Required for AI agent monitoring
+    traces_sample_rate=1.0,
+    # Add data like inputs and responses to/from LLMs and tools
+    send_default_pii=True,
     environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+    integrations=[
+        OpenAIIntegration(
+            include_prompts=True,
+        ),
+    ],
 )
 
 from fastapi import FastAPI
