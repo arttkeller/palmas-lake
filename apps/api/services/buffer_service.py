@@ -1,6 +1,7 @@
 
 import asyncio
 from typing import Dict, List
+import sentry_sdk
 from services.agent_manager import AgentManager
 from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
@@ -72,66 +73,74 @@ async def process_buffer_after_delay(lead_id: str):
             return
 
         print(f"Processing buffered messages for {lead_id} (channel: {channel}): {messages_with_ids}")
-        
-        # Call Agent
-        try:
-            # Pass (content, id) list
-            response = await agent.process_message_buffer(lead_id, messages_with_ids)
-            print(f"Agent Response for {lead_id}: {response}")
-            
-            if response and response != "IGNORED_DUPLICATE":
-                # Split messages by double newline to send "picotado"
-                parts = [p.strip() for p in response.split('\n\n') if p.strip()]
-                
-                from services.message_service import MessageService
-                msg_service = MessageService()
-                
-                for part in parts:
-                    # Send via the appropriate channel
-                    try:
-                        print(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
-                        send_result = _send_message(lead_id, part, channel)
-                        print(f"[Buffer] Message sent successfully via {channel}")
-                    except Exception as send_err:
-                        import traceback
-                        print(f"[Buffer] ERROR sending message via {channel}: {send_err}")
-                        traceback.print_exc()
-                        send_result = None
-                    
-                    # Save each part to DB
-                    try:
-                        whatsapp_msg_id = None
-                        if channel == "instagram" and isinstance(send_result, dict):
-                            whatsapp_msg_id = send_result.get("message_id")
-                        msg_service.save_message(lead_id, part, "ai", whatsapp_msg_id=whatsapp_msg_id)
-                    except Exception as db_err:
-                        print(f"DB Error saving AI response part: {db_err}")
-                    
-                    # Small delay between parts to feel natural
-                    await asyncio.sleep(1.5)
 
-                # Apos IA responder, agendar follow-up Stage 1 (2h)
-                # Se o lead nao responder em 2h, o cron job do Supabase dispara a mensagem
-                try:
-                    from services.follow_up_service import schedule_follow_up_after_ai_response
-                    from services.supabase_client import create_client
-                    sb = create_client()
-                    
-                    # For Instagram leads, search by instagram_id
-                    if lead_id.startswith("ig:"):
-                        ig_id = lead_id[3:]
-                        lead_res = sb.table("leads").select("id").eq("instagram_id", ig_id).execute()
-                    else:
-                        lead_res = sb.table("leads").select("id").eq("phone", lead_id).execute()
-                    
-                    if lead_res.data and len(lead_res.data) > 0:
-                        real_lead_id = lead_res.data[0]["id"]
-                        schedule_follow_up_after_ai_response(real_lead_id)
-                except Exception as fu_err:
-                    print(f"[FollowUp] Erro ao agendar follow-up (nao fatal): {fu_err}")
-            
-        except Exception as e:
-            print(f"Error acting on buffer: {e}")
+        # Wrapped in Sentry transaction so OpenAI calls in background tasks are captured
+        with sentry_sdk.start_transaction(op="gen_ai.invoke_agent", name=f"agent.maria {lead_id}") as txn:
+            txn.set_data("gen_ai.agent.name", "Maria")
+            txn.set_data("lead_id", lead_id)
+            txn.set_data("channel", channel)
+            txn.set_data("message_count", len(messages_with_ids))
+
+            # Call Agent
+            try:
+                # Pass (content, id) list
+                response = await agent.process_message_buffer(lead_id, messages_with_ids)
+                print(f"Agent Response for {lead_id}: {response}")
+
+                if response and response != "IGNORED_DUPLICATE":
+                    # Split messages by double newline to send "picotado"
+                    parts = [p.strip() for p in response.split('\n\n') if p.strip()]
+
+                    from services.message_service import MessageService
+                    msg_service = MessageService()
+
+                    for part in parts:
+                        # Send via the appropriate channel
+                        try:
+                            print(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
+                            send_result = _send_message(lead_id, part, channel)
+                            print(f"[Buffer] Message sent successfully via {channel}")
+                        except Exception as send_err:
+                            import traceback
+                            print(f"[Buffer] ERROR sending message via {channel}: {send_err}")
+                            traceback.print_exc()
+                            send_result = None
+
+                        # Save each part to DB
+                        try:
+                            whatsapp_msg_id = None
+                            if channel == "instagram" and isinstance(send_result, dict):
+                                whatsapp_msg_id = send_result.get("message_id")
+                            msg_service.save_message(lead_id, part, "ai", whatsapp_msg_id=whatsapp_msg_id)
+                        except Exception as db_err:
+                            print(f"DB Error saving AI response part: {db_err}")
+
+                        # Small delay between parts to feel natural
+                        await asyncio.sleep(1.5)
+
+                    # Apos IA responder, agendar follow-up Stage 1 (2h)
+                    # Se o lead nao responder em 2h, o cron job do Supabase dispara a mensagem
+                    try:
+                        from services.follow_up_service import schedule_follow_up_after_ai_response
+                        from services.supabase_client import create_client
+                        sb = create_client()
+
+                        # For Instagram leads, search by instagram_id
+                        if lead_id.startswith("ig:"):
+                            ig_id = lead_id[3:]
+                            lead_res = sb.table("leads").select("id").eq("instagram_id", ig_id).execute()
+                        else:
+                            lead_res = sb.table("leads").select("id").eq("phone", lead_id).execute()
+
+                        if lead_res.data and len(lead_res.data) > 0:
+                            real_lead_id = lead_res.data[0]["id"]
+                            schedule_follow_up_after_ai_response(real_lead_id)
+                    except Exception as fu_err:
+                        print(f"[FollowUp] Erro ao agendar follow-up (nao fatal): {fu_err}")
+
+            except Exception as e:
+                sentry_sdk.capture_exception(e)
+                print(f"Error acting on buffer: {e}")
 
 
 def _send_message(lead_id: str, text: str, channel: str):
