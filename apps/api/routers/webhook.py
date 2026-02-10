@@ -6,6 +6,7 @@ from services.analytics_service import AnalyticsService
 from services.analytics_cache_service import AnalyticsCacheService
 import asyncio
 import os
+import requests as http_requests
 
 router = APIRouter()
 uazapi = UazapiService()
@@ -72,8 +73,11 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         # 4. Deletar o lead
         supabase.table("leads").delete().eq("id", lead_id).execute()
         print(f"🗑️ [CLEAR] Lead deletado")
-        
-        # 5. Enviar mensagem de confirmação pelo canal correto
+
+        # 5. Broadcast para atualizar frontend em tempo real
+        _broadcast_lead_deleted(lead_id)
+
+        # 6. Enviar mensagem de confirmação pelo canal correto
         _send_clear_response(lead_identifier, channel,
             "✅ Dados limpos com sucesso!\n\n"
             "Todos os seus dados foram apagados:\n"
@@ -97,6 +101,33 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
             pass
             
         return False
+
+
+def _broadcast_lead_deleted(lead_id: str):
+    """Broadcast via Supabase Realtime para notificar o frontend que um lead foi deletado."""
+    try:
+        supabase_url = os.environ.get("SUPABASE_URL", "")
+        supabase_key = os.environ.get("SUPABASE_KEY", "")
+        if not supabase_url or not supabase_key:
+            return
+
+        url = f"{supabase_url.rstrip('/')}/realtime/v1/api/broadcast"
+        headers = {
+            "apikey": supabase_key,
+            "Authorization": f"Bearer {supabase_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "messages": [{
+                "topic": "realtime:lead-deletions",
+                "event": "lead_deleted",
+                "payload": {"lead_id": lead_id}
+            }]
+        }
+        http_requests.post(url, json=payload, headers=headers, timeout=5)
+        print(f"🗑️ [CLEAR] Broadcast lead_deleted enviado para lead {lead_id}")
+    except Exception as e:
+        print(f"🗑️ [CLEAR] Erro ao enviar broadcast (nao-bloqueante): {e}")
 
 
 def _send_clear_response(lead_identifier: str, channel: str, message: str):

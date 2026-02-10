@@ -305,6 +305,21 @@ export default function ChatPage() {
         };
     }, [fetchConversations, supabase]);
 
+    // Broadcast fallback: escuta evento lead_deleted enviado pelo backend
+    useEffect(() => {
+        const channel = supabase
+            .channel('realtime:lead-deletions-chat')
+            .on('broadcast', { event: 'lead_deleted' }, () => {
+                console.log('[Realtime] Broadcast lead_deleted recebido');
+                fetchConversations();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchConversations, supabase]);
+
     // Realtime Subscription: Messages
     useEffect(() => {
         if (!activeConversation) return;

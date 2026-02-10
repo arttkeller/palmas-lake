@@ -284,6 +284,22 @@ export default function LeadsPage() {
         };
     }, [fetchLeads, supabase]);
 
+    // Broadcast fallback: escuta evento lead_deleted enviado pelo backend
+    // Garante atualização mesmo se postgres_changes não emitir DELETE
+    useEffect(() => {
+        const channel = supabase
+            .channel('realtime:lead-deletions-table')
+            .on('broadcast', { event: 'lead_deleted' }, () => {
+                console.log('[Realtime] Broadcast lead_deleted recebido');
+                fetchLeads(false);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchLeads, supabase]);
+
     // Filtrar leads por busca
     const filteredLeads = leads.filter(lead => {
         const search = searchTerm.toLowerCase();

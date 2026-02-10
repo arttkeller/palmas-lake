@@ -185,13 +185,33 @@ export default function LeadsKanban() {
         };
     }, [fetchLeads, supabase]);
 
+    // Broadcast fallback: escuta evento lead_deleted enviado pelo backend
+    // Garante atualização mesmo se postgres_changes não emitir DELETE
+    useEffect(() => {
+        const channel = supabase
+            .channel('realtime:lead-deletions')
+            .on('broadcast', { event: 'lead_deleted' }, () => {
+                console.log('[Realtime] Broadcast lead_deleted recebido');
+                fetchLeads(true);
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [fetchLeads, supabase]);
+
     // Sync selectedLead with allLeadsData on realtime updates (Requirements 3.2, 3.3)
     // When allLeadsData refreshes via realtime, update the modal's selectedLead so
     // temperature badge, tags, sentiment etc. reflect the latest data.
+    // Also closes modal if the lead was deleted (#apagar command).
     useEffect(() => {
         if (!isModalOpen || !selectedLead) return;
         const rawLead = allLeadsData.find(item => item.id === selectedLead.id);
-        if (!rawLead) return;
+        if (!rawLead) {
+            closeModal();
+            return;
+        }
 
         const updatedTemp = rawLead.temperature
             ? normalizeTemperature(rawLead.temperature)
@@ -210,7 +230,7 @@ export default function LeadsKanban() {
                 interest_type: rawLead.interest_type,
             });
         }
-    }, [allLeadsData, isModalOpen, selectedLead, openModal]);
+    }, [allLeadsData, isModalOpen, selectedLead, openModal, closeModal]);
 
     // Realtime subscription for modal messages
     useEffect(() => {

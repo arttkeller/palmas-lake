@@ -47,9 +47,17 @@ Componente de indicador visual de conexão:
 ## Tabelas com Realtime Habilitado
 
 As seguintes tabelas do schema `palmaslake-agno` estão na publicação `supabase_realtime`:
-- `leads` - Atualizações de status, dados do lead
-- `conversations` - Novas conversas, updates
-- `messages` - Novas mensagens (INSERT), edições (UPDATE)
+- `leads` - INSERT, UPDATE, DELETE (status, dados, remoção via #apagar)
+- `conversations` - INSERT, UPDATE, DELETE
+- `messages` - INSERT, UPDATE, DELETE
+
+**Importante:** As tabelas precisam de `REPLICA IDENTITY FULL` para que eventos DELETE funcionem corretamente via Supabase Realtime. Ver migration `013_fix_realtime_delete_events.sql`.
+
+## Broadcast Fallback para DELETE
+
+Além do `postgres_changes`, o backend envia um broadcast explícito (`lead_deleted`) após deletar um lead via comando `#apagar`. O frontend escuta este broadcast como fallback caso o `postgres_changes` DELETE não funcione.
+
+Canal: `realtime:lead-deletions` | Evento: `lead_deleted`
 
 ## Como Funciona
 
