@@ -107,10 +107,14 @@ class MetaService:
             pages = data.get("data", [])
             
             if pages:
-                # Use the first page that has MESSAGING task
+                # If META_PAGE_ID is set, use that specific page instead of auto-selecting
+                target_page_id = os.environ.get("META_PAGE_ID")
+
                 for page in pages:
+                    if target_page_id and page["id"] != target_page_id:
+                        continue
                     tasks = page.get("tasks", [])
-                    if "MESSAGING" in tasks or not tasks:
+                    if target_page_id or "MESSAGING" in tasks or not tasks:
                         self.page_access_token = page["access_token"]
                         self.page_id = page["id"]
                         

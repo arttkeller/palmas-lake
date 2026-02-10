@@ -271,6 +271,12 @@ async def handle_webhook(request: Request):
             # entry.id is our own Instagram Business Account ID or Page ID
             # Any message where sender.id matches entry.id is from us (echo)
             entry_id = entry.get("id", "")
+
+            # Filter: only process messages from the expected Instagram page
+            expected_page_id = os.environ.get("META_PAGE_ID")
+            if expected_page_id and entry_id != expected_page_id:
+                print(f"[Meta Webhook] Ignoring message from unexpected page: {entry_id} (expected: {expected_page_id})")
+                continue
             
             for messaging_event in entry.get("messaging", []):
                 sender_id = messaging_event.get("sender", {}).get("id")
