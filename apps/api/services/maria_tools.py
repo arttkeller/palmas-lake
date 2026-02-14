@@ -496,8 +496,12 @@ class MariaTools(Toolkit):
         supabase = create_client()
         try:
             update_data = {"temperature": temperature}
-            if status:
+            # Block protected statuses — only agenda() tool can set these
+            protected = ("visita_agendada", "visita_realizada", "proposta_enviada")
+            if status and status.lower() not in protected:
                 update_data["status"] = status
+            elif status:
+                print(f"[Tool] BLOCKED: status '{status}' can only be set by the agenda tool")
                 
             self._lead_query(
                 supabase.table("leads").update(update_data)
