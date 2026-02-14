@@ -1,11 +1,19 @@
 
 from services.supabase_client import create_client
 import os
+import re
 from datetime import datetime
 import pytz
 import uuid
 import logging
 import traceback
+
+
+def is_valid_pushname(name: str) -> bool:
+    """Check if a WhatsApp pushname looks like a real person name."""
+    if not name or len(name.strip()) < 2 or len(name.strip()) > 30:
+        return False
+    return bool(re.match(r'^[a-zA-ZÀ-ÿ\s\-\.]+$', name.strip()))
 
 # Configure logging for MessageService (Requirements 3.4, 7.4, 9.5)
 logger = logging.getLogger(__name__)
@@ -72,7 +80,7 @@ class MessageService:
             logger.error(f"Failed to initialize MessageService: {e}")
             raise MessageServiceError(f"Initialization failed: {e}")
 
-    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None):
+    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None, wa_pushname: str = None):
         """
         Saves a message to the database.
         Ensures a lead and conversation exist for the remote_jid.
@@ -120,6 +128,21 @@ class MessageService:
                     lead_id = lead_res.data[0]["id"]
                     logger.debug(f"Found existing lead: {lead_id}")
                     
+                    # Update WhatsApp lead name from pushname if still generic
+                    if not is_instagram and wa_pushname and is_valid_pushname(wa_pushname):
+                        try:
+                            current_lead = self.supabase.table("leads").select("full_name").eq("id", lead_id).execute()
+                            if current_lead.data:
+                                current_name = current_lead.data[0].get("full_name", "")
+                                if current_name.startswith("Lead "):
+                                    self.supabase.table("leads").update({
+                                        "full_name": wa_pushname.strip(),
+                                        "qualification_state": {"step": "interest"}
+                                    }).eq("id", lead_id).execute()
+                                    logger.info(f"Updated WhatsApp lead name from pushname: {current_name} -> {wa_pushname.strip()}")
+                        except Exception as name_err:
+                            logger.warning(f"Error updating WhatsApp lead name from pushname (non-fatal): {name_err}")
+
                     # Update Instagram lead name if profile is available and name is still generic
                     if is_instagram and ig_profile and ig_profile.get("name"):
                         try:
@@ -175,11 +198,17 @@ class MessageService:
                         
                         logger.info(f"Creating Instagram lead: {lead_name}")
                     else:
+                        has_valid_pushname = wa_pushname and is_valid_pushname(wa_pushname)
                         new_lead = {
-                            "full_name": f"Lead {phone}",
+                            "full_name": wa_pushname.strip() if has_valid_pushname else f"Lead {phone}",
                             "phone": phone,
-                            "status": "new"
+                            "status": "novo_lead"
                         }
+                        if has_valid_pushname:
+                            new_lead["qualification_state"] = {"step": "interest"}
+                            logger.info(f"Creating WhatsApp lead with pushname: {wa_pushname.strip()}")
+                        else:
+                            logger.info(f"Creating WhatsApp lead without valid pushname: '{wa_pushname}'")
                     
                     # Retry logic for failed lead creation (Requirement 9.5)
                     max_retries = 1

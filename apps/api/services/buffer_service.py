@@ -16,6 +16,8 @@ _processed_msg_ids: Dict[str, float] = {}  # msg_id -> timestamp
 _DEDUP_TTL = 120  # seconds to keep message IDs in memory
 # Leads marked for deletion — buffer processing will skip these
 _cancelled_leads: set = set()
+# Track WhatsApp pushname per lead
+pushname_map: Dict[str, str] = {}
 
 agent = AgentManager()
 uazapi = UazapiService()
@@ -34,22 +36,24 @@ def cancel_buffer(lead_id: str):
     _cancelled_leads.add(lead_id)
     removed = message_buffer.pop(lead_id, [])
     channel_map.pop(lead_id, None)
+    pushname_map.pop(lead_id, None)
     if removed:
         print(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
     else:
         print(f"[Buffer] No pending messages to cancel for {lead_id}")
 
 
-async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp"):
+async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp", pushname: str = ""):
     """
     Add a message to the buffer for a lead. Messages are batched and processed
-    after a 2-second delay.
+    after a 40-second delay.
 
     Args:
         lead_id: Identifier for the lead (phone for WhatsApp, ig:<igsid> for Instagram)
         message_content: Text content of the message
         message_id: Platform message ID (optional)
         channel: "whatsapp" or "instagram"
+        pushname: WhatsApp display name (optional)
     """
     import time
 
@@ -65,8 +69,10 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
     if lead_id not in buffer_locks:
         buffer_locks[lead_id] = asyncio.Lock()
 
-    # Store the channel for this lead
+    # Store the channel and pushname for this lead
     channel_map[lead_id] = channel
+    if pushname:
+        pushname_map[lead_id] = pushname
 
     async with buffer_locks[lead_id]:
         if lead_id not in message_buffer:
@@ -84,12 +90,14 @@ async def process_buffer_after_delay(lead_id: str):
         _cancelled_leads.discard(lead_id)
         message_buffer.pop(lead_id, None)
         channel_map.pop(lead_id, None)
+        pushname_map.pop(lead_id, None)
         print(f"[Buffer] Skipping processing for deleted lead {lead_id}")
         return
 
     async with buffer_locks[lead_id]:
         messages_with_ids = message_buffer.pop(lead_id, [])
         channel = channel_map.pop(lead_id, "whatsapp")
+        lead_pushname = pushname_map.pop(lead_id, "")
         if not messages_with_ids:
             return
 
@@ -105,7 +113,7 @@ async def process_buffer_after_delay(lead_id: str):
             # Call Agent
             try:
                 # Pass (content, id) list
-                response = await agent.process_message_buffer(lead_id, messages_with_ids)
+                response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
                 print(f"Agent Response for {lead_id}: {response}")
 
                 if response and response != "IGNORED_DUPLICATE":

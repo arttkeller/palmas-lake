@@ -159,21 +159,24 @@ async def handle_uazapi_webhook(request: Request):
         
         # 1. Handle Evolution API v2 (event: messages.upsert)
         event = data.get("event")
+        pushname = ""
         if event == "messages.upsert":
             msg_data = data.get("data", {})
             key = msg_data.get("key", {})
             if key.get("fromMe"): return {"status": "ignored"}
-            
+
             remote_jid = key.get("remoteJid")
+            pushname = msg_data.get("pushName", "") or ""
             message_obj = msg_data.get("message", {})
             text = message_obj.get("conversation") or message_obj.get("extendedTextMessage", {}).get("text")
-            
+
         # 2. Handle BlackAI / Direct UazAPI (EventType: messages)
         elif data.get("EventType") == "messages":
             message_info = data.get("message", {})
             if message_info.get("fromMe"): return {"status": "ignored"}
-            
+
             remote_jid = message_info.get("chatid") or message_info.get("sender")
+            pushname = message_info.get("pushName", "") or message_info.get("senderName", "") or ""
             text = message_info.get("text") or message_info.get("content")
         
         else:
@@ -216,7 +219,7 @@ async def handle_uazapi_webhook(request: Request):
                 from services.message_service import MessageService
                 msg_service = MessageService()
                 print(f"[Webhook] Calling save_message for lead message...")
-                result = msg_service.save_message(remote_jid, text, "lead", whatsapp_msg_id=msg_id)
+                result = msg_service.save_message(remote_jid, text, "lead", whatsapp_msg_id=msg_id, wa_pushname=pushname)
                 print(f"[Webhook] save_message result: {result}")
                 
                 # Queue analytics recalculation (non-blocking)
@@ -229,7 +232,7 @@ async def handle_uazapi_webhook(request: Request):
                 print(f"DB Error: {db_err}")
                 traceback.print_exc()
 
-            await add_to_buffer(remote_jid, text, msg_id)
+            await add_to_buffer(remote_jid, text, msg_id, pushname=pushname)
                 
     except Exception as e:
         import traceback

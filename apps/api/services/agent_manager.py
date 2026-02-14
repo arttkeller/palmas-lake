@@ -147,7 +147,7 @@ Mensagem atual do Cliente:
                 pass
             return "Desculpe, estou com dificuldades técnicas no momento. (Erro interno registrado)"
 
-    async def process_message_buffer(self, lead_id: str, messages: List[tuple]) -> str:
+    async def process_message_buffer(self, lead_id: str, messages: List[tuple], pushname: str = "") -> str:
         """Processa um buffer de mensagens acumuladas"""
         
         # --- VERIFICAÇÃO DE DUPLICIDADE (DEBOUNCE) ---
@@ -227,6 +227,10 @@ Mensagem atual do Cliente:
                     source_info = """
     <channel>Instagram DM</channel>
     <channel_rule>Este lead veio pelo Instagram. O nome dele ja foi obtido automaticamente do perfil do Instagram. NAO pergunte o nome novamente. Comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
+                elif current_step != "name" and not full_name.startswith("Lead "):
+                    source_info = f"""
+    <channel>WhatsApp</channel>
+    <channel_rule>O nome deste lead ({full_name}) foi obtido automaticamente do perfil do WhatsApp. NAO pergunte o nome novamente. Cumprimente pelo nome, se apresente como Maria consultora do Palmas Lake Towers, e comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
                 
                 lead_context_str = f"""
 <lead_context>
