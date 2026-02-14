@@ -77,7 +77,7 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
         message_buffer[lead_id].append((message_content, message_id))
 
 async def process_buffer_after_delay(lead_id: str):
-    await asyncio.sleep(2.0) # Wait 2 seconds for more messages
+    await asyncio.sleep(40.0) # Wait 40 seconds to accumulate messages before processing
 
     # Skip processing if lead was deleted via #apagar during the delay
     if lead_id in _cancelled_leads:
