@@ -79,7 +79,7 @@ export default function LeadsKanban() {
     const searchParams = useSearchParams();
     const [columns, setColumns] = useState<Column[]>(initialColumns);
     const [loading, setLoading] = useState(true);
-    const [isRefreshing, setIsRefreshing] = useState(false);
+
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [allLeadsData, setAllLeadsData] = useState<any[]>([]);
@@ -120,10 +120,7 @@ export default function LeadsKanban() {
         if (isInitialLoadRef.current && !isBackgroundRefresh) {
             setLoading(true);
         }
-        // Subsequent (realtime / background) fetches — show subtle indicator
-        if (isBackgroundRefresh) {
-            setIsRefreshing(true);
-        }
+
         setError('');
 
         try {
@@ -132,7 +129,6 @@ export default function LeadsKanban() {
                 const apiData = await res.json();
                 setAllLeadsData(apiData);
                 setLoading(false);
-                setIsRefreshing(false);
                 isInitialLoadRef.current = false;
                 return;
             }
@@ -152,7 +148,6 @@ export default function LeadsKanban() {
             setAllLeadsData(data || []);
         }
         setLoading(false);
-        setIsRefreshing(false);
         isInitialLoadRef.current = false;
     }, [supabase]); // stable — supabase is memoized, no other changing deps
 
@@ -713,11 +708,6 @@ export default function LeadsKanban() {
             </div>
 
             {/* Subtle refresh indicator — never blocks content */}
-            {isRefreshing && !loading && (
-                <div className="w-full overflow-hidden rounded-full h-0.5 bg-emerald-100">
-                    <div className="h-full bg-emerald-500 animate-pulse rounded-full" style={{ width: '60%' }} />
-                </div>
-            )}
 
             {loading && allLeadsData.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
