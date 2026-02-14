@@ -296,10 +296,36 @@ async def handle_webhook(request: Request):
                 text = message.get("text")
                 msg_id = message.get("mid")
 
-                # Skip non-message events (message_edit, read receipts, etc.)
+                # Skip non-message events (message_edit, read receipts, reactions, etc.)
                 if not message or "mid" not in message:
-                    print(f"[Meta Webhook] Skipping non-message event")
+                    event_keys = list(messaging_event.keys())
+                    print(f"[Meta Webhook] Skipping non-message event (keys: {event_keys})")
                     continue
+
+                # --- Extract text from non-text messages (images, audio, stickers, etc.) ---
+                if not text:
+                    attachments = message.get("attachments", [])
+                    if attachments:
+                        att_type = attachments[0].get("type", "unknown")
+                        att_url = attachments[0].get("payload", {}).get("url", "")
+                        type_labels = {
+                            "image": "Imagem",
+                            "video": "Vídeo",
+                            "audio": "Áudio",
+                            "file": "Arquivo",
+                            "share": "Compartilhamento",
+                            "story_mention": "Menção em story",
+                        }
+                        label = type_labels.get(att_type, att_type)
+                        text = f"[{label} enviado pelo cliente]"
+                        if att_url:
+                            text += f" URL: {att_url}"
+                        print(f"[Meta Webhook] Non-text message converted: type={att_type}")
+                    elif message.get("sticker"):
+                        text = "[Sticker enviado pelo cliente]"
+                    elif message.get("reply_to"):
+                        # Story reply without text (just a reaction to a story)
+                        text = "[Reagiu ao seu story]"
 
                 # --- MECHANISM 1: Check if this is a message we sent (by MID) ---
                 if meta_service.is_own_message(msg_id):
@@ -323,16 +349,13 @@ async def handle_webhook(request: Request):
                 }
                 own_ids.discard("")
 
-                # Diagnostic logging
-                print(f"[Meta Webhook] IDs: entry_id={entry_id}, sender_id={sender_id}, recipient_id={recipient_id}, page_id={meta_service.page_id}, igsid={meta_service.instagram_scoped_id}, biz_id={meta_service.instagram_business_account_id}")
-
                 if sender_id in own_ids:
                     meta_service.learn_own_igsid(sender_id)
                     print(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")
                     continue
 
                 if not sender_id or not text:
-                    print(f"[Meta Webhook] Missing sender_id or text, skipping")
+                    print(f"[Meta Webhook] DROPPED: sender_id={sender_id}, text={text}, message_keys={list(message.keys())}")
                     continue
 
                 # Learn our own IGSID from incoming messages.
@@ -349,21 +372,28 @@ async def handle_webhook(request: Request):
                     try:
                         from services.message_service import MessageService
                         _msg_svc = MessageService()
-                        # Global lookup: if ANY message already has this platform msg_id,
-                        # this webhook event is a duplicate/echo and must be ignored.
-                        _existing_res = (
-                            _msg_svc.supabase
-                            .table("messages")
-                            .select("id")
-                            .eq("metadata->>whatsapp_msg_id", msg_id)
-                            .limit(1)
-                            .execute()
-                        )
-                        if _existing_res.data:
-                            print(f"[Meta Webhook] DUPLICATE/ECHO: msg_id {msg_id} already exists in DB, skipping")
-                            continue
+                        # Find the lead's conversation and check only within it
+                        _ig_id = sender_id
+                        _lead_res = _msg_svc.supabase.table("leads").select("id").eq("instagram_id", _ig_id).execute()
+                        if _lead_res.data:
+                            _conv_res = _msg_svc.supabase.table("conversations").select("id").eq("lead_id", _lead_res.data[0]["id"]).execute()
+                            if _conv_res.data:
+                                _conv_ids = [c["id"] for c in _conv_res.data]
+                                _existing_res = (
+                                    _msg_svc.supabase
+                                    .table("messages")
+                                    .select("id")
+                                    .in_("conversation_id", _conv_ids)
+                                    .eq("metadata->>whatsapp_msg_id", msg_id)
+                                    .limit(1)
+                                    .execute()
+                                )
+                                if _existing_res.data:
+                                    print(f"[Meta Webhook] DUPLICATE: msg_id {msg_id} already in DB for this lead, skipping")
+                                    continue
                     except Exception as dup_err:
-                        print(f"[Meta Webhook] Idempotency check error (non-fatal): {dup_err}")
+                        # Never block a message due to dedup check failure
+                        print(f"[Meta Webhook] Idempotency check error (allowing message through): {dup_err}")
                 # ---------------------------------------------------------------
 
                 # Verificar comando especial #apagar
