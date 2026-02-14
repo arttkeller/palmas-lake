@@ -6,8 +6,14 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from services.supabase_client import create_client
+from services.uazapi_service import UazapiService
 
 router = APIRouter(prefix="/api/events", tags=["Events"])
+
+
+def normalize_whatsapp_phone(value: Optional[str]) -> str:
+    """Normaliza número no padrão ddidddnumero."""
+    return UazapiService.normalize_whatsapp_number(value or "")
 
 # Models
 class EventCreate(BaseModel):
@@ -86,6 +92,33 @@ async def create_event(event: EventCreate):
     """Cria um novo evento/agendamento"""
     try:
         supabase = create_client()
+
+        resolved_lead_phone = normalize_whatsapp_phone(event.lead_phone)
+        if event.lead_id:
+            lead_res = (
+                supabase
+                .table("leads")
+                .select("phone, source, instagram_id")
+                .eq("id", event.lead_id)
+                .execute()
+            )
+            lead_data = lead_res.data[0] if lead_res.data else {}
+            if not resolved_lead_phone:
+                resolved_lead_phone = normalize_whatsapp_phone(lead_data.get("phone"))
+
+            is_instagram_lead = (
+                str(lead_data.get("source") or "").strip().lower() == "instagram"
+                or bool(lead_data.get("instagram_id"))
+            )
+            if is_instagram_lead and not resolved_lead_phone:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Para leads do Instagram, informe um telefone WhatsApp válido "
+                        "no formato ddidddnumero "
+                        "antes de agendar."
+                    ),
+                )
         
         event_data = {
             "title": event.title,
@@ -96,7 +129,7 @@ async def create_event(event: EventCreate):
             "category": event.category,
             "lead_id": event.lead_id,
             "lead_name": event.lead_name,
-            "lead_phone": event.lead_phone,
+            "lead_phone": resolved_lead_phone or None,
             "lead_email": event.lead_email,
             "location": event.location,
             "notes": event.notes,
@@ -131,6 +164,11 @@ async def update_event(event_id: str, event: EventUpdate):
                     update_data[field] = value.isoformat()
                 else:
                     update_data[field] = value
+
+        # If the visit time changes, reminder must be recalculated/sent again.
+        if "start_time" in update_data:
+            update_data["reminder_1h_sent"] = False
+            update_data["reminder_1h_sent_at"] = None
         
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")

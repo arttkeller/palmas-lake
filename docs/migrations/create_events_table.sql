@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS "palmaslake-agno".events (
     location VARCHAR(255),
     notes TEXT,
     status VARCHAR(50) DEFAULT 'confirmado',
+    reminder_1h_sent BOOLEAN DEFAULT false,
+    reminder_1h_sent_at TIMESTAMPTZ,
     
     -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -57,3 +59,5 @@ ALTER PUBLICATION supabase_realtime ADD TABLE "palmaslake-agno".events;
 COMMENT ON TABLE "palmaslake-agno".events IS 'Tabela de agendamentos de visitas e eventos';
 COMMENT ON COLUMN "palmaslake-agno".events.created_by IS 'Quem criou: ai_sofia, manual, system';
 COMMENT ON COLUMN "palmaslake-agno".events.status IS 'confirmado, cancelado, realizado, pendente';
+COMMENT ON COLUMN "palmaslake-agno".events.reminder_1h_sent IS 'Se o lembrete de confirmacao 1h antes foi enviado';
+COMMENT ON COLUMN "palmaslake-agno".events.reminder_1h_sent_at IS 'Quando o lembrete 1h antes foi enviado';

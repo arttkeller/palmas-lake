@@ -45,6 +45,14 @@ class MariaTools(Toolkit):
             return query.eq("instagram_id", self.instagram_id)
         return query.eq("phone", self.phone)
 
+    @staticmethod
+    def _normalize_phone_for_whatsapp(value: Optional[str]) -> str:
+        """
+        Normaliza telefone no padrão ddidddnumero.
+        Retorna string vazia quando inválido para envio WhatsApp.
+        """
+        return UazapiService.normalize_whatsapp_number(value or "")
+
     def enviar_mensagem(self, texto: str, reply_id: Optional[str] = None):
         """
         Envia uma mensagem de texto ao cliente. 
@@ -309,7 +317,7 @@ class MariaTools(Toolkit):
         Args:
             nome: Nome completo do cliente.
             email: Email do cliente.
-            telefone: Telefone com DDD (apenas números). Se vazio ou não informado, usa o telefone da conversa.
+            telefone: Telefone no formato ddidddnumero (apenas números). Para leads do Instagram é obrigatório.
             horario_inicio: Data e hora de início (ISO 8601, ex: 2025-01-20T10:00:00).
             horario_fim: Data e hora de fim.
         """
@@ -324,10 +332,25 @@ class MariaTools(Toolkit):
             print(f"[Agenda] BLOCKED: email not provided or is placeholder. Got: '{email}'")
             return "❌ ERRO: Você precisa coletar o EMAIL REAL do cliente antes de agendar. Pergunte ao cliente o email."
 
-        # Default telefone to the phone from the current conversation (Requirements 4.1, 4.2)
-        if not telefone or telefone.strip() == "":
-            telefone = self.phone
-            print(f"[Agenda] telefone not provided, defaulting to conversation phone: {telefone}")
+        is_instagram_lead = bool(self.instagram_id)
+        provided_phone = (telefone or "").strip()
+
+        # Instagram policy: proactive reminders must be sent via WhatsApp.
+        if is_instagram_lead and not provided_phone:
+            print("[Agenda] BLOCKED: Instagram lead without explicit phone for WhatsApp reminder")
+            return (
+                "❌ ERRO: Para leads do Instagram, o telefone WhatsApp é obrigatório antes do agendamento. "
+                "Peça o telefone no formato ddidddnumero (ex.: 5563999991234) e tente novamente."
+            )
+
+        if not provided_phone:
+            provided_phone = self.phone
+            print(f"[Agenda] telefone not provided, defaulting to conversation phone: {provided_phone}")
+
+        telefone_normalizado = self._normalize_phone_for_whatsapp(provided_phone)
+        if not telefone_normalizado:
+            print(f"[Agenda] BLOCKED: invalid phone for WhatsApp reminder. Got: '{provided_phone}'")
+            return "❌ ERRO: Telefone inválido. Colete um WhatsApp válido no formato ddidddnumero (ex.: 5563999991234) antes de agendar."
 
         print(f"[Tool] Agendar Visita: {horario_inicio}")
         cal_service = CalendarService()
@@ -338,15 +361,15 @@ class MariaTools(Toolkit):
         horario_fim = self._ensure_brasilia_tz(horario_fim)
 
         # Check for duplicate event before creating
-        if self._event_exists(telefone, horario_inicio):
-            print(f"[Agenda] Duplicate detected — skipping creation for {telefone} at {horario_inicio}")
+        if self._event_exists(telefone_normalizado, horario_inicio):
+            print(f"[Agenda] Duplicate detected — skipping creation for {telefone_normalizado} at {horario_inicio}")
             return "Visita já agendada para este horário. Não foi criado um novo evento."
 
         # 1. Google Calendar
         try:
             link = cal_service.create_event(
                 summary=f"Visita Palmas Lake Towers - {nome}",
-                description=f"Cliente: {nome}\nTel: {telefone}\nEmail: {email}",
+                description=f"Cliente: {nome}\nTel: {telefone_normalizado}\nEmail: {email}",
                 start_time=horario_inicio,
                 end_time=horario_fim,
                 attendee_email=email
@@ -366,14 +389,14 @@ class MariaTools(Toolkit):
             # Criar evento na tabela events
             event_data = {
                 "title": f"Visita - {nome}",
-                "description": f"Visita agendada via Maria\nTelefone: {telefone}\nEmail: {email}",
+                "description": f"Visita agendada via Maria\nTelefone: {telefone_normalizado}\nEmail: {email}",
                 "start_time": horario_inicio,
                 "end_time": horario_fim,
                 "color": "green",
                 "category": "Visita",
                 "lead_id": lead_uuid,
                 "lead_name": nome,
-                "lead_phone": telefone,
+                "lead_phone": telefone_normalizado,
                 "lead_email": email,
                 "location": "Stand Palmas Lake - AV JK, Orla 14",
                 "status": "confirmado",
@@ -393,6 +416,15 @@ class MariaTools(Toolkit):
                     "sentiment_label": "Positivo",
                     "sentiment_score": 70
                 }).eq("id", lead_uuid).execute()
+
+                # Keep WhatsApp phone synced for Instagram leads (required for reminders).
+                if is_instagram_lead:
+                    try:
+                        supabase.table("leads").update({
+                            "phone": telefone_normalizado
+                        }).eq("id", lead_uuid).execute()
+                    except Exception as phone_sync_err:
+                        print(f"[Agenda] Warning: could not sync lead phone (non-blocking): {phone_sync_err}")
                 print(f"[Agenda] Lead {lead_uuid} updated: status=visita_agendada, temperature=quente, sentiment=Positivo")
         
         except Exception as e:

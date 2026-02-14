@@ -29,10 +29,11 @@ from routers import leads, webhook, analytics, chat, events, ai_specialist, debu
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Follow-ups são processados pelo cron job do Supabase (pg_cron + pg_net)
-    # que chama POST /api/webhook/follow-up-cron a cada 5 minutos.
+    # Follow-ups e lembretes de visita (1h antes) são processados pelo cron job
+    # do Supabase (pg_cron + pg_net), que chama:
+    # POST /api/webhook/follow-up-cron a cada 5 minutos.
     # Nenhum scheduler in-process é necessário.
-    print("[Startup] Follow-ups gerenciados pelo cron job do Supabase")
+    print("[Startup] Follow-ups + lembretes de visita gerenciados pelo cron job do Supabase")
     print("[Startup] Endpoint: POST /api/webhook/follow-up-cron")
     yield
     print("[Shutdown] API encerrada")

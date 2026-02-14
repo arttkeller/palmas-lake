@@ -15,11 +15,47 @@ class UazapiService:
             "Content-Type": "application/json"
         }
 
+    @staticmethod
+    def normalize_whatsapp_number(number: str, default_ddi: str = "55") -> str:
+        """
+        Normaliza número no formato ddidddnumero (somente dígitos).
+        Exemplos válidos:
+        - 5563999991234
+        - 5511999999999
+        """
+        raw = (number or "").strip().lower()
+        if not raw or raw.startswith("ig:"):
+            return ""
+
+        if "@" in raw:
+            raw = raw.split("@")[0]
+
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if not digits:
+            return ""
+
+        # Remove prefixo internacional "00" quando presente (ex.: 0055...)
+        if digits.startswith("00") and len(digits) > 2:
+            digits = digits[2:]
+
+        # Local BR (DDD + número) => adiciona DDI padrão
+        if len(digits) in (10, 11):
+            return f"{default_ddi}{digits}"
+
+        # Já possui DDI + DDD + número
+        if len(digits) in (12, 13):
+            return digits
+
+        return ""
+
     def send_whatsapp_message(self, number: str, text: str, reply_id: str = None):
         """
         Sends a text message via UazAPI /send/text.
         """
-        clean_number = number.replace("+", "").replace(" ", "").replace("-", "")
+        clean_number = self.normalize_whatsapp_number(number)
+        if not clean_number:
+            print(f"Error sending UazAPI message: invalid WhatsApp number format '{number}' (expected ddidddnumero)")
+            return None
         
         url = f"{self.base_url}/send/text"
         
@@ -46,7 +82,10 @@ class UazapiService:
         """
         Sends an image via UazAPI /send/media.
         """
-        clean_number = number.replace("+", "").replace(" ", "").replace("-", "")
+        clean_number = self.normalize_whatsapp_number(number)
+        if not clean_number:
+            print(f"Error sending UazAPI image: invalid WhatsApp number format '{number}' (expected ddidddnumero)")
+            return None
         url = f"{self.base_url}/send/media"
         
         payload = {
@@ -75,7 +114,10 @@ class UazapiService:
         - image: Image URL
         - buttons: List of button dicts (optional)
         """
-        clean_number = number.replace("+", "").replace(" ", "").replace("-", "")
+        clean_number = self.normalize_whatsapp_number(number)
+        if not clean_number:
+            print(f"Error sending UazAPI carousel: invalid WhatsApp number format '{number}' (expected ddidddnumero)")
+            return None
         url = f"{self.base_url}/send/carousel"
         
         carousel_cards = []
@@ -137,7 +179,10 @@ class UazapiService:
         """
         Sends a reaction via UazAPI /message/react.
         """
-        clean_number = number.replace("+", "").replace(" ", "").replace("-", "")
+        clean_number = self.normalize_whatsapp_number(number)
+        if not clean_number:
+            print(f"Error sending UazAPI reaction: invalid WhatsApp number format '{number}' (expected ddidddnumero)")
+            return None
         url = f"{self.base_url}/message/react"
         
         payload = {
