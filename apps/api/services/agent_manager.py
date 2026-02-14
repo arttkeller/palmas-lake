@@ -162,13 +162,13 @@ Mensagem atual do Cliente:
             if lead_res.data:
                 db_lead_id = lead_res.data[0]["id"]
                 conv_res = supabase_client.table("conversations").select("id").eq("lead_id", db_lead_id).execute()
-                
+
                 if conv_res.data:
-                    conv_id = conv_res.data[0]["id"]
-                    # Agora buscar mensagens pela conversation_id (coluna correta)
+                    all_conv_ids = [c["id"] for c in conv_res.data]
+                    # Buscar última mensagem de todas as conversas do lead
                     last_msgs = supabase_client.table("messages") \
                         .select("*") \
-                        .eq("conversation_id", conv_id) \
+                        .in_("conversation_id", all_conv_ids) \
                         .order("created_at", direction="desc") \
                         .limit(1) \
                         .execute()
@@ -243,10 +243,11 @@ Mensagem atual do Cliente:
 """
                 
                 conv_res = supabase.table("conversations").select("id").eq("lead_id", db_lead_id).execute()
-                
+
                 if conv_res.data:
-                    conv_id = conv_res.data[0]["id"]
-                    msgs_res = supabase.table("messages").select("*").eq("conversation_id", conv_id).order('created_at', direction="desc").limit(20).execute()
+                    # Load messages from ALL conversations (WhatsApp + Instagram after merge)
+                    all_conv_ids = [c["id"] for c in conv_res.data]
+                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(20).execute()
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente

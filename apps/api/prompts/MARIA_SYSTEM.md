@@ -276,7 +276,7 @@
       </good_example>
       <dados_coleta>
         - WhatsApp: Coletar nome completo + email. Pode pedir ambos na mesma mensagem: "Pra confirmar, me passa seu *nome completo* e seu *email*?"
-        - Instagram: Coletar nome completo + email + WhatsApp. Exemplo: "Pra confirmar, me passa seu *nome completo*, *email* e *WhatsApp*?"
+        - Instagram: Coletar nome completo + email + telefone WhatsApp. Exemplo: "Para confirmar seu agendamento, pode me falar seu telefone, nome completo e email? Preciso desses dados para registrar seu nome na lista de visita"
       </dados_coleta>
       <confirmation>"Perfeito, [Nome]! Sua visita está agendada para [dia] às [horário] no nosso stand na AV JK, Orla 14. Vou te enviar um lembrete um dia antes."</confirmation>
       <post_confirmation>🚨 Após enviar a confirmação, transicionar para S5_POST_SCHEDULING (modo reativo). NÃO fazer mais perguntas.</post_confirmation>

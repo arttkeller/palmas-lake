@@ -16,6 +16,19 @@ from agno.tools import Toolkit
 
 BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 
+# Status ordering for lead merge (higher = more advanced in funnel)
+_STATUS_ORDER = {
+    "novo_lead": 0, "qualificado": 1, "visita_agendada": 2,
+    "visita_realizada": 3, "proposta_enviada": 4, "convertido": 5,
+}
+
+def _prefer_advanced_status(status_a: Optional[str], status_b: Optional[str]) -> str:
+    """Return whichever status is further along the sales funnel."""
+    a = _STATUS_ORDER.get(status_a or "", 0)
+    b = _STATUS_ORDER.get(status_b or "", 0)
+    return (status_a or "novo_lead") if a >= b else (status_b or "novo_lead")
+
+
 class MariaTools(Toolkit):
     def __init__(self, lead_id: str):
         super().__init__(name="maria_tools")
@@ -353,6 +366,113 @@ class MariaTools(Toolkit):
             print(f"[Tool] Error checking events table for booked slots (non-blocking): {e}")
             return slots
 
+    def _try_merge_instagram_whatsapp(self, phone: str) -> bool:
+        """
+        If this is an Instagram lead and the phone already belongs to a WhatsApp lead,
+        merge both into a single lead (keep the WhatsApp lead as primary).
+        Returns True if merge happened.
+        """
+        if not self.instagram_id:
+            return False
+
+        supabase = create_client()
+
+        # 1. Find existing WhatsApp lead with this phone
+        wa_lead_res = supabase.table("leads").select("*").eq("phone", phone).execute()
+        if not wa_lead_res.data:
+            return False  # New phone, no conflict
+
+        wa_data = wa_lead_res.data[0]
+        wa_lead_id = wa_data["id"]
+
+        # 2. Find current Instagram lead
+        ig_lead_res = supabase.table("leads").select("*").eq("instagram_id", self.instagram_id).execute()
+        if not ig_lead_res.data:
+            return False
+
+        ig_data = ig_lead_res.data[0]
+        ig_lead_id = ig_data["id"]
+
+        if wa_lead_id == ig_lead_id:
+            return False  # Already the same lead
+
+        print(f"[Merge] Merging Instagram lead {ig_lead_id} into WhatsApp lead {wa_lead_id} (phone={phone})")
+
+        # 3. Move conversations from IG lead to WA lead
+        ig_convs = supabase.table("conversations").select("id, platform").eq("lead_id", ig_lead_id).execute()
+        for conv in (ig_convs.data or []):
+            existing = (
+                supabase.table("conversations")
+                .select("id")
+                .eq("lead_id", wa_lead_id)
+                .eq("platform", conv["platform"])
+                .execute()
+            )
+            if existing.data:
+                # WA lead already has a conversation for this platform — move messages
+                supabase.table("messages").update(
+                    {"conversation_id": existing.data[0]["id"]}
+                ).eq("conversation_id", conv["id"]).execute()
+                supabase.table("conversations").delete().eq("id", conv["id"]).execute()
+                print(f"[Merge] Moved messages from conv {conv['id']} into existing conv {existing.data[0]['id']}")
+            else:
+                # Move the whole conversation
+                supabase.table("conversations").update(
+                    {"lead_id": wa_lead_id}
+                ).eq("id", conv["id"]).execute()
+                print(f"[Merge] Moved conversation {conv['id']} to WA lead")
+
+        # 4. Move events
+        try:
+            supabase.table("events").update({"lead_id": wa_lead_id}).eq("lead_id", ig_lead_id).execute()
+        except Exception as e:
+            print(f"[Merge] Error moving events (non-blocking): {e}")
+
+        # 5. Move follow_up_queue
+        try:
+            supabase.table("follow_up_queue").update({"lead_id": wa_lead_id}).eq("lead_id", ig_lead_id).execute()
+        except Exception:
+            pass
+
+        # 6. Enrich WA lead with IG data
+        enrichment = {"instagram_id": self.instagram_id}
+
+        ig_name = ig_data.get("full_name", "")
+        wa_name = wa_data.get("full_name", "")
+        if ig_name and not ig_name.startswith("Instagram ") and (wa_name.startswith("Lead ") or not wa_name):
+            enrichment["full_name"] = ig_name
+
+        if ig_data.get("email") and not wa_data.get("email"):
+            enrichment["email"] = ig_data["email"]
+
+        ig_tags = ig_data.get("tags") or []
+        wa_tags = wa_data.get("tags") or []
+        if ig_tags:
+            enrichment["tags"] = list(set(wa_tags + ig_tags))
+
+        enrichment["status"] = _prefer_advanced_status(
+            wa_data.get("status"), ig_data.get("status")
+        )
+
+        supabase.table("leads").update(enrichment).eq("id", wa_lead_id).execute()
+        print(f"[Merge] Enriched WA lead with: {list(enrichment.keys())}")
+
+        # 7. Delete IG lead (cascades remaining FK rows)
+        supabase.table("leads").delete().eq("id", ig_lead_id).execute()
+        print(f"[Merge] Deleted Instagram lead {ig_lead_id}")
+
+        # 8. Broadcast deletion to frontend
+        try:
+            from routers.webhook import _broadcast_lead_deleted
+            _broadcast_lead_deleted(ig_lead_id)
+        except Exception as bc_err:
+            print(f"[Merge] Broadcast error (non-blocking): {bc_err}")
+
+        # 9. Update internal references so the current agent session uses the merged lead
+        self.phone = phone
+        print(f"[Merge] Successfully merged IG lead into WA lead {wa_lead_id}")
+        return True
+
     def agenda(self, nome: str, email: str, telefone: str, horario_inicio: str, horario_fim: str):
         """
         Agenda uma visita ao stand de vendas do Palmas Lake Towers. 
@@ -395,6 +515,13 @@ class MariaTools(Toolkit):
         if not telefone_normalizado:
             print(f"[Agenda] BLOCKED: invalid phone for WhatsApp reminder. Got: '{provided_phone}'")
             return "❌ ERRO: Telefone inválido. Colete um WhatsApp válido no formato ddidddnumero (ex.: 5563999991234) antes de agendar."
+
+        # Try to merge Instagram lead with existing WhatsApp lead (same phone)
+        if is_instagram_lead and telefone_normalizado:
+            try:
+                self._try_merge_instagram_whatsapp(telefone_normalizado)
+            except Exception as merge_err:
+                print(f"[Agenda] Merge attempt failed (non-blocking): {merge_err}")
 
         print(f"[Tool] Agendar Visita: {horario_inicio}")
         cal_service = CalendarService()
