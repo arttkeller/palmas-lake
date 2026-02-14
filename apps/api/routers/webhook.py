@@ -35,6 +35,35 @@ _AUDIO_KEYS = {
 }
 
 
+def _is_uazapi_audio_message(message_info: Dict[str, Any]) -> bool:
+    """
+    Detecta se o payload EventType=messages representa um áudio da UazAPI.
+    """
+    if not isinstance(message_info, dict):
+        return False
+
+    message_type = str(message_info.get("messageType", "")).lower()
+    media_type = str(message_info.get("mediaType", "")).lower()
+    generic_type = str(message_info.get("type", "")).lower()
+
+    if "audio" in message_type:
+        return True
+    if media_type in {"audio", "ptt", "voice", "voicenote"}:
+        return True
+
+    content = message_info.get("content")
+    if isinstance(content, dict):
+        content_mimetype = str(content.get("mimetype", "")).lower()
+        if content_mimetype.startswith("audio/"):
+            return True
+        if bool(content.get("PTT")) or bool(content.get("ptt")):
+            return True
+        if "waveform" in content:
+            return True
+
+    return generic_type in {"audio", "ptt"}
+
+
 def _extract_text_from_message_payload(payload: Dict[str, Any]) -> Optional[str]:
     """
     Extrai texto de payloads WhatsApp em diferentes formatos (incluindo wrappers).
@@ -87,6 +116,16 @@ def _find_audio_payload(payload: Any) -> Optional[Dict[str, Any]]:
         media_obj = payload.get("media")
         if isinstance(media_obj, dict):
             return media_obj
+
+    # UazAPI often sends audio inside "content" with metadata fields.
+    lowered = {str(k).lower(): v for k, v in payload.items()}
+    content_mimetype = str(lowered.get("mimetype", "")).lower()
+    if content_mimetype.startswith("audio/"):
+        return payload
+    if bool(payload.get("PTT")) or bool(payload.get("ptt")):
+        return payload
+    if "waveform" in payload:
+        return payload
 
     for key, value in payload.items():
         if key.lower() in _AUDIO_KEYS and isinstance(value, dict):
@@ -345,13 +384,24 @@ async def handle_uazapi_webhook(request: Request):
 
             remote_jid = message_info.get("chatid") or message_info.get("sender")
             pushname = message_info.get("pushName", "") or message_info.get("senderName", "") or ""
-            text = message_info.get("text") or message_info.get("content")
+            text = message_info.get("text")
+            if not isinstance(text, str):
+                text = None
+            if not text:
+                raw_content = message_info.get("content")
+                if isinstance(raw_content, str):
+                    text = raw_content
+
             if not text:
                 audio_payload = _find_audio_payload(message_info)
-                message_type_hint = str(message_info.get("type", "")).lower()
-                if audio_payload or message_type_hint in _AUDIO_TYPE_HINTS:
+                is_audio_message = _is_uazapi_audio_message(message_info)
+
+                if not audio_payload and is_audio_message and isinstance(message_info.get("content"), dict):
+                    audio_payload = message_info.get("content")
+
+                if audio_payload or is_audio_message:
                     message_type = "audio"
-                    text = _build_audio_text(audio_payload or message_info)
+                    text = _build_audio_text(audio_payload or {})
         
         else:
             print(f"Unknown event type: {event or data.get('EventType')}")
@@ -372,6 +422,10 @@ async def handle_uazapi_webhook(request: Request):
                 print(f"Parsed JSON message content: {text}")
             except Exception as e:
                 print(f"Failed to parse JSON message content: {e}")
+
+        if text is not None and not isinstance(text, str):
+            print(f"[Webhook] Ignoring non-string text payload (type={type(text)}).")
+            text = None
 
         if remote_jid and text:
             # Verificar comando especial #apagar

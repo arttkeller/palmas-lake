@@ -168,3 +168,63 @@ def test_blackai_audio_message_is_transcribed_and_buffered():
     assert args[1].startswith("[Áudio transcrito pelo cliente]")
 
     mock_add_to_buffer.assert_awaited_once()
+
+
+def test_uazapi_eventtype_messages_audio_content_object_is_processed():
+    from routers import webhook
+
+    mock_request = AsyncMock()
+    mock_request.json.return_value = {
+        "EventType": "messages",
+        "message": {
+            "chatid": "5527998724593@s.whatsapp.net",
+            "fromMe": False,
+            "id": "5527997463733:3EB095C8A65D10DBCD1C55",
+            "messageType": "AudioMessage",
+            "mediaType": "ptt",
+            "type": "media",
+            "senderName": "Arthur",
+            "text": "",
+            "content": {
+                "URL": "https://mmg.whatsapp.net/example-audio.enc",
+                "mimetype": "audio/ogg; codecs=opus",
+                "PTT": True,
+                "seconds": 1,
+            },
+        },
+    }
+
+    async def mock_queue_recalculation(_trigger_source: str):
+        return None
+
+    async def run_test():
+        with patch.object(
+            webhook.analytics_cache_service,
+            "queue_recalculation",
+            side_effect=mock_queue_recalculation,
+        ):
+            with patch("services.message_service.MessageService") as mock_msg_service_class:
+                mock_msg_service = MagicMock()
+                mock_msg_service_class.return_value = mock_msg_service
+
+                with patch("routers.webhook.add_to_buffer", new_callable=AsyncMock) as mock_add_to_buffer:
+                    with patch.object(webhook.audio_transcription_service, "is_enabled", return_value=True):
+                        with patch.object(
+                            webhook.audio_transcription_service,
+                            "transcribe_from_url",
+                            return_value="tenho interesse no apartamento",
+                        ):
+                            result = await webhook.handle_uazapi_webhook(mock_request)
+
+        return result, mock_msg_service, mock_add_to_buffer
+
+    result, mock_msg_service, mock_add_to_buffer = asyncio.run(run_test())
+
+    assert result == {"status": "received"}
+    mock_msg_service.save_message.assert_called_once()
+    args, kwargs = mock_msg_service.save_message.call_args
+    assert args[0] == "5527998724593@s.whatsapp.net"
+    assert kwargs["message_type"] == "audio"
+    assert args[1].startswith("[Áudio transcrito pelo cliente]")
+
+    mock_add_to_buffer.assert_awaited_once()
