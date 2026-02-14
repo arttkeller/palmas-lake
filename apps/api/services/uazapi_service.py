@@ -19,6 +19,7 @@ class UazapiService:
     def normalize_whatsapp_number(number: str, default_ddi: str = "55") -> str:
         """
         Normaliza número no formato ddidddnumero (somente dígitos).
+        Adiciona DDI 55 se ausente e nono dígito (9) para DDDs >= 29.
         Exemplos válidos:
         - 5563999991234
         - 5511999999999
@@ -40,13 +41,23 @@ class UazapiService:
 
         # Local BR (DDD + número) => adiciona DDI padrão
         if len(digits) in (10, 11):
-            return f"{default_ddi}{digits}"
-
+            digits = f"{default_ddi}{digits}"
         # Já possui DDI + DDD + número
-        if len(digits) in (12, 13):
-            return digits
+        elif len(digits) not in (12, 13):
+            return ""
 
-        return ""
+        # Agora digits tem formato 55DDDNUMERO (12 ou 13 dígitos)
+        # Adicionar nono dígito para celulares de DDDs >= 29 que ainda não têm
+        if len(digits) == 12 and digits[:2] == "55":
+            ddd = int(digits[2:4])
+            local = digits[4:]  # 8 dígitos
+            # DDDs >= 29 (fora de SP metro) usam nono dígito obrigatório
+            # Celulares começam com 9, 8, 7 ou 6
+            if ddd >= 29 and local[0] in ("6", "7", "8"):
+                digits = f"55{ddd}9{local}"
+                print(f"[Normalize] Added 9th digit: {digits}")
+
+        return digits
 
     def send_whatsapp_message(self, number: str, text: str, reply_id: str = None):
         """

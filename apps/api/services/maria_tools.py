@@ -504,7 +504,7 @@ class MariaTools(Toolkit):
             print("[Agenda] BLOCKED: Instagram lead without explicit phone for WhatsApp reminder")
             return (
                 "❌ ERRO: Para leads do Instagram, o telefone WhatsApp é obrigatório antes do agendamento. "
-                "Peça o telefone no formato ddidddnumero (ex.: 5563999991234) e tente novamente."
+                "Peça o telefone com DDD ao cliente e tente novamente."
             )
 
         if not provided_phone:
@@ -514,7 +514,7 @@ class MariaTools(Toolkit):
         telefone_normalizado = self._normalize_phone_for_whatsapp(provided_phone)
         if not telefone_normalizado:
             print(f"[Agenda] BLOCKED: invalid phone for WhatsApp reminder. Got: '{provided_phone}'")
-            return "❌ ERRO: Telefone inválido. Colete um WhatsApp válido no formato ddidddnumero (ex.: 5563999991234) antes de agendar."
+            return "❌ ERRO: Telefone inválido. Peça o telefone com DDD novamente ao cliente."
 
         # Try to merge Instagram lead with existing WhatsApp lead (same phone)
         if is_instagram_lead and telefone_normalizado:
