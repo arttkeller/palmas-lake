@@ -22,6 +22,8 @@ class MariaTools(Toolkit):
         self.lead_id = lead_id
         # Extrair telefone limpo se lead_id for email ou tiver @
         self.phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
+        # Instagram conversations use lead_id in the format ig:<IGSID>
+        self.instagram_id = lead_id[3:] if lead_id.startswith("ig:") else None
         
         # Registrar tools explicitamente
         self.register(self.enviar_mensagem)
@@ -33,6 +35,15 @@ class MariaTools(Toolkit):
         self.register(self.enviar_imagens)
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
+
+    def _lead_query(self, query):
+        """
+        Aplica o filtro correto para encontrar o lead atual,
+        independentemente do canal (WhatsApp ou Instagram).
+        """
+        if self.instagram_id:
+            return query.eq("instagram_id", self.instagram_id)
+        return query.eq("phone", self.phone)
 
     def enviar_mensagem(self, texto: str, reply_id: Optional[str] = None):
         """
@@ -112,13 +123,15 @@ class MariaTools(Toolkit):
             True if message exists, False otherwise
         """
         try:
-            phone = self.lead_id.split('@')[0] if '@' in self.lead_id else self.lead_id
             supabase = create_client()
             
             # Find lead
-            lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
+            lead_res = self._lead_query(supabase.table("leads").select("id")).execute()
             if not lead_res.data:
-                print(f"[Tool] Lead not found for phone {phone}")
+                if self.instagram_id:
+                    print(f"[Tool] Lead not found for instagram_id {self.instagram_id}")
+                else:
+                    print(f"[Tool] Lead not found for phone {self.phone}")
                 return False
             
             lead_id = lead_res.data[0]["id"]
@@ -211,7 +224,9 @@ class MariaTools(Toolkit):
         print(f"[Tool] Atualizar Nome: {nome}")
         supabase = create_client()
         try:
-            supabase.table("leads").update({"full_name": nome}).eq("phone", self.phone).execute()
+            self._lead_query(
+                supabase.table("leads").update({"full_name": nome})
+            ).execute()
         except Exception as e:
             print(f"Error updating name: {e}")
 
@@ -237,7 +252,9 @@ class MariaTools(Toolkit):
             if objetivo:
                 update_data["objective"] = objetivo.lower()
                 
-            result = supabase.table("leads").update(update_data).eq("phone", self.phone).execute()
+            result = self._lead_query(
+                supabase.table("leads").update(update_data)
+            ).execute()
             print(f"[Tool] Interesse atualizado com sucesso: {update_data}, Result: {result.data}")
         except Exception as e:
             print(f"Error updating interest: {e}")
@@ -332,7 +349,7 @@ class MariaTools(Toolkit):
             supabase = create_client()
             
             # Buscar lead_id
-            lead_res = supabase.table("leads").select("id").eq("phone", self.phone).execute()
+            lead_res = self._lead_query(supabase.table("leads").select("id")).execute()
             lead_uuid = lead_res.data[0]["id"] if lead_res.data else None
             
             # Criar evento na tabela events
@@ -439,6 +456,8 @@ class MariaTools(Toolkit):
             if status:
                 update_data["status"] = status
                 
-            supabase.table("leads").update(update_data).eq("phone", self.phone).execute()
+            self._lead_query(
+                supabase.table("leads").update(update_data)
+            ).execute()
         except Exception as e:
             print(f"Error updating lead status: {e}")

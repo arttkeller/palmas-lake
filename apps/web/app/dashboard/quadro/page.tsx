@@ -73,6 +73,71 @@ const initialColumns: Column[] = [
     { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [] },
 ];
 
+const INVESTOR_SIGNALS = ['investidor', 'investir', 'investimento', 'investor'] as const;
+
+function normalizeLeadSignal(value: string): string {
+    return value
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+}
+
+function hasInvestorSignal(values: Array<string | null | undefined>): boolean {
+    return values.some((value) => {
+        if (!value) return false;
+        const normalized = normalizeLeadSignal(value);
+        return INVESTOR_SIGNALS.some(signal => normalized.includes(signal));
+    });
+}
+
+function normalizeObjectiveValue(rawObjective: unknown): Lead['objective'] | undefined {
+    if (typeof rawObjective !== 'string') return undefined;
+    const normalized = normalizeLeadSignal(rawObjective);
+    if (!normalized) return undefined;
+    if (normalized.includes('morar') && normalized.includes('invest')) return 'morar_investir';
+    if (normalized.includes('invest')) return 'investir';
+    if (normalized.includes('morar')) return 'morar';
+    return undefined;
+}
+
+function inferLeadObjective(item: any): Lead['objective'] | undefined {
+    const objective = normalizeObjectiveValue(item?.objective);
+    if (objective) return objective;
+
+    const signals = [
+        ...parseTags(item?.tags),
+        ...parseTags(item?.adjectives),
+        typeof item?.notes === 'string' ? item.notes : null,
+        typeof item?.conversation_summary === 'string' ? item.conversation_summary : null,
+    ];
+
+    return hasInvestorSignal(signals) ? 'investir' : undefined;
+}
+
+function inferLeadClassification(
+    item: any,
+    objective?: Lead['objective']
+): Lead['classificationType'] | undefined {
+    const rawClassification = typeof item?.classification_type === 'string'
+        ? normalizeLeadSignal(item.classification_type)
+        : '';
+
+    if (rawClassification === 'cliente_final' || rawClassification === 'corretor' || rawClassification === 'investidor') {
+        return rawClassification as Lead['classificationType'];
+    }
+
+    if (objective === 'investir' || objective === 'morar_investir') {
+        return 'investidor';
+    }
+
+    const signals = [
+        ...parseTags(item?.tags),
+        ...parseTags(item?.adjectives),
+    ];
+    return hasInvestorSignal(signals) ? 'investidor' : undefined;
+}
+
 export default function LeadsKanban() {
     const router = useRouter();
     const pathname = usePathname();
@@ -326,11 +391,13 @@ export default function LeadsKanban() {
         filteredData.forEach((item) => {
             const statusKey = mapStatus(item.status);
             const tags: string[] = [];
+            const objective = inferLeadObjective(item);
+            const classificationType = inferLeadClassification(item, objective);
             if (item.email) tags.push('Email');
             // Source (instagram/whatsapp) is already shown as an icon in the card footer,
             // so we skip adding it as a tag to avoid duplication.
-            if (item.classification_type === 'corretor') tags.push('🏠 Corretor');
-            if (item.classification_type === 'investidor') tags.push('💰 Investidor');
+            if (classificationType === 'corretor') tags.push('🏠 Corretor');
+            if (classificationType === 'investidor') tags.push('💰 Investidor');
             if (item.is_hot) tags.push('🔥 HOT');
             
             const lead: Lead = {
@@ -346,11 +413,11 @@ export default function LeadsKanban() {
                 tags: tags,
                 assignedTo: { name: 'Arthur' },
                 interestType: item.interest_type,
-                objective: item.objective,
+                objective,
                 purchaseTimeline: item.purchase_timeline,
                 knowsRegion: item.knows_region,
                 cityOrigin: item.city_origin,
-                classificationType: item.classification_type,
+                classificationType,
                 isHot: item.is_hot,
                 source: item.source,
                 temperature: (item.temperature ? normalizeTemperature(item.temperature) : null) as LeadTemperature
