@@ -313,6 +313,17 @@ class MariaTools(Toolkit):
             horario_inicio: Data e hora de início (ISO 8601, ex: 2025-01-20T10:00:00).
             horario_fim: Data e hora de fim.
         """
+        # Validate nome completo (must have at least first and last name)
+        if not nome or len(nome.strip().split()) < 2:
+            print(f"[Agenda] BLOCKED: nome completo not provided. Got: '{nome}'")
+            return "❌ ERRO: Você precisa coletar o NOME COMPLETO do cliente (nome e sobrenome) antes de agendar. Pergunte ao cliente o nome completo."
+
+        # Validate email (must be a real email, not placeholder)
+        invalid_emails = ["pendente@email.com", "pendente", ""]
+        if not email or email.strip().lower() in invalid_emails or "@" not in email:
+            print(f"[Agenda] BLOCKED: email not provided or is placeholder. Got: '{email}'")
+            return "❌ ERRO: Você precisa coletar o EMAIL REAL do cliente antes de agendar. Pergunte ao cliente o email."
+
         # Default telefone to the phone from the current conversation (Requirements 4.1, 4.2)
         if not telefone or telefone.strip() == "":
             telefone = self.phone
