@@ -16,3 +16,4 @@ agno
 sentry-sdk[fastapi]
 hypothesis
 pytest
+groq

@@ -1,16 +1,19 @@
 from fastapi import APIRouter, Request, HTTPException
 from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
+from services.audio_transcription_service import AudioTranscriptionService
 from services.buffer_service import add_to_buffer
 from services.analytics_service import AnalyticsService
 from services.analytics_cache_service import AnalyticsCacheService
 import asyncio
 import os
 import requests as http_requests
+from typing import Any, Dict, Optional, Tuple
 
 router = APIRouter()
 uazapi = UazapiService()
 meta_service = MetaService()
+audio_transcription_service = AudioTranscriptionService()
 
 # Analytics cache service for queueing recalculations — must include AnalyticsService
 # so that background processing can actually compute metrics
@@ -20,6 +23,165 @@ analytics_cache_service.setup_background_processing()
 
 # Comando especial para limpar dados de teste
 CLEAR_COMMAND = "#apagar"
+
+_AUDIO_TYPE_HINTS = {"audio", "ptt", "voice", "voicenote", "voice_note"}
+_AUDIO_KEYS = {
+    "audiomessage",
+    "pttmessage",
+    "audio",
+    "voice",
+    "voicenote",
+    "voice_note",
+}
+
+
+def _extract_text_from_message_payload(payload: Dict[str, Any]) -> Optional[str]:
+    """
+    Extrai texto de payloads WhatsApp em diferentes formatos (incluindo wrappers).
+    """
+    if not isinstance(payload, dict):
+        return None
+
+    conversation = payload.get("conversation")
+    if isinstance(conversation, str) and conversation.strip():
+        return conversation
+
+    ext_text = payload.get("extendedTextMessage", {})
+    if isinstance(ext_text, dict):
+        text = ext_text.get("text")
+        if isinstance(text, str) and text.strip():
+            return text
+
+    for key in ("imageMessage", "videoMessage", "documentMessage"):
+        media_obj = payload.get(key, {})
+        if isinstance(media_obj, dict):
+            caption = media_obj.get("caption")
+            if isinstance(caption, str) and caption.strip():
+                return caption
+
+    for value in payload.values():
+        if isinstance(value, dict):
+            found_text = _extract_text_from_message_payload(value)
+            if found_text:
+                return found_text
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    found_text = _extract_text_from_message_payload(item)
+                    if found_text:
+                        return found_text
+
+    return None
+
+
+def _find_audio_payload(payload: Any) -> Optional[Dict[str, Any]]:
+    """
+    Procura por conteúdo de áudio em payloads de webhook.
+    """
+    if not isinstance(payload, dict):
+        return None
+
+    payload_type = str(payload.get("type", "")).lower()
+    is_audio_type = payload_type in _AUDIO_TYPE_HINTS
+    if is_audio_type:
+        media_obj = payload.get("media")
+        if isinstance(media_obj, dict):
+            return media_obj
+
+    for key, value in payload.items():
+        if key.lower() in _AUDIO_KEYS and isinstance(value, dict):
+            return value
+
+    for value in payload.values():
+        if isinstance(value, dict):
+            found = _find_audio_payload(value)
+            if found:
+                return found
+        elif isinstance(value, list):
+            for item in value:
+                found = _find_audio_payload(item)
+                if found:
+                    return found
+
+    if is_audio_type:
+        return payload
+
+    return None
+
+
+def _extract_audio_source(audio_payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[str], str]:
+    """
+    Extrai URL/base64 e filename de um payload de áudio.
+    """
+    if not isinstance(audio_payload, dict):
+        return None, None, "audio.m4a"
+
+    # Normaliza chaves para suportar variações da UazAPI (ex.: AudioMessage, URL, etc.)
+    lowered = {str(k).lower(): v for k, v in audio_payload.items()}
+
+    url = None
+    for key in ("url", "mediaurl", "downloadurl", "link", "file", "audiourl", "audio_url"):
+        value = lowered.get(key)
+        if isinstance(value, str):
+            normalized = value.strip()
+            if normalized.startswith("http://") or normalized.startswith("https://"):
+                url = normalized
+                break
+
+    if not url:
+        nested_payload = lowered.get("payload")
+        if isinstance(nested_payload, dict):
+            nested_url, _, _ = _extract_audio_source(nested_payload)
+            url = nested_url
+
+    base64_audio = None
+    for key in ("base64", "audiobase64", "data", "audiodata", "audio_data"):
+        value = lowered.get(key)
+        if isinstance(value, str) and value.strip():
+            base64_audio = value.strip()
+            break
+
+    if not base64_audio:
+        nested_payload = lowered.get("payload")
+        if isinstance(nested_payload, dict):
+            _, nested_base64, _ = _extract_audio_source(nested_payload)
+            base64_audio = nested_base64
+
+    filename = (
+        lowered.get("filename")
+        or lowered.get("name")
+        or lowered.get("file")
+        or "audio.m4a"
+    )
+
+    if "." not in str(filename):
+        filename = f"{filename}.m4a"
+
+    return url, base64_audio, str(filename)
+
+
+def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
+    """
+    Retorna texto transcrito do áudio quando possível.
+    """
+    if not isinstance(audio_payload, dict):
+        return "[Áudio enviado pelo cliente]"
+
+    url, base64_audio, filename = _extract_audio_source(audio_payload)
+
+    transcribed_text = None
+    if audio_transcription_service.is_enabled():
+        if url:
+            transcribed_text = audio_transcription_service.transcribe_from_url(url, filename_hint=filename)
+        if not transcribed_text and base64_audio:
+            transcribed_text = audio_transcription_service.transcribe_from_base64(base64_audio, filename=filename)
+    else:
+        print("[Webhook] GROQ_API_KEY ausente: áudio salvo sem transcrição.")
+
+    if transcribed_text:
+        return f"[Áudio transcrito pelo cliente] {transcribed_text}"
+
+    return "[Áudio enviado pelo cliente]"
 
 async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") -> bool:
     """
@@ -151,13 +313,14 @@ def _send_clear_response(lead_identifier: str, channel: str, message: str):
 async def handle_uazapi_webhook(request: Request):
     """
     Receive incoming messages from UazAPI.
-    Payload structure: Evolution API (v2)
+    Payload structure: UazAPI webhooks (messages.upsert e EventType=messages).
     """
     try:
         data = await request.json()
         print("Received UazAPI Webhook:", data)
+        message_type = "text"
         
-        # 1. Handle Evolution API v2 (event: messages.upsert)
+        # 1. Handle UazAPI format with event=messages.upsert
         event = data.get("event")
         pushname = ""
         if event == "messages.upsert":
@@ -168,9 +331,14 @@ async def handle_uazapi_webhook(request: Request):
             remote_jid = key.get("remoteJid")
             pushname = msg_data.get("pushName", "") or ""
             message_obj = msg_data.get("message", {})
-            text = message_obj.get("conversation") or message_obj.get("extendedTextMessage", {}).get("text")
+            text = _extract_text_from_message_payload(message_obj)
+            if not text:
+                audio_payload = _find_audio_payload(message_obj)
+                if audio_payload:
+                    message_type = "audio"
+                    text = _build_audio_text(audio_payload)
 
-        # 2. Handle BlackAI / Direct UazAPI (EventType: messages)
+        # 2. Handle alternate UazAPI format (EventType=messages)
         elif data.get("EventType") == "messages":
             message_info = data.get("message", {})
             if message_info.get("fromMe"): return {"status": "ignored"}
@@ -178,6 +346,12 @@ async def handle_uazapi_webhook(request: Request):
             remote_jid = message_info.get("chatid") or message_info.get("sender")
             pushname = message_info.get("pushName", "") or message_info.get("senderName", "") or ""
             text = message_info.get("text") or message_info.get("content")
+            if not text:
+                audio_payload = _find_audio_payload(message_info)
+                message_type_hint = str(message_info.get("type", "")).lower()
+                if audio_payload or message_type_hint in _AUDIO_TYPE_HINTS:
+                    message_type = "audio"
+                    text = _build_audio_text(audio_payload or message_info)
         
         else:
             print(f"Unknown event type: {event or data.get('EventType')}")
@@ -212,14 +386,21 @@ async def handle_uazapi_webhook(request: Request):
             elif data.get("EventType") == "messages":
                 msg_id = message_info.get("id")
                 
-            print(f"Processing message from {remote_jid} (ID: {msg_id}): {text}")
+            print(f"Processing message from {remote_jid} (ID: {msg_id}, type: {message_type}): {text}")
             
             # Save User Message to DB
             try:
                 from services.message_service import MessageService
                 msg_service = MessageService()
                 print(f"[Webhook] Calling save_message for lead message...")
-                result = msg_service.save_message(remote_jid, text, "lead", whatsapp_msg_id=msg_id, wa_pushname=pushname)
+                result = msg_service.save_message(
+                    remote_jid,
+                    text,
+                    "lead",
+                    message_type=message_type,
+                    whatsapp_msg_id=msg_id,
+                    wa_pushname=pushname,
+                )
                 print(f"[Webhook] save_message result: {result}")
                 
                 # Queue analytics recalculation (non-blocking)
