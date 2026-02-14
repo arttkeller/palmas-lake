@@ -199,6 +199,51 @@ def _extract_audio_source(audio_payload: Dict[str, Any]) -> Tuple[Optional[str],
     return url, base64_audio, str(filename)
 
 
+def _try_uazapi_download_and_transcribe(audio_payload: Dict[str, Any]) -> Optional[str]:
+    """
+    Tenta baixar áudio descriptografado via UazAPI e transcrever com Groq.
+    Retorna texto transcrito ou None.
+    """
+    lowered = {str(k).lower(): v for k, v in audio_payload.items()}
+
+    media_url = None
+    for key in ("url", "mediaurl", "downloadurl"):
+        val = lowered.get(key)
+        if isinstance(val, str) and val.strip().startswith("http"):
+            media_url = val.strip()
+            break
+
+    media_key = lowered.get("mediakey")
+    mimetype = lowered.get("mimetype", "")
+    file_sha256 = lowered.get("filesha256")
+    file_length = lowered.get("filelength")
+    file_enc_sha256 = lowered.get("fileencsha256")
+
+    if not (media_url and media_key and file_sha256 and file_length):
+        return None
+
+    try:
+        b64_audio = uazapi.download_audio(
+            url=media_url,
+            media_key=media_key,
+            mimetype=mimetype,
+            file_sha256=file_sha256,
+            file_length=file_length,
+            file_enc_sha256=file_enc_sha256,
+        )
+        if b64_audio:
+            import base64 as b64mod
+            audio_bytes = b64mod.b64decode(b64_audio)
+            ext = ".ogg" if "ogg" in mimetype.lower() else ".m4a"
+            return audio_transcription_service.transcribe_from_bytes(
+                audio_bytes, filename=f"audio{ext}"
+            )
+    except Exception as exc:
+        print(f"[Webhook] UazAPI download+transcribe failed: {exc}")
+
+    return None
+
+
 def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
     """
     Retorna texto transcrito do áudio quando possível.
@@ -210,15 +255,21 @@ def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
 
     transcribed_text = None
     if audio_transcription_service.is_enabled():
-        if url:
+        # 1) Tentar download descriptografado via UazAPI (preferencial)
+        transcribed_text = _try_uazapi_download_and_transcribe(audio_payload)
+
+        # 2) Fallback: URL direta (pode funcionar se não for criptografada)
+        if not transcribed_text and url:
             transcribed_text = audio_transcription_service.transcribe_from_url(url, filename_hint=filename)
+
+        # 3) Fallback: base64 do payload
         if not transcribed_text and base64_audio:
             transcribed_text = audio_transcription_service.transcribe_from_base64(base64_audio, filename=filename)
     else:
         print("[Webhook] GROQ_API_KEY ausente: áudio salvo sem transcrição.")
 
     if transcribed_text:
-        return f"[Áudio transcrito pelo cliente] {transcribed_text}"
+        return f"🔊 {transcribed_text}"
 
     return "[Áudio enviado pelo cliente]"
 
