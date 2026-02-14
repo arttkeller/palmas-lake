@@ -28,9 +28,14 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
     Suporta WhatsApp (phone) e Instagram (ig:<igsid>).
     """
     try:
+        # Cancel any pending buffered messages to prevent race condition
+        # where the AI agent re-creates the lead after deletion
+        from services.buffer_service import cancel_buffer
+        cancel_buffer(lead_identifier)
+
         from services.supabase_client import create_client
         supabase = create_client()
-        
+
         is_instagram = lead_identifier.startswith("ig:")
         
         if is_instagram:
@@ -124,8 +129,11 @@ def _broadcast_lead_deleted(lead_id: str):
                 "payload": {"lead_id": lead_id}
             }]
         }
-        http_requests.post(url, json=payload, headers=headers, timeout=5)
-        print(f"🗑️ [CLEAR] Broadcast lead_deleted enviado para lead {lead_id}")
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=5)
+        if resp.status_code in (200, 202):
+            print(f"🗑️ [CLEAR] Broadcast lead_deleted enviado para lead {lead_id}")
+        else:
+            print(f"🗑️ [CLEAR] Broadcast falhou: HTTP {resp.status_code} - {resp.text[:200]}")
     except Exception as e:
         print(f"🗑️ [CLEAR] Erro ao enviar broadcast (nao-bloqueante): {e}")
 

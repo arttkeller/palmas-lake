@@ -14,6 +14,8 @@ channel_map: Dict[str, str] = {}
 # Track recently processed message IDs to prevent duplicates (TTL managed manually)
 _processed_msg_ids: Dict[str, float] = {}  # msg_id -> timestamp
 _DEDUP_TTL = 120  # seconds to keep message IDs in memory
+# Leads marked for deletion — buffer processing will skip these
+_cancelled_leads: set = set()
 
 agent = AgentManager()
 uazapi = UazapiService()
@@ -26,6 +28,17 @@ def _cleanup_processed_ids():
     expired = [mid for mid, ts in _processed_msg_ids.items() if now - ts > _DEDUP_TTL]
     for mid in expired:
         del _processed_msg_ids[mid]
+
+def cancel_buffer(lead_id: str):
+    """Cancel any pending buffered messages for a lead (used before deletion)."""
+    _cancelled_leads.add(lead_id)
+    removed = message_buffer.pop(lead_id, [])
+    channel_map.pop(lead_id, None)
+    if removed:
+        print(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
+    else:
+        print(f"[Buffer] No pending messages to cancel for {lead_id}")
+
 
 async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp"):
     """
@@ -65,7 +78,15 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
 
 async def process_buffer_after_delay(lead_id: str):
     await asyncio.sleep(2.0) # Wait 2 seconds for more messages
-    
+
+    # Skip processing if lead was deleted via #apagar during the delay
+    if lead_id in _cancelled_leads:
+        _cancelled_leads.discard(lead_id)
+        message_buffer.pop(lead_id, None)
+        channel_map.pop(lead_id, None)
+        print(f"[Buffer] Skipping processing for deleted lead {lead_id}")
+        return
+
     async with buffer_locks[lead_id]:
         messages_with_ids = message_buffer.pop(lead_id, [])
         channel = channel_map.pop(lead_id, "whatsapp")
