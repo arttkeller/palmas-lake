@@ -291,23 +291,67 @@ class MariaTools(Toolkit):
         try:
             cal_service = CalendarService()
             slots = cal_service.get_available_slots(num_days=4, slots_per_day=2)
-            
+
             if not slots:
                 return "Não foi possível consultar o calendário. Horário de funcionamento: Segunda a Sexta, 9h às 19h."
-            
+
+            # Cross-check with events table to exclude already-booked slots
+            slots = self._filter_booked_slots(slots)
+
+            if not slots:
+                return "Todos os horários próximos estão ocupados. Horário de funcionamento: Segunda a Sexta, 9h às 19h. Pergunte ao cliente se prefere outro horário."
+
             # Format slots for the agent to use in the conversation
             formatted = "HORÁRIOS DISPONÍVEIS NO STAND:\n\n"
             for slot in slots:
                 formatted += f"- {slot['weekday']} ({slot['date']}) às {slot['time']}\n"
-            
+
             formatted += "\nEscolha 2 datas com horários diferentes (manhã e tarde) para oferecer ao cliente."
-            
+
             print(f"[Tool] Disponibilidade encontrada: {len(slots)} slots")
             return formatted
-            
+
         except Exception as e:
             print(f"[Tool] Erro ao consultar disponibilidade: {e}")
             return "Não foi possível consultar o calendário. Horário de funcionamento: Segunda a Sexta, 9h às 19h."
+
+    @staticmethod
+    def _filter_booked_slots(slots: list) -> list:
+        """
+        Remove slots that already have events booked in the Supabase events table.
+        This prevents double-booking when Google Calendar sync is delayed or unavailable.
+        """
+        if not slots:
+            return slots
+        try:
+            supabase = create_client()
+            # Get all future events from the events table
+            now = datetime.now(timezone(timedelta(hours=-3))).isoformat()
+            result = supabase.table("events").select("start_time").gte("start_time", now).execute()
+
+            if not result.data:
+                return slots
+
+            # Build set of booked (date, hour) tuples
+            booked = set()
+            for event in result.data:
+                try:
+                    dt = datetime.fromisoformat(event["start_time"])
+                    booked.add((dt.strftime("%d/%m/%Y"), f"{dt.hour:02d}:00"))
+                except Exception:
+                    pass
+
+            if not booked:
+                return slots
+
+            filtered = [s for s in slots if (s["date"], s["time"]) not in booked]
+            removed = len(slots) - len(filtered)
+            if removed:
+                print(f"[Tool] Filtered out {removed} already-booked slot(s) from availability")
+            return filtered
+        except Exception as e:
+            print(f"[Tool] Error checking events table for booked slots (non-blocking): {e}")
+            return slots
 
     def agenda(self, nome: str, email: str, telefone: str, horario_inicio: str, horario_fim: str):
         """
