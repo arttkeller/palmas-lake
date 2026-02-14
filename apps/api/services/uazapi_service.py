@@ -186,58 +186,6 @@ class UazapiService:
             print(f"Error sending UazAPI carousel: {e}")
             return None
 
-    def download_audio(
-        self,
-        url: str,
-        media_key: str,
-        mimetype: str,
-        file_sha256: str,
-        file_length: int,
-        file_enc_sha256: str = None,
-    ) -> str | None:
-        """
-        Downloads and decrypts an audio file via UazAPI /chat/downloadaudio.
-        Returns the base64-encoded decrypted audio, or None on failure.
-        """
-        endpoint = f"{self.base_url}/chat/downloadaudio"
-        payload = {
-            "Url": url,
-            "MediaKey": media_key,
-            "Mimetype": mimetype,
-            "FileSHA256": file_sha256,
-            "FileLength": int(file_length),
-        }
-        if file_enc_sha256:
-            payload["FileEncSHA256"] = file_enc_sha256
-
-        try:
-            print(f"[UazAPI] Downloading audio from {endpoint}")
-            response = requests.post(
-                endpoint, headers=self._get_headers(), json=payload, timeout=30
-            )
-            if response.status_code != 200:
-                print(f"[UazAPI] downloadaudio failed: HTTP {response.status_code} - {response.text[:300]}")
-                return None
-
-            data = response.json()
-            # WuzAPI/UazAPI returns base64 in various possible keys
-            b64 = data.get("Data") or data.get("data") or data.get("base64")
-            if isinstance(b64, str) and b64.strip():
-                print(f"[UazAPI] Audio downloaded successfully ({len(b64)} base64 chars)")
-                return b64.strip()
-
-            # If the response itself is a plain base64 string
-            text = response.text.strip()
-            if len(text) > 100 and not text.startswith("{"):
-                print(f"[UazAPI] Audio downloaded as raw base64 ({len(text)} chars)")
-                return text
-
-            print(f"[UazAPI] downloadaudio returned unexpected format: {response.text[:300]}")
-            return None
-        except Exception as exc:
-            print(f"[UazAPI] Error downloading audio: {exc}")
-            return None
-
     def send_reaction(self, number: str, message_id: str, emoji: str = "❤️"):
         """
         Sends a reaction via UazAPI /message/react.

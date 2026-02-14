@@ -199,10 +199,69 @@ def _extract_audio_source(audio_payload: Dict[str, Any]) -> Tuple[Optional[str],
     return url, base64_audio, str(filename)
 
 
-def _try_uazapi_download_and_transcribe(audio_payload: Dict[str, Any]) -> Optional[str]:
+def _decrypt_whatsapp_media(encrypted_bytes: bytes, media_key_b64: str, media_type: str = "audio") -> Optional[bytes]:
     """
-    Tenta baixar áudio descriptografado via UazAPI e transcrever com Groq.
-    Retorna texto transcrito ou None.
+    Descriptografa mídia do WhatsApp usando o mediaKey.
+    WhatsApp usa HKDF + AES-256-CBC.
+    """
+    import base64 as b64mod
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+        from cryptography.hazmat.primitives.hashes import SHA256
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    except ImportError:
+        print("[AudioDecrypt] cryptography library not installed")
+        return None
+
+    info_map = {
+        "audio": b"WhatsApp Audio Keys",
+        "ptt": b"WhatsApp Audio Keys",
+        "image": b"WhatsApp Image Keys",
+        "video": b"WhatsApp Video Keys",
+        "document": b"WhatsApp Document Keys",
+    }
+    info = info_map.get(media_type.lower(), b"WhatsApp Audio Keys")
+
+    try:
+        media_key = b64mod.b64decode(media_key_b64)
+
+        # HKDF expand: 112 bytes = 16 (IV) + 32 (cipherKey) + 32 (macKey) + 32 (refKey)
+        expanded = HKDF(
+            algorithm=SHA256(),
+            length=112,
+            salt=None,
+            info=info,
+        ).derive(media_key)
+
+        iv = expanded[:16]
+        cipher_key = expanded[16:48]
+
+        # Strip last 10 bytes (MAC) from encrypted data
+        file_data = encrypted_bytes[:-10]
+
+        # Decrypt AES-256-CBC
+        cipher = Cipher(algorithms.AES(cipher_key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        decrypted_padded = decryptor.update(file_data) + decryptor.finalize()
+
+        # Remove PKCS7 padding
+        pad_len = decrypted_padded[-1]
+        if 1 <= pad_len <= 16:
+            decrypted = decrypted_padded[:-pad_len]
+        else:
+            decrypted = decrypted_padded
+
+        print(f"[AudioDecrypt] Decrypted {len(encrypted_bytes)} -> {len(decrypted)} bytes")
+        return decrypted
+    except Exception as exc:
+        print(f"[AudioDecrypt] Decryption failed: {exc}")
+        return None
+
+
+def _try_download_decrypt_and_transcribe(audio_payload: Dict[str, Any]) -> Optional[str]:
+    """
+    Baixa áudio criptografado do WhatsApp CDN, descriptografa com mediaKey,
+    e transcreve com Groq.
     """
     lowered = {str(k).lower(): v for k, v in audio_payload.items()}
 
@@ -215,33 +274,34 @@ def _try_uazapi_download_and_transcribe(audio_payload: Dict[str, Any]) -> Option
 
     media_key = lowered.get("mediakey")
     mimetype = lowered.get("mimetype", "")
-    file_sha256 = lowered.get("filesha256")
-    file_length = lowered.get("filelength")
-    file_enc_sha256 = lowered.get("fileencsha256")
 
-    if not (media_url and media_key and file_sha256 and file_length):
+    if not (media_url and media_key):
         return None
 
     try:
-        b64_audio = uazapi.download_audio(
-            url=media_url,
-            media_key=media_key,
-            mimetype=mimetype,
-            file_sha256=file_sha256,
-            file_length=file_length,
-            file_enc_sha256=file_enc_sha256,
-        )
-        if b64_audio:
-            import base64 as b64mod
-            audio_bytes = b64mod.b64decode(b64_audio)
-            ext = ".ogg" if "ogg" in mimetype.lower() else ".m4a"
-            return audio_transcription_service.transcribe_from_bytes(
-                audio_bytes, filename=f"audio{ext}"
-            )
-    except Exception as exc:
-        print(f"[Webhook] UazAPI download+transcribe failed: {exc}")
+        import requests
+        print(f"[AudioDecrypt] Downloading encrypted audio from WhatsApp CDN...")
+        resp = requests.get(media_url, timeout=20)
+        resp.raise_for_status()
+        encrypted_bytes = resp.content
+        print(f"[AudioDecrypt] Downloaded {len(encrypted_bytes)} encrypted bytes")
 
-    return None
+        # Determine media type from mimetype or payload hints
+        media_type = "audio"
+        if bool(lowered.get("ptt")):
+            media_type = "ptt"
+
+        decrypted = _decrypt_whatsapp_media(encrypted_bytes, media_key, media_type)
+        if not decrypted:
+            return None
+
+        ext = ".ogg" if "ogg" in mimetype.lower() else ".m4a"
+        return audio_transcription_service.transcribe_from_bytes(
+            decrypted, filename=f"audio{ext}"
+        )
+    except Exception as exc:
+        print(f"[AudioDecrypt] Download+decrypt+transcribe failed: {exc}")
+        return None
 
 
 def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
@@ -255,8 +315,8 @@ def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
 
     transcribed_text = None
     if audio_transcription_service.is_enabled():
-        # 1) Tentar download descriptografado via UazAPI (preferencial)
-        transcribed_text = _try_uazapi_download_and_transcribe(audio_payload)
+        # 1) Baixar do CDN, descriptografar com mediaKey, transcrever
+        transcribed_text = _try_download_decrypt_and_transcribe(audio_payload)
 
         # 2) Fallback: URL direta (pode funcionar se não for criptografada)
         if not transcribed_text and url:
