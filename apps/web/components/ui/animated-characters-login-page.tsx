@@ -16,6 +16,9 @@ import { KeySquareIcon } from "@/components/ui/key-square";
 import { EyeIcon } from "@/components/ui/eye";
 import { EyeOffIcon } from "@/components/ui/eye-off";
 
+const AUTH_REGISTRATION_PROJECT =
+  process.env.NEXT_PUBLIC_AUTH_REGISTRATION_PROJECT || "palmaslake-agno";
+
 /* ─────────────────────── Pupil ─────────────────────── */
 
 interface PupilProps {
@@ -276,6 +279,8 @@ export default function AnimatedLoginPage() {
         options: {
           data: {
             full_name: fullName.trim(),
+            registration_project: AUTH_REGISTRATION_PROJECT,
+            project_schema: AUTH_REGISTRATION_PROJECT,
           },
         },
       });
