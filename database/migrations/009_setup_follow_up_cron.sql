@@ -83,19 +83,29 @@ WHERE EXISTS (
 
 SELECT cron.schedule(
     'follow-up-processor',          -- nome do job
-    '*/5 * * * *',                  -- a cada 5 minutos
+    '*/5 * * * *',                  -- checa a cada 5 minutos (query leve no banco)
     $$
-    SELECT net.http_post(
-        url := 'https://api-palmas.blackai.dev/api/webhook/follow-up-cron',
-        headers := jsonb_build_object(
-            'Content-Type', 'application/json',
-            'X-Cron-Secret', 'palmaslake-follow-up-cron-2024'
-        ),
-        body := jsonb_build_object(
-            'source', 'supabase_cron',
-            'triggered_at', now()::text
-        )
-    );
+    -- Só chama a API quando existem follow-ups pendentes com horário vencido
+    DO $body$
+    BEGIN
+        IF EXISTS (
+            SELECT 1 FROM "palmaslake-agno".follow_up_queue
+            WHERE status = 'pending' AND scheduled_at <= now()
+            LIMIT 1
+        ) THEN
+            PERFORM net.http_post(
+                url := 'https://api-palmas.blackai.dev/api/webhook/follow-up-cron',
+                headers := jsonb_build_object(
+                    'Content-Type', 'application/json',
+                    'X-Cron-Secret', 'palmaslake-follow-up-cron-2024'
+                ),
+                body := jsonb_build_object(
+                    'source', 'supabase_cron',
+                    'triggered_at', now()::text
+                )
+            );
+        END IF;
+    END $body$;
     $$
 );
 
