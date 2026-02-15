@@ -159,7 +159,9 @@ async def process_buffer_after_delay(lead_id: str):
                             ig_id = lead_id[3:]
                             lead_res = sb.table("leads").select("id").eq("instagram_id", ig_id).execute()
                         else:
-                            lead_res = sb.table("leads").select("id").eq("phone", lead_id).execute()
+                            # Strip WhatsApp JID suffix (@s.whatsapp.net) for DB lookup
+                            phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
+                            lead_res = sb.table("leads").select("id").eq("phone", phone).execute()
 
                         if lead_res.data and len(lead_res.data) > 0:
                             real_lead_id = lead_res.data[0]["id"]

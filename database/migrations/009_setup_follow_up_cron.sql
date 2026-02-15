@@ -80,7 +80,7 @@ SELECT cron.schedule(
     '*/5 * * * *',                  -- a cada 5 minutos
     $$
     SELECT net.http_post(
-        url := 'http://localhost:8000/api/webhook/follow-up-cron',
+        url := 'https://api-palmas.blackai.dev/api/webhook/follow-up-cron',
         headers := jsonb_build_object(
             'Content-Type', 'application/json',
             'X-Cron-Secret', 'palmaslake-follow-up-cron-2024'
