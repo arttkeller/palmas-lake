@@ -41,6 +41,7 @@ interface Lead {
     interest_type: string | null;
     tags: string[] | string | null;
     adjectives: string[] | string | null;
+    profile_picture_url: string | null;
 }
 
 // Ícone de canal
@@ -180,6 +181,7 @@ export default function LeadsPage() {
             interest_type: item.interest_type || null,
             tags: item.tags || null,
             adjectives: item.adjectives || null,
+            profile_picture_url: item.profile_picture_url || null,
         });
 
         try {
@@ -337,6 +339,7 @@ export default function LeadsPage() {
             interest_type: lead.interest_type,
             tags: lead.tags,
             adjectives: lead.adjectives,
+            profile_picture_url: lead.profile_picture_url,
         };
         setSelectedLead(modalLead);
         setIsModalOpen(true);

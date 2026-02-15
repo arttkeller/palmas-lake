@@ -478,8 +478,9 @@ export default function LeadsKanban() {
             notes: rawLead?.notes,
             created_at: rawLead?.created_at || '',
             updated_at: rawLead?.updated_at || '',
+            profile_picture_url: rawLead?.profile_picture_url,
         };
-        
+
         openModal(leadForModal);
         
         // Load conversation messages - try API first, fallback to Supabase direct
