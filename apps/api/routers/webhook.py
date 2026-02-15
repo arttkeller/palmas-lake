@@ -560,6 +560,11 @@ async def handle_uazapi_webhook(request: Request):
             except Exception:
                 pass
 
+            # Fallback: use imagePreview from webhook payload if API call returned nothing
+            if not profile_pic_url:
+                chat_data = data.get("chat") or data.get("data", {})
+                profile_pic_url = chat_data.get("imagePreview") or chat_data.get("image") or None
+
             # Save User Message to DB
             try:
                 from services.message_service import MessageService
