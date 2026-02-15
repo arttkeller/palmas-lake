@@ -8,6 +8,12 @@
 -- As extensões pg_cron e pg_net precisam estar habilitadas no projeto.
 
 -- =============================================================================
+-- Part 0: Garantir que operações rodem no schema correto
+-- =============================================================================
+
+SET search_path TO "palmaslake-agno", public, cron, net;
+
+-- =============================================================================
 -- Part 1: Extensões necessárias
 -- =============================================================================
 
