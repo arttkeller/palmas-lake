@@ -147,6 +147,8 @@ export default function LeadsKanban() {
 
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
+    const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
     const [allLeadsData, setAllLeadsData] = useState<any[]>([]);
     const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
     // Stable Supabase client — avoids re-creating on every render
@@ -198,7 +200,7 @@ export default function LeadsKanban() {
                 return;
             }
         } catch (err) {
-            console.warn('API error, falling back to Supabase...', err);
+            // API error, falling back to Supabase
         }
 
         const { data, error: sbError } = await supabase
@@ -251,7 +253,6 @@ export default function LeadsKanban() {
         const channel = supabase
             .channel('realtime:lead-deletions')
             .on('broadcast', { event: 'lead_deleted' }, () => {
-                console.log('[Realtime] Broadcast lead_deleted recebido');
                 fetchLeads(true);
             })
             .subscribe();
@@ -304,7 +305,6 @@ export default function LeadsKanban() {
                 table: 'messages'
             }, (payload) => {
                 const newMsg = payload.new as Message;
-                console.log('[Realtime Modal] New message received:', newMsg);
 
                 // Filter only messages from this conversation
                 if (newMsg.conversation_id === activeConversationId) {
@@ -327,9 +327,7 @@ export default function LeadsKanban() {
                     );
                 }
             })
-            .subscribe((status) => {
-                console.log('[Realtime Modal] Messages channel status:', status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
@@ -514,12 +512,9 @@ export default function LeadsKanban() {
                     setIsLoadingMessages(false);
                     return;
                 }
-                console.warn('[KanbanPage] API messages fetch failed:', msgsRes.status, await msgsRes.text().catch(() => ''));
-            } else if (convRes.status !== 404) {
-                console.warn('[KanbanPage] API conversation fetch failed:', convRes.status, await convRes.text().catch(() => ''));
             }
         } catch (err) {
-            console.warn('[KanbanPage] API unavailable, falling back to Supabase direct:', err);
+            // API unavailable, falling back to Supabase direct
         }
 
         // 2. Fallback to Supabase direct (Requirements 2.1, 2.3)
@@ -612,7 +607,6 @@ export default function LeadsKanban() {
         setIsSendingMessage(true);
         try {
             // TODO: Implement actual message sending via WhatsApp API
-            console.log('Sending message to lead:', selectedLead.id, message);
             // For now, just add to local state as optimistic update
             const newMessage: Message = {
                 id: Date.now().toString(),
@@ -630,14 +624,23 @@ export default function LeadsKanban() {
 
     const handleDragStart = (e: React.DragEvent, lead: Lead, columnId: string) => {
         e.dataTransfer.setData('text/plain', JSON.stringify({ lead, sourceColumnId: columnId }));
+        setDraggingLeadId(lead.id);
     };
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = (e: React.DragEvent, columnId?: string) => {
         e.preventDefault();
+        if (columnId) setDragOverColumnId(columnId);
+    };
+
+    const handleDragEnd = () => {
+        setDraggingLeadId(null);
+        setDragOverColumnId(null);
     };
 
     const handleDrop = async (e: React.DragEvent, targetColumnId: string) => {
         e.preventDefault();
+        setDraggingLeadId(null);
+        setDragOverColumnId(null);
         const data = JSON.parse(e.dataTransfer.getData('text/plain'));
         const { lead, sourceColumnId } = data;
 
@@ -690,7 +693,6 @@ export default function LeadsKanban() {
             });
 
             if (!res.ok) {
-                console.warn(`API update failed (${res.status}), trying Supabase directly...`);
                 // Fallback: direct Supabase update
                 const { error } = await supabase
                     .schema(SCHEMA)
@@ -757,7 +759,7 @@ export default function LeadsKanban() {
                         {searchTerm && (
                             <button
                                 onClick={() => setSearchTerm('')}
-                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-black/5:bg-white/10 rounded-lg transition-colors"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-black/5 rounded-lg transition-colors"
                             >
                                 <X className="w-3 h-3 text-muted-foreground" />
                             </button>
@@ -799,12 +801,14 @@ export default function LeadsKanban() {
                             <div
                                 key={column.id}
                                 className={cn(
-                                    "flex-1 min-w-[280px] flex flex-col rounded-2xl",
+                                    "flex-1 min-w-[280px] flex flex-col rounded-2xl transition-all duration-200",
                                     "bg-gradient-to-b",
                                     column.gradient,
-                                    getGlassmorphismClasses('subtle', { rounded: '2xl' })
+                                    getGlassmorphismClasses('subtle', { rounded: '2xl' }),
+                                    dragOverColumnId === column.id && "ring-2 ring-primary/30 bg-primary/5 scale-[1.01]"
                                 )}
-                                onDragOver={handleDragOver}
+                                onDragOver={(e) => handleDragOver(e, column.id)}
+                                onDragLeave={() => setDragOverColumnId(null)}
                                 onDrop={(e) => handleDrop(e, column.id)}
                             >
                                 {/* Column Header */}
@@ -837,10 +841,13 @@ export default function LeadsKanban() {
                                             className={cn(
                                                 "group relative cursor-pointer",
                                                 "rounded-xl",
-                                                "hover:scale-[1.02]"
+                                                "hover:scale-[1.02]",
+                                                "transition-all duration-200",
+                                                draggingLeadId === lead.id && "opacity-50 scale-95"
                                             )}
                                             draggable
                                             onDragStart={(e) => handleDragStart(e, lead, column.id)}
+                                            onDragEnd={handleDragEnd}
                                             onClick={() => handleCardClick(lead)}
                                         >
                                             <div className="p-4 space-y-3">
@@ -903,8 +910,8 @@ export default function LeadsKanban() {
                                                     )}
                                                     {lead.cityOrigin && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-gray-100 rounded-lg">
-                                                                <MapPin className="w-3 h-3 text-gray-600" />
+                                                            <div className="p-1.5 bg-muted rounded-lg">
+                                                                <MapPin className="w-3 h-3 text-muted-foreground" />
                                                             </div>
                                                             <span>{lead.cityOrigin}</span>
                                                         </div>
@@ -1041,14 +1048,14 @@ export default function LeadsKanban() {
                                                 (sentimentScore ?? 0) < -20 ? 'Negativo' : 'Neutro'
                                             );
                                             const emoji = label === 'Positivo' ? '😊' : label === 'Negativo' ? '😟' : '😐';
-                                            const color = label === 'Positivo' ? 'text-green-600' : label === 'Negativo' ? 'text-red-600' : 'text-gray-500';
+                                            const color = label === 'Positivo' ? 'text-green-600' : label === 'Negativo' ? 'text-red-600' : 'text-muted-foreground';
                                             return (
                                                 <>
                                                     <span className={cn("text-sm font-medium", color)}>
                                                         {emoji} {label}
                                                     </span>
                                                     {sentimentScore !== undefined && sentimentScore !== null && (
-                                                        <span className="text-xs text-gray-400">({sentimentScore})</span>
+                                                        <span className="text-xs text-muted-foreground/70">({sentimentScore})</span>
                                                     )}
                                                 </>
                                             );

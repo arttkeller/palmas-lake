@@ -220,7 +220,7 @@ class MetaService:
             
         url = f"{self.base_url}/{user_id}"
         params = {
-            "fields": "name,username",
+            "fields": "name,username,profile_pic",
             "access_token": token,
         }
         try:
@@ -232,6 +232,7 @@ class MetaService:
             return {
                 "name": data.get("name", ""),
                 "username": data.get("username", ""),
+                "profile_pic": data.get("profile_pic", ""),
             }
         except requests.exceptions.RequestException as e:
             print(f"[MetaService] Error fetching Instagram profile: {e}")

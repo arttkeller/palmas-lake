@@ -8,7 +8,7 @@ export default function AgendamentosLayout({
     children: React.ReactNode;
 }) {
     return (
-        <div className="fixed inset-0 pt-12 md:pt-14 pb-20 md:pb-24 overflow-hidden">
+        <div className="h-full overflow-hidden">
             {children}
         </div>
     );

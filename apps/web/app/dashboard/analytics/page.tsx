@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Loader2, Download, RefreshCw, Wifi, WifiOff, Clock } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import AreaChartStats from '@/components/charts/AreaChartStats';
 import ConversionFunnel from '@/components/charts/ConversionFunnel';
 import ResponseTimeChart from '@/components/charts/ResponseTimeChart';
@@ -129,9 +130,8 @@ export default function AnalyticsPage() {
             // Auto-refresh when cache is empty (lastUpdate null) OR data is stale
             if (lastUpdate === null || isStale) {
                 hasTriggeredMountRefresh.current = true;
-                console.log('[AnalyticsPage] Auto-refreshing: lastUpdate=', lastUpdate, 'isStale=', isStale);
-                refresh().catch((err) => {
-                    console.warn('[AnalyticsPage] Mount auto-refresh failed:', err);
+                refresh().catch(() => {
+                    // Mount auto-refresh failed silently
                 });
             }
         }
@@ -199,7 +199,7 @@ export default function AnalyticsPage() {
             <div className="flex flex-col h-96 items-center justify-center gap-4">
                 <div className="text-center">
                     <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500">Carregando análises...</p>
+                    <p className="text-sm text-muted-foreground">Carregando análises...</p>
                 </div>
             </div>
         );
@@ -208,13 +208,13 @@ export default function AnalyticsPage() {
     return (
         <div className={`space-y-6 p-4 sm:p-6 transition-all duration-500 ${highlightUpdate ? 'ring-2 ring-emerald-400/50 ring-offset-2 rounded-lg' : ''}`}>
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="glass-card rounded-2xl p-6 flex items-center justify-between mb-2">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">
                         Análise de Desempenho
                     </h2>
                     <div className="flex items-center gap-2">
-                        <p className="text-gray-500">
+                        <p className="text-muted-foreground">
                             Visão estratégica do pipeline e eficiência do agente
                         </p>
                         {/* Connection status indicator */}
@@ -224,17 +224,17 @@ export default function AnalyticsPage() {
                             </span>
                         ) : (
                             <span title="Desconectado do Realtime">
-                                <WifiOff className="h-4 w-4 text-gray-400" />
+                                <WifiOff className="h-4 w-4 text-muted-foreground" />
                             </span>
                         )}
                     </div>
                     {/* Last update timestamp - Requirements: 4.1 */}
                     <div className="flex items-center gap-2 mt-1">
-                        <Clock className="h-3 w-3 text-gray-400" />
-                        <p className="text-xs text-gray-400">
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
                             Última atualização: {formatLastUpdate(lastUpdate)}
                             {calculationDurationMs && (
-                                <span className="ml-2 text-gray-300">
+                                <span className="ml-2 text-muted-foreground/60">
                                     ({formatDuration(calculationDurationMs)})
                                 </span>
                             )}
@@ -242,18 +242,21 @@ export default function AnalyticsPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button
+                    <Button
+                        variant="outline"
+                        size="sm"
                         onClick={handleRefresh}
                         disabled={isLoading || isRefreshing}
-                        className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="rounded-xl"
                     >
                         <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                         {isRefreshing ? 'Atualizando...' : 'Atualizar'}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        size="sm"
                         onClick={handleExport}
                         disabled={exporting}
-                        className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 border-0"
                     >
                         {exporting ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -261,12 +264,12 @@ export default function AnalyticsPage() {
                             <Download className="h-4 w-4" />
                         )}
                         Exportar Excel
-                    </button>
+                    </Button>
                 </div>
             </div>
 
             {/* 1. High-Level KPIs */}
-            <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.01]' : ''}`}>
+            <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.02] ring-2 ring-primary/20' : ''}`}>
                 {/* Requirements: 4.1, 4.2 - Show calculating indicator when data is loading or being calculated */}
                 {!lastUpdate && (isRefreshing || isCalculating) && (
                     <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center flex items-center justify-center gap-2">
@@ -289,13 +292,13 @@ export default function AnalyticsPage() {
             </div>
 
             {/* 2. Critical Path: Funnel */}
-            <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.01]' : ''}`}>
+            <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.02] ring-2 ring-primary/20' : ''}`}>
                 <ConversionFunnel data={data} />
             </div>
 
             {/* 3. Operational Efficiency */}
             <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Eficiência Operacional</h3>
+                <h3 className="text-lg font-semibold text-foreground">Eficiência Operacional</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                     <div className={`lg:col-span-2 flex flex-col gap-4 transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
                         <ResponseTimeChart data={data} />
@@ -311,7 +314,7 @@ export default function AnalyticsPage() {
 
             {/* 4. Strategic Insights */}
             <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Insights Estratégicos</h3>
+                <h3 className="text-lg font-semibold text-foreground">Insights Estratégicos</h3>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
                         <AppointmentHeatmap data={data} />
@@ -324,7 +327,7 @@ export default function AnalyticsPage() {
 
             {/* 5. FAQ - Perguntas Frequentes */}
             <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Perguntas Mais Frequentes</h3>
+                <h3 className="text-lg font-semibold text-foreground">Perguntas Mais Frequentes</h3>
                 <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
                     <FAQChart data={data} />
                 </div>

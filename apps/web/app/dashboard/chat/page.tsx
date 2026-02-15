@@ -3,13 +3,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Conversation, Message } from '@/types/chat';
-import { Send, Phone, MoreVertical } from 'lucide-react';
+import { Send, Phone, MoreVertical, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 import { createClient } from '@/lib/supabase';
 import { API_BASE_URL } from '@/lib/api-config';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { RealtimeStatusIndicator } from '@/components/ui/realtime-status';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
 /**
@@ -85,10 +89,11 @@ export default function ChatPage() {
                     id: c.id,
                     lead_id: c.lead_id,
                     platform: c.platform,
-                    lead_name: c.leads?.full_name || c.lead_id, // API Python já faz join ou traz leads
+                    lead_name: c.leads?.full_name || c.lead_id,
                     last_message: c.last_message,
                     updated_at: c.updated_at,
-                    unread_count: 0
+                    unread_count: 0,
+                    profile_picture_url: c.leads?.profile_picture_url || null,
                 }));
                 setConversations(formatted);
                 // Atualizar activeConversation se existir na nova lista
@@ -110,7 +115,6 @@ export default function ChatPage() {
             });
         } catch (apiError) {
             // API not available - use Supabase backup
-            console.warn('[ChatPage] API fetch failed, falling back to Supabase:', apiError instanceof Error ? apiError.message : apiError);
         }
 
         // Backup Supabase Direto
@@ -119,7 +123,7 @@ export default function ChatPage() {
             const { data, error: supaError } = await supabase
                 .schema(SCHEMA)
                 .from('conversations')
-                .select('*, leads(full_name, phone)')
+                .select('*, leads(full_name, phone, profile_picture_url)')
                 .order('updated_at', { ascending: false });
 
             if (supaError) {
@@ -142,7 +146,8 @@ export default function ChatPage() {
                     lead_name: c.leads?.full_name || c.leads?.[0]?.full_name || c.lead_id,
                     last_message: c.last_message,
                     updated_at: c.updated_at,
-                    unread_count: 0
+                    unread_count: 0,
+                    profile_picture_url: c.leads?.profile_picture_url || c.leads?.[0]?.profile_picture_url || null,
                 }));
                 setConversations(formatted);
                 // Atualizar activeConversation se existir na nova lista
@@ -203,7 +208,6 @@ export default function ChatPage() {
         } catch (apiError) {
             // API not available - use Supabase backup
             apiErrorDetails = apiError instanceof Error ? apiError.message : String(apiError);
-            console.warn('[ChatPage] Messages API fetch failed, falling back to Supabase:', apiErrorDetails);
         }
 
         // Backup Supabase
@@ -284,8 +288,7 @@ export default function ChatPage() {
                 event: '*',
                 schema: SCHEMA,
                 table: 'conversations'
-            }, (payload) => {
-                console.log('[Realtime] Conversation change:', payload);
+            }, () => {
                 fetchConversations();
             })
             .on('postgres_changes', {
@@ -293,12 +296,9 @@ export default function ChatPage() {
                 schema: SCHEMA,
                 table: 'leads'
             }, () => {
-                console.log('[Realtime] Lead change detected');
                 fetchConversations();
             })
-            .subscribe((status) => {
-                console.log('[Realtime] Conversations channel status:', status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
@@ -310,7 +310,6 @@ export default function ChatPage() {
         const channel = supabase
             .channel('realtime:lead-deletions-chat')
             .on('broadcast', { event: 'lead_deleted' }, () => {
-                console.log('[Realtime] Broadcast lead_deleted recebido');
                 fetchConversations();
             })
             .subscribe();
@@ -333,7 +332,6 @@ export default function ChatPage() {
                 filter: `conversation_id=eq.${activeConversation.id}`
             }, (payload) => {
                 const newMsg = payload.new as Message;
-                console.log('[Realtime] New message received:', newMsg);
 
                 setMessages((prev: Message[]) => {
                     // Evitar duplicatas
@@ -353,7 +351,6 @@ export default function ChatPage() {
                 );
             })
             .subscribe((status) => {
-                console.log('[Realtime] Messages channel status:', status);
                 if (status === 'CHANNEL_ERROR') {
                     console.error('[Realtime] Messages channel error - check RLS and replication settings');
                 }
@@ -393,21 +390,24 @@ export default function ChatPage() {
         <div className="h-full max-w-7xl mx-auto">
             <GlassmorphismCard variant="default" className="flex h-full overflow-hidden">
             {/* Sidebar List */}
-            <div className="w-72 border-r border-white/20 bg-white/30 backdrop-blur-xl flex flex-col">
+            <div className={cn(
+                "w-full md:w-72 border-r border-white/20 bg-white/30 backdrop-blur-xl flex flex-col",
+                activeConversation ? "hidden md:flex" : "flex"
+            )}>
                 <div className="p-4 border-b border-white/20">
-                    <input 
-                        type="text" 
-                        placeholder="Buscar conversas..." 
-                        className="w-full rounded-xl border border-white/30 bg-white/50 backdrop-blur-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50" 
+                    <Input
+                        type="text"
+                        placeholder="Buscar conversas..."
+                        className="rounded-xl border-white/30 bg-white/50 backdrop-blur-sm focus:ring-emerald-500/50"
                     />
                 </div>
                 <div className="flex-1 overflow-y-auto">
                     {loading ? (
-                        <div className="p-4 text-gray-500">Carregando...</div>
+                        <div className="p-4 text-muted-foreground">Carregando...</div>
                     ) : error ? (
                         <div className="p-4 text-red-500 text-sm">{error}</div>
                     ) : conversations.length === 0 ? (
-                        <div className="p-4 text-gray-500 text-sm">Nenhuma conversa encontrada</div>
+                        <EmptyState icon="message" title="Nenhuma conversa encontrada" description="As conversas aparecerão aqui" />
                     ) : conversations.map((conv) => (
                         <div
                             key={conv.id}
@@ -415,23 +415,35 @@ export default function ChatPage() {
                             className={clsx(
                                 activeConversation?.id === conv.id 
                                     ? 'bg-emerald-50/80 border-l-4 border-emerald-600' 
-                                    : 'hover:bg-white/50:bg-white/5',
+                                    : 'hover:bg-white/50',
                                 'cursor-pointer p-4 transition-colors'
                             )}
                         >
-                            <div className="flex justify-between">
-                                <span className="font-medium text-gray-900">{conv.lead_name}</span>
-                                <span className="text-xs text-gray-500">
-                                    {conv.updated_at ? new Date(conv.updated_at).toLocaleTimeString('pt-BR', { hour12: false }) : '--:--:--'}
-                                </span>
-                            </div>
-                            <div className="mt-1 flex justify-between">
-                                <p className="text-sm text-gray-600 truncate">{conv.last_message}</p>
-                                {conv.platform === 'whatsapp' ? (
-                                    <div className="h-4 w-4 bg-green-500 text-white flex items-center justify-center rounded-full text-[10px]">W</div>
-                                ) : (
-                                    <div className="h-4 w-4 bg-purple-500 text-white flex items-center justify-center rounded-full text-[10px]">I</div>
-                                )}
+                            <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9 shrink-0">
+                                    {conv.profile_picture_url && (
+                                        <AvatarImage src={conv.profile_picture_url} alt={conv.lead_name || ''} />
+                                    )}
+                                    <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white text-xs font-bold">
+                                        {conv.lead_name?.[0]}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex justify-between">
+                                        <span className="font-medium text-foreground truncate">{conv.lead_name}</span>
+                                        <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                                            {conv.updated_at ? new Date(conv.updated_at).toLocaleTimeString('pt-BR', { hour12: false }) : '--:--:--'}
+                                        </span>
+                                    </div>
+                                    <div className="mt-1 flex justify-between">
+                                        <p className="text-sm text-muted-foreground truncate">{conv.last_message}</p>
+                                        {conv.platform === 'whatsapp' ? (
+                                            <div className="h-4 w-4 bg-green-500 text-white flex items-center justify-center rounded-full text-[10px] shrink-0">W</div>
+                                        ) : (
+                                            <div className="h-4 w-4 bg-purple-500 text-white flex items-center justify-center rounded-full text-[10px] shrink-0">I</div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     ))}
@@ -440,22 +452,38 @@ export default function ChatPage() {
 
             {/* Chat Area */}
             {activeConversation ? (
-                <div className="flex flex-1 flex-col">
+                <div className={cn(
+                    "flex flex-1 flex-col",
+                    activeConversation ? "flex" : "hidden md:flex"
+                )}>
                     {/* Header */}
                     <div className="flex h-16 items-center justify-between border-b border-white/20 px-6 bg-white/50 backdrop-blur-xl">
                         <div className="flex items-center space-x-3">
-                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-500/25">
-                                {activeConversation.lead_name?.[0]}
-                            </div>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="md:hidden mr-1"
+                                onClick={() => setActiveConversation(null)}
+                            >
+                                <ArrowLeft className="h-5 w-5" />
+                            </Button>
+                            <Avatar className="h-10 w-10 shadow-lg shadow-emerald-500/25">
+                                {activeConversation.profile_picture_url && (
+                                    <AvatarImage src={activeConversation.profile_picture_url} alt={activeConversation.lead_name || ''} />
+                                )}
+                                <AvatarFallback className="bg-gradient-to-br from-emerald-400 to-emerald-600 text-white font-bold">
+                                    {activeConversation.lead_name?.[0]}
+                                </AvatarFallback>
+                            </Avatar>
                             <div>
-                                <h3 className="text-sm font-bold text-gray-900">{activeConversation.lead_name}</h3>
+                                <h3 className="text-sm font-bold text-foreground">{activeConversation.lead_name}</h3>
                                 <p className="text-xs text-green-600 flex items-center"><span className="block h-2 w-2 rounded-full bg-green-500 mr-1"></span> Online</p>
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
                             <RealtimeStatusIndicator />
-                            <Phone className="h-5 w-5 text-gray-400 hover:text-gray-600:text-gray-300 cursor-pointer transition-colors" />
-                            <MoreVertical className="h-5 w-5 text-gray-400 hover:text-gray-600:text-gray-300 cursor-pointer transition-colors" />
+                            <Phone className="h-5 w-5 text-muted-foreground/70 hover:text-muted-foreground cursor-pointer transition-colors" />
+                            <MoreVertical className="h-5 w-5 text-muted-foreground/70 hover:text-muted-foreground cursor-pointer transition-colors" />
                         </div>
                     </div>
 
@@ -463,7 +491,7 @@ export default function ChatPage() {
                     <div className="flex-1 overflow-y-auto p-6 bg-gradient-to-b from-slate-50/50 to-white/30 space-y-4">
                         {messagesLoading ? (
                             <div className="flex items-center justify-center h-full">
-                                <div className="text-gray-500">Carregando mensagens...</div>
+                                <div className="text-muted-foreground">Carregando mensagens...</div>
                             </div>
                         ) : messagesError ? (
                             <div className="flex flex-col items-center justify-center h-full space-y-4">
@@ -472,7 +500,7 @@ export default function ChatPage() {
                                     <p className="text-sm text-red-500">{messagesError}</p>
                                     <button 
                                         onClick={fetchMessages}
-                                        className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200:bg-red-800/50 text-red-700 rounded-lg text-sm transition-colors"
+                                        className="mt-4 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm transition-colors"
                                     >
                                         Tentar novamente
                                     </button>
@@ -480,7 +508,7 @@ export default function ChatPage() {
                             </div>
                         ) : messages.length === 0 ? (
                             <div className="flex items-center justify-center h-full">
-                                <div className="text-gray-500">Nenhuma mensagem ainda</div>
+                                <EmptyState icon="inbox" title="Nenhuma mensagem ainda" description="Inicie uma conversa" />
                             </div>
                         ) : (
                             messages.map((msg) => {
@@ -501,7 +529,7 @@ export default function ChatPage() {
                                                 ? "bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-br-md shadow-emerald-500/25" 
                                                 : msg.sender_type === 'ai' 
                                                     ? "bg-purple-100/80 text-purple-900 border border-purple-200/50 rounded-br-md backdrop-blur-sm" 
-                                                    : "bg-white/80 text-gray-900 border border-white/50 rounded-bl-md backdrop-blur-xl shadow-black/5"
+                                                    : "bg-white/80 text-foreground border border-white/50 rounded-bl-md backdrop-blur-xl shadow-black/5"
                                         )}>
                                             {isAi && <p className="mb-1 text-[10px] uppercase font-bold text-purple-700">AI Assistant</p>}
 
@@ -523,9 +551,9 @@ export default function ChatPage() {
                                                                 <div className="bg-purple-100 p-1.5 rounded-full">
                                                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-600"><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></svg>
                                                                 </div>
-                                                                <span className="text-xs font-bold text-gray-700">Galeria de Imóveis Enviada</span>
+                                                                <span className="text-xs font-bold text-muted-foreground">Galeria de Imóveis Enviada</span>
                                                             </div>
-                                                            <p className="text-[11px] text-gray-500 leading-tight">
+                                                            <p className="text-[11px] text-muted-foreground leading-tight">
                                                                 O cliente recebeu um carrossel interativo com fotos e detalhes no WhatsApp.
                                                             </p>
                                                         </div>
@@ -551,6 +579,18 @@ export default function ChatPage() {
                             );
                         })
                         )}
+                        {/* Typing indicator - shows when last message was from our side */}
+                        {messages.length > 0 && (messages[messages.length - 1].sender_type === 'user' || messages[messages.length - 1].sender_type === 'ai') && (
+                            <div className="flex items-start space-x-2 justify-start">
+                                <div className="bg-white/80 border border-white/50 rounded-2xl rounded-bl-md backdrop-blur-xl px-4 py-3">
+                                    <div className="flex space-x-1.5">
+                                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                        <span className="w-2 h-2 bg-muted-foreground/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {/* Elemento de referência para auto-scroll */}
                         <div ref={messagesEndRef} />
                     </div>
@@ -558,25 +598,26 @@ export default function ChatPage() {
                     {/* Input */}
                     <div className="border-t border-white/20 p-4 bg-white/50 backdrop-blur-xl">
                         <div className="flex items-center space-x-2">
-                            <input
+                            <Input
                                 type="text"
                                 value={inputText}
                                 onChange={(e) => setInputText(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                 placeholder="Digite uma mensagem..."
-                                className="flex-1 rounded-full border border-white/30 bg-white/70 backdrop-blur-sm px-4 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                                className="flex-1 rounded-full border-white/30 bg-white/70 backdrop-blur-sm focus:border-emerald-500 focus:ring-emerald-500/50"
                             />
-                            <button
+                            <Button
                                 onClick={handleSendMessage}
-                                className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 p-2 text-white hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-lg shadow-emerald-500/25"
+                                size="icon"
+                                className="rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-lg shadow-emerald-500/25 border-0"
                             >
                                 <Send className="h-5 w-5" />
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
             ) : (
-                <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-slate-50/50 to-white/30 text-gray-500">
+                <div className="flex flex-1 items-center justify-center bg-gradient-to-b from-slate-50/50 to-white/30 text-muted-foreground">
                     Selecione uma conversa para iniciar o chat
                 </div>
             )}

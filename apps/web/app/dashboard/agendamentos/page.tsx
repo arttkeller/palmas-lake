@@ -151,13 +151,10 @@ export default function AgendamentosPage() {
                 event: '*',
                 schema: SCHEMA,
                 table: 'events'
-            }, (payload) => {
-                console.log('[Realtime] Event change:', payload)
+            }, () => {
                 fetchEvents()
             })
-            .subscribe((status) => {
-                console.log('[Realtime] Events channel status:', status)
-            })
+            .subscribe()
 
         return () => {
             supabase.removeChannel(channel)
@@ -167,7 +164,7 @@ export default function AgendamentosPage() {
     if (loading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <div className="text-gray-500">Carregando agendamentos...</div>
+                <div className="text-muted-foreground">Carregando agendamentos...</div>
             </div>
         )
     }
@@ -177,8 +174,8 @@ export default function AgendamentosPage() {
             {/* Header com indicador de realtime */}
             <div className="flex items-center justify-between py-2 flex-shrink-0">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">Agendamentos</h1>
-                    <p className="text-xs text-gray-500">
+                    <h1 className="text-xl font-bold text-foreground">Agendamentos</h1>
+                    <p className="text-xs text-muted-foreground">
                         Gerencie as visitas agendadas pela Maria e manualmente
                     </p>
                 </div>

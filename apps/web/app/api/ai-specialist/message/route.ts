@@ -50,10 +50,6 @@ export async function POST(request: NextRequest) {
     // Route to backend endpoint - all context types use the same /message endpoint
     const backendEndpoint = `${BACKEND_API_URL}/api/ai-specialist/message`;
     
-    console.log(`[AI Specialist] Routing to: ${backendEndpoint}`);
-    console.log(`[AI Specialist] Message: ${body.message.substring(0, 100)}...`);
-    console.log(`[AI Specialist] Context: ${JSON.stringify(body.context)}`);
-    
     // Call backend API
     const backendResponse = await fetch(backendEndpoint, {
       method: 'POST',

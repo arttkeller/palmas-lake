@@ -17,4 +17,5 @@ export interface Conversation {
     last_message?: string;
     unread_count?: number;
     updated_at?: string;
+    profile_picture_url?: string;
 }

@@ -80,17 +80,17 @@ class MessageService:
             logger.error(f"Failed to initialize MessageService: {e}")
             raise MessageServiceError(f"Initialization failed: {e}")
 
-    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None, wa_pushname: str = None):
+    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None, wa_pushname: str = None, profile_picture_url: str = None):
         """
         Saves a message to the database.
         Ensures a lead and conversation exist for the remote_jid.
         Supports both WhatsApp (phone) and Instagram (ig:<igsid>) identifiers.
-        
+
         Implements comprehensive error handling (Requirements 3.4, 7.4, 9.5):
         - Try-catch blocks for all database operations
         - Detailed error logging for schema mismatches
         - Retry logic for failed operations
-        
+
         Args:
             remote_jid: Identificador do lead (telefone@whatsapp ou ig:<igsid> para Instagram)
             content: Conteúdo da mensagem
@@ -98,6 +98,7 @@ class MessageService:
             message_type: 'text', 'image', etc.
             whatsapp_msg_id: ID da mensagem na plataforma (opcional)
             ig_profile: Perfil do Instagram (dict com 'name' e 'username') para novos leads
+            profile_picture_url: URL da foto de perfil do lead (opcional)
         
         Returns:
             conversation_id se sucesso, None se falha
@@ -165,6 +166,18 @@ class MessageService:
                                     logger.info(f"Updated Instagram lead name: {current_name} -> {new_name}")
                         except Exception as name_err:
                             logger.warning(f"Error updating Instagram lead name (non-fatal): {name_err}")
+
+                    # Update profile picture if provided and lead doesn't have one yet
+                    if profile_picture_url:
+                        try:
+                            current_pic = self.supabase.table("leads").select("profile_picture_url").eq("id", lead_id).execute()
+                            if current_pic.data and not current_pic.data[0].get("profile_picture_url"):
+                                self.supabase.table("leads").update({
+                                    "profile_picture_url": profile_picture_url
+                                }).eq("id", lead_id).execute()
+                                logger.info(f"Updated profile picture for lead {lead_id}")
+                        except Exception as pic_err:
+                            logger.warning(f"Error updating profile picture (non-fatal): {pic_err}")
                 else:
                     # Create a new lead with proper formatting (Requirements 9.2, 9.3)
                     if is_instagram:
@@ -191,7 +204,9 @@ class MessageService:
                             "source": "instagram",
                             "status": "novo_lead",
                         }
-                        
+                        if profile_picture_url:
+                            new_lead["profile_picture_url"] = profile_picture_url
+
                         # Skip name qualification step since Instagram provides the name
                         if ig_name:
                             new_lead["qualification_state"] = {"step": "interest"}
@@ -204,6 +219,8 @@ class MessageService:
                             "phone": phone,
                             "status": "novo_lead"
                         }
+                        if profile_picture_url:
+                            new_lead["profile_picture_url"] = profile_picture_url
                         if has_valid_pushname:
                             new_lead["qualification_state"] = {"step": "interest"}
                             logger.info(f"Creating WhatsApp lead with pushname: {wa_pushname.strip()}")
@@ -385,7 +402,7 @@ class MessageService:
             List of conversations with lead details, or empty list on error
         """
         try:
-            result = self.supabase.table("conversations").select("*, leads(full_name, phone)").order("updated_at", direction="desc").execute()
+            result = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url)").order("updated_at", direction="desc").execute()
             return result.data if result.data else []
         except Exception as e:
             logger.error(f"Error fetching conversations: {e}")
@@ -407,7 +424,7 @@ class MessageService:
             Conversation data with lead details, or None if not found
         """
         try:
-            res = self.supabase.table("conversations").select("*, leads(full_name, phone)").eq("lead_id", lead_id).execute()
+            res = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url)").eq("lead_id", lead_id).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
             logger.debug(f"No conversation found for lead {lead_id}")

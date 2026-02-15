@@ -553,6 +553,13 @@ async def handle_uazapi_webhook(request: Request):
                 
             print(f"Processing message from {remote_jid} (ID: {msg_id}, type: {message_type}): {text}")
             
+            # Fetch WhatsApp profile picture (non-blocking, graceful fallback)
+            profile_pic_url = None
+            try:
+                profile_pic_url = uazapi.get_profile_picture_url(remote_jid)
+            except Exception:
+                pass
+
             # Save User Message to DB
             try:
                 from services.message_service import MessageService
@@ -565,6 +572,7 @@ async def handle_uazapi_webhook(request: Request):
                     message_type=message_type,
                     whatsapp_msg_id=msg_id,
                     wa_pushname=pushname,
+                    profile_picture_url=profile_pic_url,
                 )
                 print(f"[Webhook] save_message result: {result}")
                 
@@ -755,6 +763,9 @@ async def handle_webhook(request: Request):
                 else:
                     print(f"[Meta Webhook] Could not fetch Instagram profile for {sender_id}")
 
+                # Extract profile picture URL from Instagram profile
+                ig_profile_pic_url = ig_profile.get("profile_pic") if ig_profile else None
+
                 # Save message to DB
                 try:
                     from services.message_service import MessageService
@@ -762,7 +773,8 @@ async def handle_webhook(request: Request):
                     result = msg_service.save_message(
                         lead_identifier, text, "lead",
                         whatsapp_msg_id=msg_id,
-                        ig_profile=ig_profile
+                        ig_profile=ig_profile,
+                        profile_picture_url=ig_profile_pic_url,
                     )
                     print(f"[Meta Webhook] save_message result: {result}")
 

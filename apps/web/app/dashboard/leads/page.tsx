@@ -18,6 +18,7 @@ import { RealtimeStatusIndicator } from '@/components/ui/realtime-status';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
 import { LeadModal, type LeadModalLead } from '@/components/LeadModal';
 import { normalizeStatus, getStatusConfig } from '@/lib/status-config';
 import { TemperatureBadge } from '@/components/ui/temperature-badge';
@@ -73,7 +74,7 @@ function ChannelIcon({ channel }: { channel: string }) {
                 </div>
             );
         default:
-            return <span className="text-sm text-gray-500">-</span>;
+            return <span className="text-sm text-muted-foreground">-</span>;
     }
 }
 
@@ -113,7 +114,7 @@ function SentimentIcon({ sentiment, label, status }: { sentiment: number; label?
     const config = {
         Positivo: { icon: TrendingUp, color: 'text-green-500', textColor: 'text-green-600' },
         Negativo: { icon: TrendingDown, color: 'text-red-500', textColor: 'text-red-600' },
-        Neutro: { icon: Minus, color: 'text-gray-400', textColor: 'text-gray-500' },
+        Neutro: { icon: Minus, color: 'text-muted-foreground/70', textColor: 'text-muted-foreground' },
     };
     const { icon: Icon, color, textColor } = config[effectiveLabel as keyof typeof config] || config.Neutro;
 
@@ -128,7 +129,7 @@ function SentimentIcon({ sentiment, label, status }: { sentiment: number; label?
 // Badge de Interesse (Nova Coluna)
 function InterestBadge({ interestType }: { interestType: string | null }) {
     if (!interestType) {
-        return <span className="text-gray-400 text-sm">-</span>;
+        return <span className="text-muted-foreground/70 text-sm">-</span>;
     }
 
     return (
@@ -148,6 +149,10 @@ export default function LeadsPage() {
     // State for LeadModal - Requirements 2.1, 4.5
     const [selectedLead, setSelectedLead] = useState<LeadModalLead | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const pageSize = 20;
 
     // Schema correto do projeto
     const SCHEMA = 'palmaslake-agno';
@@ -188,9 +193,8 @@ export default function LeadsPage() {
                 setIsInitialLoad(false);
                 return; // Sucesso API
             }
-            console.warn(`API returned ${res.status}, trying Supabase direct...`);
         } catch (err) {
-            console.warn('API fetch failed (network error), trying Supabase direct...', err);
+            // API fetch failed (network error), trying Supabase direct
         }
 
         // Fallback: Supabase Direto (Executa se API falhar ou der erro de rede)
@@ -270,14 +274,11 @@ export default function LeadsPage() {
                 event: '*',
                 schema: SCHEMA,
                 table: 'leads'
-            }, (payload) => {
-                console.log('[Realtime] Lead change:', payload);
+            }, () => {
                 // Não mostrar loading em atualizações realtime
                 fetchLeads(false);
             })
-            .subscribe((status) => {
-                console.log('[Realtime] Leads table channel status:', status);
-            });
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
@@ -290,7 +291,6 @@ export default function LeadsPage() {
         const channel = supabase
             .channel('realtime:lead-deletions-table')
             .on('broadcast', { event: 'lead_deleted' }, () => {
-                console.log('[Realtime] Broadcast lead_deleted recebido');
                 fetchLeads(false);
             })
             .subscribe();
@@ -310,6 +310,10 @@ export default function LeadsPage() {
             lead.status?.toLowerCase().includes(search)
         );
     });
+
+    // Pagination
+    const totalPages = Math.ceil(filteredLeads.length / pageSize);
+    const paginatedLeads = filteredLeads.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
     /**
      * Handle click on lead row to open modal
@@ -355,7 +359,7 @@ export default function LeadsPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Leads</h1>
-                    <p className="text-gray-500 text-sm mt-1">
+                    <p className="text-muted-foreground text-sm mt-1">
                         Acompanhe todos os leads em tempo real
                     </p>
                 </div>
@@ -380,11 +384,11 @@ export default function LeadsPage() {
             {/* Search with Glassmorphism */}
             <div className="flex items-center gap-4">
                 <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground/70" />
                     <Input
                         placeholder="Buscar por nome, telefone ou email..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                         className="pl-10 rounded-xl bg-white/70 backdrop-blur-xl border-white/20"
                     />
                 </div>
@@ -395,70 +399,71 @@ export default function LeadsPage() {
 
             {/* Table with Glassmorphism */}
             <GlassmorphismCard variant="default" className="overflow-hidden">
+                <div className="overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-white/50 border-b border-white/20">
-                            <TableHead className="font-semibold text-gray-900">Nome</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Canal</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Status</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Interesse</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Temperatura</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Data</TableHead>
-                            <TableHead className="font-semibold text-gray-900">Sentimento</TableHead>
+                            <TableHead className="font-semibold text-foreground">Nome</TableHead>
+                            <TableHead className="font-semibold text-foreground hidden md:table-cell">Canal</TableHead>
+                            <TableHead className="font-semibold text-foreground">Status</TableHead>
+                            <TableHead className="font-semibold text-foreground hidden lg:table-cell">Interesse</TableHead>
+                            <TableHead className="font-semibold text-foreground">Temperatura</TableHead>
+                            <TableHead className="font-semibold text-foreground hidden md:table-cell">Data</TableHead>
+                            <TableHead className="font-semibold text-foreground hidden lg:table-cell">Sentimento</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {loading ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                                     Carregando leads...
                                 </TableCell>
                             </TableRow>
-                        ) : filteredLeads.length === 0 ? (
+                        ) : paginatedLeads.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                                    Nenhum lead encontrado
+                                <TableCell colSpan={7}>
+                                    <EmptyState icon="search" title="Nenhum lead encontrado" description="Tente uma busca diferente ou adicione um novo lead" />
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredLeads.map((lead) => (
+                            paginatedLeads.map((lead) => (
                                 <TableRow
                                     key={lead.id}
-                                    className="hover:bg-white/50:bg-white/5 cursor-pointer transition-colors border-b border-white/10"
+                                    className="hover:bg-white/50 cursor-pointer transition-colors border-b border-white/10"
                                     onClick={() => handleLeadClick(lead)}
                                 >
                                     <TableCell>
                                         <div className="flex flex-col">
-                                            <span className="font-medium text-gray-900">{lead.name}</span>
+                                            <span className="font-medium text-foreground">{lead.name}</span>
                                             {lead.phone && (
-                                                <span className="text-xs text-gray-500">{lead.phone}</span>
+                                                <span className="text-xs text-muted-foreground">{lead.phone}</span>
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden md:table-cell">
                                         <ChannelIcon channel={lead.channel} />
                                     </TableCell>
                                     <TableCell>
                                         <StatusBadge status={lead.status} />
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden lg:table-cell">
                                         <InterestBadge interestType={lead.interest_type} />
                                     </TableCell>
                                     <TableCell>
-                                        <TemperatureBadge 
-                                            temperature={lead.temperature ? normalizeTemperature(lead.temperature) : null} 
-                                            size="sm" 
+                                        <TemperatureBadge
+                                            temperature={lead.temperature ? normalizeTemperature(lead.temperature) : null}
+                                            size="sm"
                                         />
                                     </TableCell>
-                                    <TableCell>
-                                        <span className="text-sm text-gray-900">
+                                    <TableCell className="hidden md:table-cell">
+                                        <span className="text-sm text-foreground">
                                             {lead.created_at
                                                 ? new Date(lead.created_at).toLocaleDateString('pt-BR')
                                                 : '-'
                                             }
                                         </span>
                                     </TableCell>
-                                    <TableCell>
+                                    <TableCell className="hidden lg:table-cell">
                                         <SentimentIcon sentiment={lead.sentiment} label={lead.sentiment_label} status={lead.status} />
                                     </TableCell>
                                 </TableRow>
@@ -466,11 +471,44 @@ export default function LeadsPage() {
                         )}
                     </TableBody>
                 </Table>
+                </div>
             </GlassmorphismCard>
 
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                        Mostrando {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, filteredLeads.length)} de {filteredLeads.length} leads
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="rounded-xl"
+                        >
+                            Anterior
+                        </Button>
+                        <span className="text-sm text-muted-foreground">
+                            {currentPage} / {totalPages}
+                        </span>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="rounded-xl"
+                        >
+                            Próximo
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* Footer info */}
-            <p className="text-center text-sm text-gray-500">
-                ✨ Sentimento analisado automaticamente por IA • Atualização em tempo real
+            <p className="text-center text-sm text-muted-foreground">
+                Sentimento analisado automaticamente por IA - Atualização em tempo real
             </p>
 
             {/* Lead Modal - Requirements 2.1, 4.5 */}

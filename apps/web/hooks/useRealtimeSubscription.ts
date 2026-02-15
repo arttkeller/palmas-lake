@@ -52,7 +52,6 @@ export function useRealtimeSubscription({
         `realtime:${subscriptions.map(s => s.table).join('-')}:${Date.now()}`;
 
     const handleChange = useCallback((payload: RealtimePostgresChangesPayload<any>) => {
-        console.log(`[Realtime] ${payload.eventType} on ${payload.table}:`, payload);
         onMessage(payload);
     }, [onMessage]);
 
@@ -77,15 +76,9 @@ export function useRealtimeSubscription({
             channel.on('postgres_changes', config, handleChange);
         });
 
-        // Subscrever e logar status
         channel.subscribe((status) => {
-            console.log(`[Realtime] Channel "${generatedChannelName}" status:`, status);
-
-            if (status === 'SUBSCRIBED') {
-                console.log(`[Realtime] ✅ Successfully subscribed to:`,
-                    subscriptions.map(s => `${s.schema || SCHEMA}.${s.table}`).join(', '));
-            } else if (status === 'CHANNEL_ERROR') {
-                console.error('[Realtime] ❌ Channel error - check RLS and replication settings');
+            if (status === 'CHANNEL_ERROR') {
+                console.error('[Realtime] Channel error - check RLS and replication settings');
             }
         });
 
@@ -93,7 +86,6 @@ export function useRealtimeSubscription({
 
         // Cleanup ao desmontar
         return () => {
-            console.log(`[Realtime] Cleaning up channel "${generatedChannelName}"`);
             supabase.removeChannel(channel);
             channelRef.current = null;
         };

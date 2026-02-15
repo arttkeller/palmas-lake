@@ -7,6 +7,11 @@ import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api-config';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface CrmUser {
     id: string;
@@ -146,30 +151,29 @@ export default function SettingsPage() {
                     <h3 className="text-lg font-medium leading-6 text-foreground mb-4">Perfil</h3>
                     <div className="space-y-4">
                         <div>
-                            <label htmlFor="name" className="block text-sm font-medium text-muted-foreground">Nome</label>
-                            <input
+                            <Label htmlFor="name">Nome</Label>
+                            <Input
                                 type="text"
                                 id="name"
                                 value={profileName}
                                 onChange={(e) => setProfileName(e.target.value)}
-                                className="mt-1 block w-full rounded-md border border-border bg-background shadow-sm focus:border-primary focus:ring-primary sm:text-sm p-2"
+                                className="mt-1"
                             />
                         </div>
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-muted-foreground">Email</label>
-                            <input
+                            <Label htmlFor="email">Email</Label>
+                            <Input
                                 type="email"
                                 id="email"
                                 value={user?.email || ''}
                                 disabled
-                                className="mt-1 block w-full rounded-md border border-border bg-muted shadow-sm sm:text-sm p-2 text-muted-foreground cursor-not-allowed"
+                                className="mt-1"
                             />
                         </div>
                         <div className="flex items-center gap-3">
-                            <button
+                            <Button
                                 onClick={handleSaveProfile}
                                 disabled={savingProfile}
-                                className="flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                             >
                                 {savingProfile ? (
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -177,7 +181,7 @@ export default function SettingsPage() {
                                     <Save className="mr-2 h-4 w-4" />
                                 )}
                                 Salvar
-                            </button>
+                            </Button>
                             {profileSaved && (
                                 <span className="text-sm text-green-600">Salvo com sucesso!</span>
                             )}
@@ -206,13 +210,14 @@ export default function SettingsPage() {
                                 </p>
                             </div>
                         </div>
-                        <button
+                        <Button
+                            variant="outline"
                             onClick={handleSignOut}
-                            className="flex w-full items-center justify-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/20 transition-colors"
+                            className="w-full border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
                         >
                             <LogOut className="h-4 w-4" />
                             Sair da conta
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
@@ -237,54 +242,60 @@ export default function SettingsPage() {
                         </p>
                     ) : (
                         <div className="overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="border-b border-border">
-                                        <th className="text-left py-3 px-2 font-medium text-muted-foreground">Nome</th>
-                                        <th className="text-left py-3 px-2 font-medium text-muted-foreground">Email</th>
-                                        <th className="text-left py-3 px-2 font-medium text-muted-foreground">Role</th>
-                                        <th className="text-right py-3 px-2 font-medium text-muted-foreground">Acoes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Email</TableHead>
+                                        <TableHead>Role</TableHead>
+                                        <TableHead className="text-right">Acoes</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
                                     {allUsers.map((u) => (
-                                        <tr key={u.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                                            <td className="py-3 px-2 text-foreground">
+                                        <TableRow key={u.id}>
+                                            <TableCell className="text-foreground">
                                                 {u.full_name || '—'}
                                                 {u.id === user?.id && (
                                                     <span className="ml-2 text-xs text-primary font-medium">(voce)</span>
                                                 )}
-                                            </td>
-                                            <td className="py-3 px-2 text-muted-foreground">{u.email}</td>
-                                            <td className="py-3 px-2">
-                                                <select
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">{u.email}</TableCell>
+                                            <TableCell>
+                                                <Select
                                                     value={u.role}
-                                                    onChange={(e) => handleRoleChange(u.id, e.target.value as 'admin' | 'user')}
+                                                    onValueChange={(value) => handleRoleChange(u.id, value as 'admin' | 'user')}
                                                     disabled={updatingRole === u.id || u.id === user?.id}
-                                                    className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground focus:border-primary focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
                                                 >
-                                                    <option value="admin">Admin</option>
-                                                    <option value="user">Usuario</option>
-                                                </select>
+                                                    <SelectTrigger className="w-[120px]">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="admin">Admin</SelectItem>
+                                                        <SelectItem value="user">Usuario</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
                                                 {updatingRole === u.id && (
                                                     <Loader2 className="inline ml-2 h-3 w-3 animate-spin text-muted-foreground" />
                                                 )}
-                                            </td>
-                                            <td className="py-3 px-2 text-right">
+                                            </TableCell>
+                                            <TableCell className="text-right">
                                                 {u.id !== user?.id && (
-                                                    <button
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
                                                         onClick={() => handleDeleteUser(u.id, u.email)}
-                                                        className="text-destructive hover:text-destructive/80 transition-colors p-1 rounded-md hover:bg-destructive/10"
+                                                        className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
                                                         title="Remover usuario"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
-                                                    </button>
+                                                    </Button>
                                                 )}
-                                            </td>
-                                        </tr>
+                                            </TableCell>
+                                        </TableRow>
                                     ))}
-                                </tbody>
-                            </table>
+                                </TableBody>
+                            </Table>
                         </div>
                     )}
                 </div>

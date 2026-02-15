@@ -186,6 +186,27 @@ class UazapiService:
             print(f"Error sending UazAPI carousel: {e}")
             return None
 
+    def get_profile_picture_url(self, number: str) -> str | None:
+        """
+        Busca URL da foto de perfil do WhatsApp via UazAPI.
+        Retorna None silenciosamente se falhar (graceful fallback).
+        """
+        clean_number = self.normalize_whatsapp_number(number)
+        if not clean_number:
+            return None
+        url = f"{self.base_url}/chat/fetchProfilePicUrl"
+        payload = {"number": clean_number}
+        try:
+            response = requests.post(url, headers=self._get_headers(), json=payload, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                pic_url = data.get("profilePicUrl") or data.get("url") or data.get("result")
+                if pic_url and isinstance(pic_url, str) and pic_url.startswith("http"):
+                    return pic_url
+        except Exception:
+            pass
+        return None
+
     def send_reaction(self, number: str, message_id: str, emoji: str = "❤️"):
         """
         Sends a reaction via UazAPI /message/react.

@@ -145,6 +145,7 @@ export default function AnimatedLoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
 
   /* ── Animation state ── */
   const [mouseX, setMouseX] = useState(0);
@@ -313,16 +314,16 @@ export default function AnimatedLoginPage() {
   const isPasswordHidden = password.length > 0 && !showPassword;
   const isPasswordVisible = password.length > 0 && showPassword;
 
-  /* ── Theme colors (Palmas Lake) ── */
+  /* ── Theme colors (Palmas Lake) — referencing CSS variables ── */
   const colors = {
-    purple: "oklch(0.5854 0.2041 277.1173)", // --primary
-    black: "oklch(0.2795 0.0368 260.0310)",   // --foreground
-    orange: "oklch(0.6368 0.2078 25.3313)",    // --destructive (warm)
-    yellow: "oklch(0.8687 0.0043 56.3660)",    // --secondary (beige)
+    purple: "var(--primary)",
+    black: "var(--foreground)",
+    orange: "var(--destructive)",
+    yellow: "var(--secondary)",
   };
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-muted/30 p-4">
+    <main className="flex min-h-screen w-full items-center justify-center bg-muted/30 p-4">
       <div className="flex w-full max-w-[1000px] overflow-hidden rounded-2xl bg-background shadow-xl border border-border/40" style={{ minHeight: "600px", maxHeight: "700px" }}>
       {/* ─── Left Content Section (hidden on mobile) ─── */}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-8 bg-gradient-to-br from-primary/5 via-muted/50 to-accent/5">
@@ -708,6 +709,7 @@ export default function AnimatedLoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   {showPassword ? (
@@ -744,7 +746,7 @@ export default function AnimatedLoginPage() {
             {mode === "login" && (
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Checkbox id="remember" />
+                  <Checkbox id="remember" checked={rememberMe} onCheckedChange={(checked) => setRememberMe(checked === true)} />
                   <Label
                     htmlFor="remember"
                     className="text-sm text-muted-foreground cursor-pointer"
@@ -845,6 +847,6 @@ export default function AnimatedLoginPage() {
         </div>
       </div>
       </div>
-    </div>
+    </main>
   );
 }
