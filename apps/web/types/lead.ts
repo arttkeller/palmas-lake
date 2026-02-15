@@ -54,4 +54,7 @@ export interface Lead {
     };
     last_interaction_at?: string;
     assigned_to?: string;
+
+    // Foto de perfil
+    profile_picture_url?: string;
 }

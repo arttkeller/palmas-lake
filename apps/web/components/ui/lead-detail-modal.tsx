@@ -139,9 +139,17 @@ export function LeadDetailModal({
         <div className="flex items-center justify-between p-4 border-b border-black/5">
           <div className="flex items-center gap-4">
             {/* Avatar */}
-            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-500/25">
-              {(lead.full_name || lead.phone || 'L')[0].toUpperCase()}
-            </div>
+            {lead.profile_picture_url ? (
+              <img
+                src={lead.profile_picture_url}
+                alt={lead.full_name || 'Lead'}
+                className="w-14 h-14 rounded-full object-cover shadow-lg shadow-emerald-500/25"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-emerald-500/25">
+                {(lead.full_name || lead.phone || 'L')[0].toUpperCase()}
+              </div>
+            )}
             <div>
               <div className="flex items-center gap-2">
                 <h2
