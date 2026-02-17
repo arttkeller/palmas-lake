@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Conversation, Message } from '@/types/chat';
 import { Send, Phone, MoreVertical, ArrowLeft } from 'lucide-react';
+import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import clsx from 'clsx';
 import { createClient } from '@/lib/supabase';
 import { API_BASE_URL } from '@/lib/api-config';
@@ -94,6 +95,7 @@ export default function ChatPage() {
                     updated_at: c.updated_at,
                     unread_count: 0,
                     profile_picture_url: c.leads?.profile_picture_url || null,
+                    last_interaction_at: c.leads?.last_interaction || c.leads?.last_interaction_at || null,
                 }));
                 setConversations(formatted);
                 // Atualizar activeConversation se existir na nova lista
@@ -123,7 +125,7 @@ export default function ChatPage() {
             const { data, error: supaError } = await supabase
                 .schema(SCHEMA)
                 .from('conversations')
-                .select('*, leads(full_name, phone, profile_picture_url)')
+                .select('*, leads(full_name, phone, profile_picture_url, last_interaction, last_interaction_at)')
                 .order('updated_at', { ascending: false });
 
             if (supaError) {
@@ -148,6 +150,7 @@ export default function ChatPage() {
                     updated_at: c.updated_at,
                     unread_count: 0,
                     profile_picture_url: c.leads?.profile_picture_url || c.leads?.[0]?.profile_picture_url || null,
+                    last_interaction_at: c.leads?.last_interaction || c.leads?.last_interaction_at || c.leads?.[0]?.last_interaction || c.leads?.[0]?.last_interaction_at || null,
                 }));
                 setConversations(formatted);
                 // Atualizar activeConversation se existir na nova lista
@@ -443,6 +446,14 @@ export default function ChatPage() {
                                             <div className="h-4 w-4 bg-purple-500 text-white flex items-center justify-center rounded-full text-[10px] shrink-0">I</div>
                                         )}
                                     </div>
+                                    {conv.platform === 'whatsapp' && (
+                                        <div className="mt-1">
+                                            <WhatsAppWindowBadge
+                                                lastInteractionAt={conv.last_interaction_at}
+                                                variant="compact"
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -477,7 +488,15 @@ export default function ChatPage() {
                             </Avatar>
                             <div>
                                 <h3 className="text-sm font-bold text-foreground">{activeConversation.lead_name}</h3>
-                                <p className="text-xs text-green-600 flex items-center"><span className="block h-2 w-2 rounded-full bg-green-500 mr-1"></span> Online</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <p className="text-xs text-green-600 flex items-center"><span className="block h-2 w-2 rounded-full bg-green-500 mr-1"></span> Online</p>
+                                    {activeConversation.platform === 'whatsapp' && (
+                                        <WhatsAppWindowBadge
+                                            lastInteractionAt={activeConversation.last_interaction_at}
+                                            variant="full"
+                                        />
+                                    )}
+                                </div>
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">

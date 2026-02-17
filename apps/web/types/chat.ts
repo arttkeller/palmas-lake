@@ -18,4 +18,5 @@ export interface Conversation {
     unread_count?: number;
     updated_at?: string;
     profile_picture_url?: string;
+    last_interaction_at?: string; // Timestamp of last inbound message from lead (for 24h window)
 }

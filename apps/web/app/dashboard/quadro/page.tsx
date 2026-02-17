@@ -7,6 +7,7 @@ import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glas
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { DollarSign, MapPin, MoreVertical, Phone, Plus, Loader2, Target, Calendar, Home, Flame, Search, X, Instagram } from 'lucide-react';
+import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
 import { Button } from '@/components/ui/button';
@@ -54,6 +55,7 @@ interface Lead {
     isHot?: boolean;
     source?: 'instagram' | 'facebook' | 'site' | 'indicacao' | 'whatsapp';
     temperature?: LeadTemperature;
+    lastInteractionAt?: string;
 }
 
 interface Column {
@@ -418,7 +420,8 @@ export default function LeadsKanban() {
                 classificationType,
                 isHot: item.is_hot,
                 source: item.source,
-                temperature: (item.temperature ? normalizeTemperature(item.temperature) : null) as LeadTemperature
+                temperature: (item.temperature ? normalizeTemperature(item.temperature) : null) as LeadTemperature,
+                lastInteractionAt: item.last_interaction ?? item.last_interaction_at,
             };
 
             const colIndex = newColumns.findIndex(c => c.id === statusKey);
@@ -943,6 +946,14 @@ export default function LeadsKanban() {
                                                             <>🏠💰 Morar + Investir</>
                                                         )}
                                                     </div>
+                                                )}
+
+                                                {/* WhatsApp Conversation Window Badge */}
+                                                {lead.source !== 'instagram' && (
+                                                    <WhatsAppWindowBadge
+                                                        lastInteractionAt={lead.lastInteractionAt}
+                                                        variant="compact"
+                                                    />
                                                 )}
 
                                                 {/* Footer */}
