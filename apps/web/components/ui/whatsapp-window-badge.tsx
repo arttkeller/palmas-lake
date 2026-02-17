@@ -1,8 +1,11 @@
 'use client';
 
-import { Clock, Lock } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWhatsAppWindow } from '@/hooks/useWhatsAppWindow';
+import { LottieIcon } from '@/components/ui/lottie-icon';
+
+const ALARM_CLOCK_URL = 'https://fonts.gstatic.com/s/e/notoemoji/latest/23f0/lottie.json';
 
 interface WhatsAppWindowBadgeProps {
     lastInteractionAt?: string | null;
@@ -31,7 +34,11 @@ export function WhatsAppWindowBadge({
                 )}
                 title="Janela de 24h aberta — você pode enviar mensagens livremente"
             >
-                <Clock className={cn('shrink-0', variant === 'compact' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+                <LottieIcon
+                    url={ALARM_CLOCK_URL}
+                    size={variant === 'compact' ? 14 : 18}
+                    fallback={<span>⏰</span>}
+                />
                 {variant === 'compact' ? (
                     <span>{timeRemaining}</span>
                 ) : (
