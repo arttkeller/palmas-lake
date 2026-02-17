@@ -1,53 +1,13 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
 import Lottie from 'lottie-react';
 import { cn } from '@/lib/utils';
 import {
   getTemperatureConfig,
   type LeadTemperature,
 } from '@/lib/temperature-config';
-
-// ---------------------------------------------------------------------------
-// Module-level Lottie cache — fetched once per URL across all instances
-// ---------------------------------------------------------------------------
-const lottieCache = new Map<string, object>();
-const lottiePending = new Map<string, Promise<object>>();
-
-function fetchLottieData(url: string): Promise<object> {
-  if (lottieCache.has(url)) return Promise.resolve(lottieCache.get(url)!);
-  if (lottiePending.has(url)) return lottiePending.get(url)!;
-
-  const p = fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      lottieCache.set(url, data);
-      lottiePending.delete(url);
-      return data;
-    });
-  lottiePending.set(url, p);
-  return p;
-}
-
-function useLottieData(url: string | undefined): object | null {
-  const [data, setData] = useState<object | null>(() =>
-    url ? (lottieCache.get(url) ?? null) : null
-  );
-
-  useEffect(() => {
-    if (!url) return;
-    if (lottieCache.has(url)) {
-      setData(lottieCache.get(url)!);
-      return;
-    }
-    let cancelled = false;
-    fetchLottieData(url).then(d => { if (!cancelled) setData(d); });
-    return () => { cancelled = true; };
-  }, [url]);
-
-  return data;
-}
+import { useLottieData } from '@/hooks/useLottieData';
 
 // ---------------------------------------------------------------------------
 // Size config

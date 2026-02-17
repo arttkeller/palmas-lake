@@ -1,12 +1,14 @@
 'use client';
 
 import * as React from 'react';
+import Lottie from 'lottie-react';
 import { cn } from '@/lib/utils';
 import {
   TEMPERATURE_CONFIG,
   getAllTemperatureConfigs,
   type NonNullLeadTemperature,
 } from '@/lib/temperature-config';
+import { useLottieData } from '@/hooks/useLottieData';
 
 /**
  * Props for the TemperatureFilterBar component
@@ -39,6 +41,7 @@ interface FilterButtonProps {
  */
 function FilterButton({ temperature, isActive, count, onClick }: FilterButtonProps) {
   const config = TEMPERATURE_CONFIG[temperature];
+  const animationData = useLottieData(config.lottieUrl);
 
   return (
     <button
@@ -64,10 +67,19 @@ function FilterButton({ temperature, isActive, count, onClick }: FilterButtonPro
       aria-pressed={isActive}
       aria-label={`Filtrar por ${config.label}`}
     >
-      {/* Emoji */}
-      <span className="text-lg" role="img" aria-hidden="true">
-        {config.emoji}
-      </span>
+      {/* Animated emoji */}
+      {animationData ? (
+        <Lottie
+          animationData={animationData}
+          loop
+          autoplay
+          style={{ width: 24, height: 24 }}
+        />
+      ) : (
+        <span className="text-lg" role="img" aria-hidden="true">
+          {config.emoji}
+        </span>
+      )}
       
       {/* Label (hidden on small screens) */}
       <span className="hidden sm:inline text-sm font-medium">
@@ -165,6 +177,8 @@ export function TemperatureFilterBarCompact({
         const isActive = activeFilter === config.value;
         const count = leadCounts?.[config.value];
 
+        const animationData = useLottieData(config.lottieUrl);
+
         return (
           <button
             key={config.value}
@@ -185,9 +199,18 @@ export function TemperatureFilterBarCompact({
             aria-pressed={isActive}
             aria-label={`Filtrar por ${config.label}${count ? ` (${count})` : ''}`}
           >
-            <span className="text-base" role="img" aria-hidden="true">
-              {config.emoji}
-            </span>
+            {animationData ? (
+              <Lottie
+                animationData={animationData}
+                loop
+                autoplay
+                style={{ width: 22, height: 22 }}
+              />
+            ) : (
+              <span className="text-base" role="img" aria-hidden="true">
+                {config.emoji}
+              </span>
+            )}
           </button>
         );
       })}
