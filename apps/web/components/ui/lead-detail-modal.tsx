@@ -260,12 +260,20 @@ export function LeadDetailModal({
             )}
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground uppercase tracking-wide">Status</span>
-              <p className="text-sm font-medium text-foreground">
-                {lead.status === 'novo_lead' ? '🆕 Novo Lead' :
-                 lead.status === 'qualificado' ? '✅ Qualificado' :
-                 lead.status === 'visita_agendada' ? '📅 Visita Agendada' :
-                 lead.status === 'visita_realizada' ? '🏠 Visita Realizada' :
-                 lead.status === 'proposta_enviada' ? '📄 Proposta Enviada' : lead.status}
+              <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                {lead.status === 'qualificado' ? (
+                  <>
+                    <LottieIcon
+                      url="https://fonts.gstatic.com/s/e/notoemoji/latest/2705/lottie.json"
+                      size={18}
+                      fallback={<span>✅</span>}
+                    />
+                    Qualificado
+                  </>
+                ) : lead.status === 'novo_lead' ? '🆕 Novo Lead' :
+                  lead.status === 'visita_agendada' ? '📅 Visita Agendada' :
+                  lead.status === 'visita_realizada' ? '🏠 Visita Realizada' :
+                  lead.status === 'proposta_enviada' ? '📄 Proposta Enviada' : lead.status}
               </p>
             </div>
           </div>
