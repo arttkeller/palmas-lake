@@ -402,7 +402,7 @@ class MessageService:
             List of conversations with lead details, or empty list on error
         """
         try:
-            result = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url)").order("updated_at", direction="desc").execute()
+            result = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url, last_interaction)").order("updated_at", direction="desc").execute()
             return result.data if result.data else []
         except Exception as e:
             logger.error(f"Error fetching conversations: {e}")
@@ -424,7 +424,7 @@ class MessageService:
             Conversation data with lead details, or None if not found
         """
         try:
-            res = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url)").eq("lead_id", lead_id).execute()
+            res = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url, last_interaction)").eq("lead_id", lead_id).execute()
             if res.data and len(res.data) > 0:
                 return res.data[0]
             logger.debug(f"No conversation found for lead {lead_id}")

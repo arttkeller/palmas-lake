@@ -125,7 +125,7 @@ export default function ChatPage() {
             const { data, error: supaError } = await supabase
                 .schema(SCHEMA)
                 .from('conversations')
-                .select('*, leads(full_name, phone, profile_picture_url, last_interaction, last_interaction_at)')
+                .select('*, leads(full_name, phone, profile_picture_url, last_interaction)')
                 .order('updated_at', { ascending: false });
 
             if (supaError) {
