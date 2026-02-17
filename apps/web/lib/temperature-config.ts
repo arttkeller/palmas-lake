@@ -32,6 +32,7 @@ export const VALID_TEMPERATURES: readonly NonNullLeadTemperature[] = ['hot', 'wa
 export interface TemperatureConfig {
   value: NonNullLeadTemperature;
   emoji: string;
+  lottieUrl: string;
   label: string;
   color: string;
   bgColor: string;
@@ -46,6 +47,7 @@ export const TEMPERATURE_CONFIG: Record<NonNullLeadTemperature, TemperatureConfi
   hot: {
     value: 'hot',
     emoji: '🔥',
+    lottieUrl: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f525/lottie.json',
     label: 'Quente',
     color: 'text-orange-500',
     bgColor: 'bg-orange-500/20',
@@ -54,6 +56,7 @@ export const TEMPERATURE_CONFIG: Record<NonNullLeadTemperature, TemperatureConfi
   warm: {
     value: 'warm',
     emoji: '🌤️',
+    lottieUrl: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f324_fe0f/lottie.json',
     label: 'Morno',
     color: 'text-amber-500',
     bgColor: 'bg-amber-500/20',
@@ -62,6 +65,7 @@ export const TEMPERATURE_CONFIG: Record<NonNullLeadTemperature, TemperatureConfi
   cold: {
     value: 'cold',
     emoji: '❄️',
+    lottieUrl: 'https://fonts.gstatic.com/s/e/notoemoji/latest/2744_fe0f/lottie.json',
     label: 'Frio',
     color: 'text-blue-400',
     bgColor: 'bg-blue-400/20',
