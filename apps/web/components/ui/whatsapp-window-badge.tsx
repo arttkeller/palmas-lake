@@ -1,11 +1,11 @@
 'use client';
 
-import { Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useWhatsAppWindow } from '@/hooks/useWhatsAppWindow';
 import { LottieIcon } from '@/components/ui/lottie-icon';
 
 const ALARM_CLOCK_URL = 'https://fonts.gstatic.com/s/e/notoemoji/latest/23f0/lottie.json';
+const LOCK_URL = 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f512/lottie.json';
 
 interface WhatsAppWindowBadgeProps {
     lastInteractionAt?: string | null;
@@ -59,7 +59,11 @@ export function WhatsAppWindowBadge({
             )}
             title="Janela de 24h encerrada — use um template aprovado pela Meta para retomar a conversa"
         >
-            <Lock className={cn('shrink-0', variant === 'compact' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')} />
+            <LottieIcon
+                url={LOCK_URL}
+                size={variant === 'compact' ? 14 : 18}
+                fallback={<span>🔒</span>}
+            />
             {variant === 'compact' ? (
                 <span>Janela Fechada</span>
             ) : (
