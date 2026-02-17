@@ -4,6 +4,7 @@ import * as React from 'react';
 import { X, User, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TemperatureBadge } from './temperature-badge';
+import { LottieIcon } from './lottie-icon';
 import { formatInterestType } from '@/lib/interest-type-format';
 import type { Lead } from '@/types/lead';
 
@@ -212,8 +213,13 @@ export function LeadDetailModal({
             {lead.objective && (
               <div className="space-y-1">
                 <span className="text-xs text-muted-foreground uppercase tracking-wide">Objetivo</span>
-                <p className="text-sm font-medium text-foreground">
-                  🎯 {lead.objective === 'morar' ? 'Morar' : lead.objective === 'investir' ? 'Investir' : 'Morar + Investir'}
+                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
+                  <LottieIcon
+                    url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f3af/lottie.json"
+                    size={18}
+                    fallback={<span>🎯</span>}
+                  />
+                  {lead.objective === 'morar' ? 'Morar' : lead.objective === 'investir' ? 'Investir' : 'Morar + Investir'}
                 </p>
               </div>
             )}

@@ -6,8 +6,9 @@ import { CardContent } from '@/components/ui/card';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { DollarSign, MapPin, MoreVertical, Phone, Plus, Loader2, Target, Calendar, Home, Flame, Search, X, Instagram } from 'lucide-react';
+import { DollarSign, MapPin, MoreVertical, Phone, Plus, Loader2, Calendar, Home, Flame, Search, X, Instagram } from 'lucide-react';
 import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
+import { LottieIcon } from '@/components/ui/lottie-icon';
 import { cn } from '@/lib/utils';
 import { API_BASE_URL } from '@/lib/api-config';
 import { Button } from '@/components/ui/button';
@@ -898,8 +899,12 @@ export default function LeadsKanban() {
                                                     )}
                                                     {lead.objective && (
                                                         <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-violet-100 rounded-lg">
-                                                                <Target className="w-3 h-3 text-violet-600" />
+                                                            <div className="p-1 bg-violet-100 rounded-lg flex items-center justify-center">
+                                                                <LottieIcon
+                                                                    url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f3af/lottie.json"
+                                                                    size={18}
+                                                                    fallback={<span>🎯</span>}
+                                                                />
                                                             </div>
                                                             <span>{lead.objective === 'morar' ? 'Morar' : lead.objective === 'investir' ? 'Investir' : 'Morar + Investir'}</span>
                                                         </div>
