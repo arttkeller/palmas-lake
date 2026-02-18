@@ -319,12 +319,15 @@ class AISpecialistService:
                             start_dt = start_dt.astimezone(self.brasilia_tz)
                             
                             lead_name = event.get('lead_name', 'Não informado')
+                            lead_id = event.get('lead_id', '')
                             title = event.get('title', 'Evento')
                             location = event.get('location', '')
-                            
+
                             upcoming_str += f"- {self._format_date_pt_br(start_dt)} às {self._format_time_pt_br(start_dt)}: {title}"
                             if lead_name and lead_name != 'Não informado':
                                 upcoming_str += f" com {lead_name}"
+                                if lead_id:
+                                    upcoming_str += f" (lead_id={lead_id}; link=/dashboard/quadro?leadId={lead_id})"
                             if location:
                                 upcoming_str += f" em {location}"
                             upcoming_str += "\n"
@@ -399,6 +402,8 @@ Sua função é responder perguntas sobre visitas e eventos agendados de forma c
 5. Se não houver eventos no período perguntado, informe de forma gentil
 6. Seja conciso mas informativo
 7. Quando listar eventos, inclua: data, horário e nome do lead (se disponível)
+8. SEMPRE que mencionar um lead pelo nome, use o formato de link clicável: [Nome do Lead](/dashboard/quadro?leadId=ID_DO_LEAD)
+   - Os dados dos eventos incluem "lead_id" e "link" — use-os para criar links clicáveis
 
 ## INTERPRETAÇÃO DE PERGUNTAS:
 
@@ -542,7 +547,9 @@ Sua função é responder perguntas sobre leads, conversas e o pipeline de venda
 3. Prefira frases curtas e diretas
 4. Quando mencionar números, seja preciso
 5. Nunca liste mais de 5 leads em uma resposta
-6. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
+6. SEMPRE que mencionar um lead pelo nome, use o formato de link clicável: [Nome do Lead](/dashboard/quadro?leadId=ID_DO_LEAD)
+   - Os dados dos leads incluem os campos "id" e "link" — use-os para criar links clicáveis
+7. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
    - Comece com: "Os maiores interesses registrados são:"
    - Liste no máximo 5 leads priorizando temperatura: quente > morno > frio
    - Cada item deve ter o nome clicável neste formato: [Nome do Lead](/dashboard/quadro?leadId=ID)
@@ -652,7 +659,9 @@ Sua função é responder perguntas sobre leads, seus status e temperaturas.
 4. Explique os status: novo_lead, qualificado, visita_agendada, visita_realizada, proposta_enviada
 5. Explique as temperaturas: quente (alta probabilidade), morno (engajado), frio (baixo interesse)
 6. Nunca liste mais de 5 leads em uma resposta
-7. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
+7. SEMPRE que mencionar um lead pelo nome, use o formato de link clicável: [Nome do Lead](/dashboard/quadro?leadId=ID_DO_LEAD)
+   - Os dados dos leads incluem os campos "id" e "link" — use-os para criar links clicáveis
+8. Se a pergunta for sobre "maiores interesses", "maiores leads" ou "leads com maior potencial":
    - Comece com: "Os maiores interesses registrados são:"
    - Liste no máximo 5 leads priorizando temperatura: quente > morno > frio
    - Cada item deve ter o nome clicável neste formato: [Nome do Lead](/dashboard/quadro?leadId=ID)
@@ -697,17 +706,21 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             
             # Get recent conversations
             conv_res = self.supabase.table("conversations").select(
-                "id, platform, last_message, updated_at, leads(full_name, phone)"
+                "id, platform, last_message, updated_at, lead_id, leads(id, full_name, phone)"
             ).order("updated_at", direction="desc").limit(10).execute()
             convs = conv_res.data if conv_res.data else []
-            
+
             convs_str = ""
             for conv in convs:
-                lead = conv.get('leads', {})
+                lead = conv.get('leads', {}) or {}
+                lead_id = lead.get('id', '') or conv.get('lead_id', '')
                 name = lead.get('full_name', 'Desconhecido')
                 platform = conv.get('platform', 'whatsapp')
                 last_msg = conv.get('last_message', '')[:40]
-                convs_str += f"- {name} ({platform}): {last_msg}...\n"
+                convs_str += (
+                    f"- id_lead={lead_id}; nome={name} ({platform}): {last_msg}...; "
+                    f"link=/dashboard/quadro?leadId={lead_id}\n"
+                )
             
             context = f"""
 <dados_conversas>
@@ -743,6 +756,8 @@ Sua função é responder perguntas sobre conversas com leads via WhatsApp e Ins
 1. Sempre responda em português brasileiro
 2. Use linguagem profissional mas amigável
 3. Seja conciso mas informativo
+4. SEMPRE que mencionar um lead pelo nome, use o formato de link clicável: [Nome do Lead](/dashboard/quadro?leadId=ID_DO_LEAD)
+   - Os dados das conversas incluem "id_lead" e "link" — use-os para criar links clicáveis
 
 Responda a pergunta do usuário baseado nos dados fornecidos acima."""
 
@@ -781,7 +796,7 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             
             # Get leads for analytics
             leads_res = self.supabase.table("leads").select(
-                "id, status, temperature, source, created_at"
+                "id, full_name, status, temperature, source, created_at"
             ).execute()
             leads = leads_res.data if leads_res.data else []
             
@@ -804,10 +819,24 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             propostas = by_status.get('proposta_enviada', 0)
             conversion_rate = (propostas / total_leads * 100) if total_leads > 0 else 0
             
+            # Build individual leads list for linking
+            leads_str = ""
+            for lead in leads[:10]:
+                lead_id = lead.get('id', '')
+                name = lead.get('full_name', 'Sem nome')
+                status = lead.get('status', 'novo_lead')
+                temp = self._normalize_temperature_pt(lead.get('temperature'))
+                source_label = self._format_source_label(lead.get('source'))
+                leads_str += (
+                    f"- id={lead_id}; nome={name}; status={status}; "
+                    f"temperatura={temp}; origem={source_label}; "
+                    f"link=/dashboard/quadro?leadId={lead_id}\n"
+                )
+
             context = f"""
 <dados_analytics>
     <data_atual>{self._format_date_pt_br(now)}</data_atual>
-    
+
     <metricas>
         <total_leads>{total_leads}</total_leads>
         <taxa_conversao>{conversion_rate:.1f}%</taxa_conversao>
@@ -815,14 +844,18 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
         <leads_mornos>{by_temp.get('warm', 0)}</leads_mornos>
         <leads_frios>{by_temp.get('cold', 0)}</leads_frios>
     </metricas>
-    
+
     <por_status>
         {chr(10).join([f'<{k}>{v}</{k}>' for k, v in by_status.items()])}
     </por_status>
-    
+
     <por_origem>
         {chr(10).join([f'<{k}>{v}</{k}>' for k, v in by_source.items()])}
     </por_origem>
+
+    <leads_individuais>
+{leads_str if leads_str else "        Nenhum lead cadastrado."}
+    </leads_individuais>
 </dados_analytics>
 """
             return context
@@ -850,6 +883,8 @@ Sua função é responder perguntas sobre métricas, conversões e performance.
 2. Use linguagem profissional mas amigável
 3. Seja conciso mas informativo
 4. Quando mencionar porcentagens, use uma casa decimal
+5. SEMPRE que mencionar um lead pelo nome, use o formato de link clicável: [Nome do Lead](/dashboard/quadro?leadId=ID_DO_LEAD)
+   - Os dados dos leads incluem "id" e "link" — use-os para criar links clicáveis
 
 Responda a pergunta do usuário baseado nos dados fornecidos acima."""
 
