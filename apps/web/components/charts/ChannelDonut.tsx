@@ -68,6 +68,7 @@ export default function ChannelDonut({ data }: ChannelDonutProps) {
                                         ))}
                                     </Pie>
                                     <Tooltip
+                                        position={{ y: 10 }}
                                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)', background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(8px)' }}
                                     />
                                     <Legend verticalAlign="bottom" height={36} iconType="circle" />
@@ -77,9 +78,9 @@ export default function ChannelDonut({ data }: ChannelDonutProps) {
                             {/* Center Text overlay */}
                             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center pointer-events-none pb-8">
                                 <div className="text-2xl font-bold text-gray-900">
-                                    {totalValue}%
+                                    {totalValue}
                                 </div>
-                                <div className="text-xs text-gray-500">Tracked</div>
+                                <div className="text-xs text-gray-500">leads</div>
                             </div>
                         </ClientOnlyChart>
                     )}
