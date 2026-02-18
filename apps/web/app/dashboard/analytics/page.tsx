@@ -304,25 +304,14 @@ export default function AnalyticsPage() {
                     <div className={`lg:col-span-2 flex flex-col gap-4 transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
                         <ResponseTimeChart data={data} />
                         <SentimentTrendChart data={data} />
+                        <AppointmentHeatmap data={data} />
+                        <ObjectionBarChart data={data} />
                     </div>
                     <div className={`lg:col-span-1 flex flex-col gap-4 transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
                         <TransferRateCard data={data} />
                         <PredictabilityCard data={data} />
                         <ChannelDonut data={data} />
                         <TemperatureDonut data={data} />
-                    </div>
-                </div>
-            </section>
-
-            {/* 4. Strategic Insights */}
-            <section className="space-y-4">
-                <h3 className="text-lg font-semibold text-foreground">Insights Estratégicos</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
-                        <AppointmentHeatmap data={data} />
-                    </div>
-                    <div className={`transition-all duration-300 ${highlightUpdate ? 'scale-[1.005]' : ''}`}>
-                        <ObjectionBarChart data={data} />
                     </div>
                 </div>
             </section>
