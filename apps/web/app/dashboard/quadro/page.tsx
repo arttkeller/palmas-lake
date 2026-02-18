@@ -66,14 +66,31 @@ interface Column {
     color: string;
     gradient: string;
     count: number;
+    lottieUrl: string;
 }
 
+const COLUMN_LOTTIE_URLS: Record<string, string> = {
+    novo_lead: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f331/lottie.json',
+    qualificado: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f31f/lottie.json',
+    visita_agendada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/lottie.json',
+    visita_realizada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f91d/lottie.json',
+    proposta_enviada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/lottie.json',
+};
+
+const COLUMN_LOTTIE_FALLBACKS: Record<string, string> = {
+    novo_lead: '🌱',
+    qualificado: '🌟',
+    visita_agendada: '🔔',
+    visita_realizada: '🤝',
+    proposta_enviada: '🚀',
+};
+
 const initialColumns: Column[] = [
-    { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [] },
-    { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [] },
-    { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [] },
-    { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [] },
-    { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [] },
+    { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.novo_lead },
+    { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.qualificado },
+    { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_agendada },
+    { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_realizada },
+    { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.proposta_enviada },
 ];
 
 const INVESTOR_SIGNALS = ['investidor', 'investir', 'investimento', 'investor'] as const;
@@ -374,11 +391,11 @@ export default function LeadsKanban() {
         }
 
         const newColumns: Column[] = [
-            { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [] },
-            { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [] },
-            { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [] },
-            { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [] },
-            { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [] },
+            { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.novo_lead },
+            { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.qualificado },
+            { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_agendada },
+            { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_realizada },
+            { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.proposta_enviada },
         ];
 
         const interestTypeMap: Record<string, string> = {
@@ -819,11 +836,11 @@ export default function LeadsKanban() {
                                 {/* Column Header */}
                                 <div className="p-4 flex items-center justify-between">
                                     <div className="flex items-center gap-2.5">
-                                        <div className={cn(
-                                            "w-3 h-3 rounded-full",
-                                            column.color,
-                                            "ring-4 ring-white/50"
-                                        )} />
+                                        <LottieIcon
+                                            url={column.lottieUrl}
+                                            size={22}
+                                            fallback={<span>{COLUMN_LOTTIE_FALLBACKS[column.id]}</span>}
+                                        />
                                         <h3 className="font-semibold text-sm text-foreground">
                                             {column.title}
                                         </h3>
