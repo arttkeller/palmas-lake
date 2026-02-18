@@ -1056,7 +1056,7 @@ export default function LeadsKanban() {
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {tagsList.map((tag, i) => (
                                                         <Badge key={`tag-${i}`} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs font-medium">
-                                                            {tag}
+                                                            {tag.replaceAll('_', ' ')}
                                                         </Badge>
                                                     ))}
                                                 </div>
@@ -1065,7 +1065,7 @@ export default function LeadsKanban() {
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {adjList.map((adj, i) => (
                                                         <span key={`adj-${i}`} className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-medium">
-                                                            {adj}
+                                                            {adj.replaceAll('_', ' ')}
                                                         </span>
                                                     ))}
                                                 </div>
