@@ -8,6 +8,7 @@ import ConversionFunnel from '@/components/charts/ConversionFunnel';
 import ResponseTimeChart from '@/components/charts/ResponseTimeChart';
 import PredictabilityCard from '@/components/charts/PredictabilityCard';
 import ChannelDonut from '@/components/charts/ChannelDonut';
+import TemperatureDonut from '@/components/charts/TemperatureDonut';
 import AppointmentHeatmap from '@/components/charts/AppointmentHeatmap';
 import { API_BASE_URL } from '@/lib/api-config';
 import ObjectionBarChart from '@/components/charts/ObjectionBarChart';
@@ -308,6 +309,7 @@ export default function AnalyticsPage() {
                         <TransferRateCard data={data} />
                         <PredictabilityCard data={data} />
                         <ChannelDonut data={data} />
+                        <TemperatureDonut data={data} />
                     </div>
                 </div>
             </section>
