@@ -7,6 +7,7 @@ requests
 redis
 python-dotenv
 pandas
+openpyxl
 tenacity
 google-api-python-client
 google-auth-httplib2
