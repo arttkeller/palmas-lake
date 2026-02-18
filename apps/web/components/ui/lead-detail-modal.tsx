@@ -282,19 +282,32 @@ export function LeadDetailModal({
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground uppercase tracking-wide">Status</span>
               <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                {lead.status === 'qualificado' ? (
+                {lead.status === 'novo_lead' ? (
                   <>
-                    <LottieIcon
-                      url="https://fonts.gstatic.com/s/e/notoemoji/latest/2705/lottie.json"
-                      size={18}
-                      fallback={<span>✅</span>}
-                    />
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f331/lottie.json" size={18} fallback={<span>🌱</span>} />
+                    Novo Lead
+                  </>
+                ) : lead.status === 'qualificado' ? (
+                  <>
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f31f/lottie.json" size={18} fallback={<span>🌟</span>} />
                     Qualificado
                   </>
-                ) : lead.status === 'novo_lead' ? '🆕 Novo Lead' :
-                  lead.status === 'visita_agendada' ? '📅 Visita Agendada' :
-                  lead.status === 'visita_realizada' ? '🏠 Visita Realizada' :
-                  lead.status === 'proposta_enviada' ? '📄 Proposta Enviada' : lead.status}
+                ) : lead.status === 'visita_agendada' ? (
+                  <>
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/lottie.json" size={18} fallback={<span>🔔</span>} />
+                    Visita Agendada
+                  </>
+                ) : lead.status === 'visita_realizada' ? (
+                  <>
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f91d/lottie.json" size={18} fallback={<span>🤝</span>} />
+                    Visita Realizada
+                  </>
+                ) : lead.status === 'proposta_enviada' ? (
+                  <>
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/lottie.json" size={18} fallback={<span>🚀</span>} />
+                    Proposta Enviada
+                  </>
+                ) : lead.status}
               </p>
             </div>
           </div>
