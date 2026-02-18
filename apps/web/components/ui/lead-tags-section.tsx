@@ -183,7 +183,7 @@ function TagBadge({ tag, categoryConfig }: TagBadgeProps) {
       }
     >
       {/* Tag name */}
-      <span className="font-medium text-foreground">{tag.name}</span>
+      <span className="font-medium text-foreground">{tag.name.replaceAll('_', ' ')}</span>
 
       {/* Tag value if present */}
       {tag.value && (
