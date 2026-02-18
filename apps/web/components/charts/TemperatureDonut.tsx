@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/glassmorphism-card';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { EmptyChartState, isChartDataEmpty, MIN_CHART_HEIGHT, MIN_CHART_WIDTH, ClientOnlyChart } from './EmptyChartState';
-import { LottieIcon } from '@/components/icons/animated';
+import { LottieIcon } from '@/components/ui/lottie-icon';
 
 interface TemperatureDonutProps {
     data?: {
