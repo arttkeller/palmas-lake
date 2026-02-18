@@ -55,8 +55,8 @@ export const TEMPERATURE_CONFIG: Record<NonNullLeadTemperature, TemperatureConfi
   },
   warm: {
     value: 'warm',
-    emoji: '🌤️',
-    lottieUrl: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f324_fe0f/lottie.json',
+    emoji: '🌞',
+    lottieUrl: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f31e/lottie.json',
     label: 'Morno',
     color: 'text-amber-500',
     bgColor: 'bg-amber-500/20',
