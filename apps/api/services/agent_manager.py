@@ -19,12 +19,13 @@ from services.temperature_service import TemperatureService, classify_lead_tempe
 def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
     """
     Look up a lead by phone or instagram_id based on the lead_id format.
-    
+    Normalizes Brazilian phone numbers (adds 9th digit for DDDs >= 29).
+
     Args:
         supabase: Supabase client instance
         lead_id: Lead identifier - 'ig:<igsid>' for Instagram, phone/jid for WhatsApp
         select_fields: Comma-separated fields to select
-    
+
     Returns:
         Supabase query result
     """
@@ -32,8 +33,14 @@ def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
         ig_id = lead_id[3:]
         return supabase.table("leads").select(select_fields).eq("instagram_id", ig_id).execute()
     else:
-        phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-        return supabase.table("leads").select(select_fields).eq("phone", phone).execute()
+        raw_phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
+        from services.uazapi_service import UazapiService
+        phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
+        res = supabase.table("leads").select(select_fields).eq("phone", phone).execute()
+        # Fallback: try raw phone for leads stored before normalization
+        if not res.data and phone != raw_phone:
+            res = supabase.table("leads").select(select_fields).eq("phone", raw_phone).execute()
+        return res
 
 
 class AgentManager:

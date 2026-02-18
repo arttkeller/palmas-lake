@@ -15,6 +15,7 @@ from services.event_reminder_service import (
     execute_due_event_reminders,
     get_event_reminder_status as get_event_reminder_status_service,
 )
+from services.catchup_service import recover_unanswered_leads
 
 router = APIRouter()
 
@@ -49,15 +50,18 @@ async def follow_up_cron_webhook(request: Request):
     try:
         follow_up_results = execute_due_follow_ups()
         reminder_results = execute_due_event_reminders()
+        catchup_results = await recover_unanswered_leads()
 
         return {
             "status": "ok",
             "follow_ups": follow_up_results,
             "event_reminders": reminder_results,
+            "catchup": catchup_results,
             "message": (
                 f"Follow-ups executados: {follow_up_results.get('executed', 0)}, "
                 f"proximos agendados: {follow_up_results.get('next_scheduled', 0)}, "
-                f"lembretes 1h enviados: {reminder_results.get('sent', 0)}"
+                f"lembretes 1h enviados: {reminder_results.get('sent', 0)}, "
+                f"catch-up recuperados: {catchup_results.get('recovered', 0)}"
             ),
         }
     except Exception as e:

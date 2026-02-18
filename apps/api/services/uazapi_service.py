@@ -53,7 +53,7 @@ class UazapiService:
             local = digits[4:]  # 8 dígitos
             # DDDs >= 29 (fora de SP metro) usam nono dígito obrigatório
             # Celulares começam com 9, 8, 7 ou 6
-            if ddd >= 29 and local[0] in ("6", "7", "8"):
+            if ddd >= 29 and local[0] in ("6", "7", "8", "9"):
                 digits = f"55{ddd}9{local}"
                 print(f"[Normalize] Added 9th digit: {digits}")
 

@@ -1,5 +1,6 @@
 
 from services.supabase_client import create_client
+from services.uazapi_service import UazapiService
 import os
 import re
 from datetime import datetime
@@ -113,9 +114,10 @@ class MessageService:
                 logger.debug(f"Processing Instagram message for IGSID: {instagram_id}")
             else:
                 instagram_id = None
-                phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+                raw_phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+                phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
                 platform = "whatsapp"
-                logger.debug(f"Processing message for phone: {phone}")
+                logger.debug(f"Processing message for phone: {phone} (raw: {raw_phone})")
             
             # 1. Find or Create Lead (with retry logic - Requirements 9.1, 9.2, 9.3, 9.5)
             lead_id = None
@@ -124,7 +126,14 @@ class MessageService:
                     lead_res = self.supabase.table("leads").select("id").eq("instagram_id", instagram_id).execute()
                 else:
                     lead_res = self.supabase.table("leads").select("id").eq("phone", phone).execute()
-                
+                    # Fallback: try raw phone for leads stored before normalization
+                    if not lead_res.data and phone != raw_phone:
+                        lead_res = self.supabase.table("leads").select("id").eq("phone", raw_phone).execute()
+                        if lead_res.data:
+                            # Migrate old lead phone to normalized format
+                            self.supabase.table("leads").update({"phone": phone}).eq("id", lead_res.data[0]["id"]).execute()
+                            logger.info(f"Migrated lead phone: {raw_phone} -> {phone}")
+
                 if lead_res.data:
                     lead_id = lead_res.data[0]["id"]
                     logger.debug(f"Found existing lead: {lead_id}")

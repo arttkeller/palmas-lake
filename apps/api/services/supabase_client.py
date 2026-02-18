@@ -84,6 +84,12 @@ class QueryBuilder:
         self.params[column] = f"ilike.{value}"
         return self
 
+    def in_(self, column, values):
+        # PostgREST syntax: column=in.(value1,value2,value3)
+        values_str = ",".join(str(v) for v in values)
+        self.params[column] = f"in.({values_str})"
+        return self
+
     def or_(self, filters: str):
         # PostgREST syntax: or=(filter1,filter2)
         self.params["or"] = f"({filters})"
