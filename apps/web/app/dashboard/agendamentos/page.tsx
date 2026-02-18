@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react"
 import { EventManager, type Event } from "@/components/ui/event-manager"
 import { API_BASE_URL } from '@/lib/api-config'
 import { createClient } from "@/lib/supabase"
-import { RealtimeStatusIndicator } from "@/components/ui/realtime-status"
 
 export default function AgendamentosPage() {
     const supabase = createClient()
@@ -170,29 +169,23 @@ export default function AgendamentosPage() {
     }
 
     return (
-        <div className="h-full flex flex-col px-4 sm:px-6 overflow-hidden">
-            {/* Header com indicador de realtime */}
-            <div className="flex items-center justify-between py-2 flex-shrink-0">
-                <div>
-                    <h1 className="text-xl font-bold text-foreground">Agendamentos</h1>
-                    <p className="text-xs text-muted-foreground">
-                        Gerencie as visitas agendadas pela Maria e manualmente
-                    </p>
-                </div>
-                <RealtimeStatusIndicator />
+        <div className="px-4 sm:px-6">
+            <div className="py-2 mb-2">
+                <h1 className="text-xl font-bold text-foreground">Agendamentos</h1>
+                <p className="text-xs text-muted-foreground">
+                    Gerencie as visitas agendadas pela Maria e manualmente
+                </p>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-hidden">
-                <EventManager
-                    events={events}
-                    onEventCreate={handleEventCreate}
-                    onEventUpdate={handleEventUpdate}
-                    onEventDelete={handleEventDelete}
-                    categories={["Visita", "Reunião", "Lembrete", "Pessoal"]}
-                    availableTags={["Confirmado", "Pendente", "Cancelado", "Realizado", "Importante"]}
-                    defaultView="month"
-                />
-            </div>
+            <EventManager
+                events={events}
+                onEventCreate={handleEventCreate}
+                onEventUpdate={handleEventUpdate}
+                onEventDelete={handleEventDelete}
+                categories={["Visita", "Reunião", "Lembrete", "Pessoal"]}
+                availableTags={["Confirmado", "Pendente", "Cancelado", "Realizado", "Importante"]}
+                defaultView="month"
+            />
         </div>
     )
 }

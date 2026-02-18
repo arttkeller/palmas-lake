@@ -257,7 +257,7 @@ export function EventManager({
     }
 
     return (
-        <div className={cn("flex flex-col h-full overflow-hidden", className)}>
+        <div className={cn("flex flex-col", className)}>
             {/* Header */}
             <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between flex-shrink-0">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -383,8 +383,8 @@ export function EventManager({
                 </div>
             </div>
 
-            <div className="flex flex-col gap-2">
-                <div className="relative flex-1">
+            <div className="flex flex-col gap-2 flex-shrink-0">
+                <div className="relative">
                     <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                         placeholder="Buscar eventos..."
@@ -670,7 +670,7 @@ export function EventManager({
             )}
 
             {/* Calendar Views - Pass filteredEvents instead of events */}
-            <div className="flex-1 min-h-0 overflow-auto mt-3">
+            <div className="overflow-auto mt-2">
             {view === "month" && (
                 <MonthView
                     currentDate={currentDate}
@@ -1160,7 +1160,7 @@ function MonthView({
     }
 
     return (
-        <Card className="overflow-hidden h-full flex flex-col">
+        <Card className="overflow-hidden flex flex-col min-h-[480px] sm:min-h-[560px] md:min-h-[620px] lg:min-h-[680px] xl:min-h-[740px] 2xl:min-h-[840px]">
             <div className="grid grid-cols-7 border-b flex-shrink-0">
                 {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
                     <div key={day} className="border-r p-2 text-center text-xs font-medium last:border-r-0 sm:text-sm">
@@ -1180,6 +1180,7 @@ function MonthView({
                             key={index}
                             className={cn(
                                 "border-b border-r p-1 transition-colors last:border-r-0 sm:p-1.5",
+                                "min-h-[72px] sm:min-h-[86px] md:min-h-[96px] lg:min-h-[108px] xl:min-h-[120px] 2xl:min-h-[136px]",
                                 !isCurrentMonth && "bg-muted/30",
                                 "hover:bg-accent/50",
                             )}

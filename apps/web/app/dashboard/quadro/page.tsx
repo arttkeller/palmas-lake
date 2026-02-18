@@ -14,7 +14,6 @@ import { API_BASE_URL } from '@/lib/api-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createClient } from '@/lib/supabase';
-import { RealtimeStatusIndicator } from '@/components/ui/realtime-status';
 import { TemperatureBadge } from '@/components/ui/temperature-badge';
 import { TemperatureFilterBar } from '@/components/ui/temperature-filter-bar';
 import { LeadDetailModal, LeadDetailModalSection } from '@/components/ui/lead-detail-modal';
@@ -795,7 +794,6 @@ export default function LeadsKanban() {
                             </button>
                         )}
                     </div>
-                    <RealtimeStatusIndicator />
                     <Button
                         onClick={() => setIsNewLeadOpen(true)}
                         className="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 border-0"

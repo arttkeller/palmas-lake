@@ -9,7 +9,6 @@ import clsx from 'clsx';
 import { createClient } from '@/lib/supabase';
 import { API_BASE_URL } from '@/lib/api-config';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
-import { RealtimeStatusIndicator } from '@/components/ui/realtime-status';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -500,7 +499,6 @@ export default function ChatPage() {
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                            <RealtimeStatusIndicator />
                             <Phone className="h-5 w-5 text-muted-foreground/70 hover:text-muted-foreground cursor-pointer transition-colors" />
                             <MoreVertical className="h-5 w-5 text-muted-foreground/70 hover:text-muted-foreground cursor-pointer transition-colors" />
                         </div>

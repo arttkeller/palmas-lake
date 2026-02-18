@@ -14,7 +14,6 @@ import { Badge } from "@/components/ui/badge";
 import { GlassmorphismCard, getGlassmorphismClasses } from "@/components/ui/glassmorphism-card";
 import { TrendingUp, TrendingDown, Minus, Instagram, Globe, Search, RefreshCw } from "lucide-react";
 import { createClient } from '@/lib/supabase';
-import { RealtimeStatusIndicator } from '@/components/ui/realtime-status';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -375,7 +374,6 @@ export default function LeadsPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <RealtimeStatusIndicator />
                     <Button
                         variant="outline"
                         size="sm"
