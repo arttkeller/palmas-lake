@@ -138,7 +138,7 @@ def compute_source_analysis(
         return []
 
     df = df_leads.copy()
-    df["source"] = df["source"].fillna("unknown").astype(str).str.strip()
+    df["source"] = df["source"].fillna("whatsapp").astype(str).str.strip()
     df["status_lower"] = df["status"].fillna("").astype(str).str.strip().str.lower()
 
     result = []

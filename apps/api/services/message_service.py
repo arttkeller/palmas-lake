@@ -217,7 +217,8 @@ class MessageService:
                         new_lead = {
                             "full_name": wa_pushname.strip() if has_valid_pushname else f"Lead {phone}",
                             "phone": phone,
-                            "status": "novo_lead"
+                            "status": "novo_lead",
+                            "source": "whatsapp"
                         }
                         if profile_picture_url:
                             new_lead["profile_picture_url"] = profile_picture_url

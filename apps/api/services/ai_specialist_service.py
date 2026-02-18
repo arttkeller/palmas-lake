@@ -794,7 +794,7 @@ Responda a pergunta do usuário baseado nos dados fornecidos acima."""
             for lead in leads:
                 status = lead.get('status', 'unknown')
                 temp = lead.get('temperature', 'unknown')
-                source = lead.get('source', 'unknown')
+                source = lead.get('source') or 'whatsapp'
                 
                 by_status[status] = by_status.get(status, 0) + 1
                 by_temp[temp] = by_temp.get(temp, 0) + 1
