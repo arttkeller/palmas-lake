@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,7 @@ const EyeBall = ({
 
 export default function AnimatedLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
 
   /* ── Form state ── */
@@ -146,6 +147,25 @@ export default function AnimatedLoginPage() {
   const [success, setSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+
+  /* ── Handle auth error/success from URL query params ── */
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    const errorCode = searchParams.get("error_code");
+    const errorDesc = searchParams.get("error_description");
+
+    if (errorParam || errorCode) {
+      if (errorCode === "otp_expired") {
+        setError("O link de confirmação expirou. Faça login ou cadastre-se novamente.");
+      } else if (errorDesc) {
+        setError(errorDesc.replace(/\+/g, " "));
+      } else {
+        setError("Erro na autenticação. Tente novamente.");
+      }
+      // Clean URL params without reload
+      window.history.replaceState({}, "", "/");
+    }
+  }, [searchParams]);
 
   /* ── Animation state ── */
   const [mouseX, setMouseX] = useState(0);
@@ -278,6 +298,7 @@ export default function AnimatedLoginPage() {
         email,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             full_name: fullName.trim(),
             registration_project: AUTH_REGISTRATION_PROJECT,
