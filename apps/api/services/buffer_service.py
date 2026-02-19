@@ -33,11 +33,13 @@ def _cleanup_processed_ids():
 
 def cancel_buffer(lead_id: str):
     """Cancel any pending buffered messages for a lead (used before deletion)."""
-    _cancelled_leads.add(lead_id)
     removed = message_buffer.pop(lead_id, [])
     channel_map.pop(lead_id, None)
     pushname_map.pop(lead_id, None)
     if removed:
+        # Only mark as cancelled if there were pending messages in the buffer.
+        # This prevents FUTURE messages from being silently discarded after #apagar.
+        _cancelled_leads.add(lead_id)
         print(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
     else:
         print(f"[Buffer] No pending messages to cancel for {lead_id}")
