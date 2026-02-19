@@ -16,12 +16,13 @@ export default function DashboardLayout({
 
     return (
         <AuthProvider>
-            <div className="min-h-screen bg-background">
-                <main className="w-full overflow-y-auto p-4 md:p-8 pb-32 md:pb-36">
+            <div className="h-dvh flex flex-col bg-background">
+                <main className="flex-1 min-h-0 w-full overflow-y-auto p-4 md:p-8 pb-20 md:pb-24">
                     <SuspensePageTransition
                         key={pathname}
                         fallback={<DashboardSkeleton layout="default" />}
                         animationDuration={250}
+                        className="h-full"
                     >
                         {children}
                     </SuspensePageTransition>
