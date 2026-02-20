@@ -144,8 +144,13 @@ Mensagem atual do Cliente:
                 asyncio.to_thread(agent_maria.run, prompt_input),
                 timeout=90
             )
-            
-            return run_response.content
+
+            content = run_response.content
+            # Guard: agent may return None content after tool calls without text
+            if not content or not content.strip():
+                print(f"[Maria] WARNING: Agent returned empty content for {lead_id}, using fallback")
+                return "Oi! Como posso te ajudar? 😊"
+            return content
 
         except Exception as e:
             import traceback
@@ -291,7 +296,12 @@ Mensagem atual do Cliente:
         
         # 5. Gerar resposta com regras específicas do canal
         response_text = await self.generate_response(history, lead_id=lead_id, channel=channel)
-        
+
+        # Guard: ensure we always have a response to send
+        if not response_text or not response_text.strip():
+            print(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
+            response_text = "Oi! Como posso te ajudar? 😊"
+
         end_time = time.time()
         print(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
 

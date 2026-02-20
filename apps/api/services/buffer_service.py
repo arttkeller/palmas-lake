@@ -119,11 +119,17 @@ async def _process_buffer_inner(lead_id: str):
     # Each new message updates _last_msg_time, and the loop re-checks
     while True:
         last_time = _last_msg_time.get(lead_id, 0)
+        if last_time == 0:
+            print(f"[Buffer] Timer for {lead_id}: _last_msg_time missing, processing immediately")
+            break
         elapsed = time.time() - last_time
         remaining = BUFFER_DELAY - elapsed
         if remaining <= 0:
             break
         await asyncio.sleep(remaining)
+
+    msg_count = len(message_buffer.get(lead_id, []))
+    print(f"[Buffer] Timer fired for {lead_id}: {msg_count} message(s) ready to process")
 
     # Skip processing if lead was deleted via #apagar during the delay
     if lead_id in _cancelled_leads:
@@ -161,6 +167,11 @@ async def _process_buffer_inner(lead_id: str):
             # Pass (content, id) list
             response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
             print(f"Agent Response for {lead_id}: {response}")
+
+            if not response:
+                print(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
+            elif response == "IGNORED_DUPLICATE":
+                print(f"[Buffer] Anti-duplicate triggered for {lead_id}, skipping send")
 
             if response and response != "IGNORED_DUPLICATE":
                 # Split messages by double newline to send "picotado"
