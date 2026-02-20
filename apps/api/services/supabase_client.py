@@ -117,15 +117,15 @@ class QueryBuilder:
             method = getattr(self, 'method', 'GET')
             
             if method == 'GET':
-                res = requests.get(self.url, headers=self.headers, params=self.params)
+                res = requests.get(self.url, headers=self.headers, params=self.params, timeout=15)
             elif method == 'POST':
-                res = requests.post(self.url, headers=self.headers, json=self.data, params=self.params)
+                res = requests.post(self.url, headers=self.headers, json=self.data, params=self.params, timeout=15)
             elif method == 'PATCH':
-                res = requests.patch(self.url, headers=self.headers, json=self.data, params=self.params)
+                res = requests.patch(self.url, headers=self.headers, json=self.data, params=self.params, timeout=15)
             elif method == 'DELETE':
-                res = requests.delete(self.url, headers=self.headers, params=self.params)
+                res = requests.delete(self.url, headers=self.headers, params=self.params, timeout=15)
             else:
-                res = requests.get(self.url, headers=self.headers, params=self.params)
+                res = requests.get(self.url, headers=self.headers, params=self.params, timeout=15)
             
             # Mimic supabase-py response structure
             class Response:

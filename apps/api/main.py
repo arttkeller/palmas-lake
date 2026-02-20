@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
 import sentry_sdk
@@ -29,13 +31,17 @@ from routers import leads, webhook, analytics, chat, events, ai_specialist, debu
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Follow-ups e lembretes de visita (1h antes) são processados pelo cron job
-    # do Supabase (pg_cron + pg_net), que chama:
-    # POST /api/webhook/follow-up-cron a cada 5 minutos.
-    # Nenhum scheduler in-process é necessário.
+    # Thread pool amplo para chamadas AI concorrentes (asyncio.to_thread)
+    # Default do Python e ~5-8 threads, insuficiente para GPT-5.2 + sentiment em paralelo
+    loop = asyncio.get_running_loop()
+    executor = ThreadPoolExecutor(max_workers=50)
+    loop.set_default_executor(executor)
+    print("[Startup] Thread pool configurado com 50 workers")
+
     print("[Startup] Follow-ups + lembretes de visita gerenciados pelo cron job do Supabase")
     print("[Startup] Endpoint: POST /api/webhook/follow-up-cron")
     yield
+    executor.shutdown(wait=False)
     print("[Shutdown] API encerrada")
 
 

@@ -3,7 +3,6 @@ import os
 import json
 import asyncio
 from typing import List, Dict, Any
-from tenacity import retry, stop_after_attempt, wait_fixed
 from datetime import datetime
 import pytz
 import re
@@ -42,6 +41,8 @@ def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
             res = supabase.table("leads").select(select_fields).eq("phone", raw_phone).execute()
         return res
 
+
+_agent_semaphore = asyncio.Semaphore(10)
 
 class AgentManager:
     def __init__(self):
@@ -83,85 +84,80 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
             print(f"Error loading system prompt: {e}")
             return "Erro crítico ao carregar personalidade da IA."
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(2))
     async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp") -> str:
-        try:
-            # 1. Preparar Tools com contexto do lead
-            maria_tools = MariaTools(lead_id) if lead_id else []
-            tools_list = [maria_tools] if maria_tools else []
+        async with _agent_semaphore:
+            try:
+                # 1. Preparar Tools com contexto do lead
+                maria_tools = MariaTools(lead_id) if lead_id else []
+                tools_list = [maria_tools] if maria_tools else []
 
-            # 2. Carregar Prompt com regras específicas do canal
-            system_prompt = self._load_system_prompt(channel=channel)
-            
-            # 3. Configurar Agente Agno (Maria)
-            # Usando GPT-5.2 conforme solicitado
-            agent_maria = Agent(
-                model=OpenAIChat(
-                    id="gpt-5.2",
-                    reasoning_effort=self.reasoning_effort_main,
-                    max_completion_tokens=500,
-                    timeout=60
-                ),
-                description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
-                instructions=system_prompt,
-                tools=tools_list,
-                markdown=True
-            )
+                # 2. Carregar Prompt com regras específicas do canal
+                system_prompt = self._load_system_prompt(channel=channel)
 
-            # 4. Construir Prompt com Histórico
-            last_user_msg = "Olá"
-            chat_context = ""
-            
-            if conversation_history:
-                # Se a ultima for user, extraímos como input principal
-                # se não, usamos todo histórico como contexto
-                if conversation_history[-1]['role'] == 'user':
-                    last_user_msg = conversation_history[-1]['content']
-                    prev_msgs = conversation_history[:-1]
-                else:
-                    prev_msgs = conversation_history
-                
-                # Formatar histórico para contexto
-                for msg in prev_msgs:
-                    role_display = "Cliente" if msg['role'] == 'user' else "Maria"
-                    chat_context += f"{role_display}: {msg['content']}\n"
-            
-            if chat_context:
-                prompt_input = f"""
+                # 3. Configurar Agente Agno (Maria)
+                agent_maria = Agent(
+                    model=OpenAIChat(
+                        id="gpt-5.2",
+                        reasoning_effort=self.reasoning_effort_main,
+                        max_completion_tokens=500,
+                        timeout=60
+                    ),
+                    description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
+                    instructions=system_prompt,
+                    tools=tools_list,
+                    markdown=True
+                )
+
+                # 4. Construir Prompt com Histórico
+                last_user_msg = "Olá"
+                chat_context = ""
+
+                if conversation_history:
+                    if conversation_history[-1]['role'] == 'user':
+                        last_user_msg = conversation_history[-1]['content']
+                        prev_msgs = conversation_history[:-1]
+                    else:
+                        prev_msgs = conversation_history
+
+                    for msg in prev_msgs:
+                        role_display = "Cliente" if msg['role'] == 'user' else "Maria"
+                        chat_context += f"{role_display}: {msg['content']}\n"
+
+                if chat_context:
+                    prompt_input = f"""
 Histórico da conversa:
 {chat_context}
 
 Mensagem atual do Cliente:
 {last_user_msg}
 """
-            else:
-                prompt_input = last_user_msg
+                else:
+                    prompt_input = last_user_msg
 
-            # 5. Executar Agente (em thread separada para não bloquear o event loop)
-            print(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
+                # 5. Executar Agente (em thread separada para não bloquear o event loop)
+                print(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
 
-            run_response = await asyncio.wait_for(
-                asyncio.to_thread(agent_maria.run, prompt_input),
-                timeout=90
-            )
+                run_response = await asyncio.wait_for(
+                    asyncio.to_thread(agent_maria.run, prompt_input),
+                    timeout=90
+                )
 
-            content = run_response.content
-            # Guard: agent may return None content after tool calls without text
-            if not content or not content.strip():
-                print(f"[Maria] WARNING: Agent returned empty content for {lead_id}, using fallback")
-                return "Oi! Como posso te ajudar? 😊"
-            return content
+                content = run_response.content
+                if not content or not content.strip():
+                    print(f"[Maria] WARNING: Agent returned empty content for {lead_id}, using fallback")
+                    return "Oi! Como posso te ajudar? 😊"
+                return content
 
-        except Exception as e:
-            import traceback
-            error_msg = f"Error generating AI response with Agno: {e}\n{traceback.format_exc()}"
-            print(error_msg)
-            try:
-                with open("agent_error.log", "a") as f:
-                    f.write(f"\n--- Error at {datetime.now()} ---\n{error_msg}\n")
-            except:
-                pass
-            return "Desculpe, estou com dificuldades técnicas no momento. (Erro interno registrado)"
+            except Exception as e:
+                import traceback
+                error_msg = f"Error generating AI response with Agno: {e}\n{traceback.format_exc()}"
+                print(error_msg)
+                try:
+                    with open("agent_error.log", "a") as f:
+                        f.write(f"\n--- Error at {datetime.now()} ---\n{error_msg}\n")
+                except:
+                    pass
+                return "Desculpe, estou com dificuldades técnicas no momento. (Erro interno registrado)"
 
     async def process_message_buffer(self, lead_id: str, messages: List[tuple], pushname: str = "") -> str:
         """Processa um buffer de mensagens acumuladas"""

@@ -81,10 +81,11 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
     if pushname:
         pushname_map[lead_id] = pushname
 
-    # Update last message time (used by process_buffer_after_delay to reset timer)
-    _last_msg_time[lead_id] = time.time()
-
     async with buffer_locks[lead_id]:
+        # Update last message time INSIDE the lock to prevent race condition
+        # (previous batch clearing _last_msg_time could erase the new value)
+        _last_msg_time[lead_id] = time.time()
+
         if lead_id not in message_buffer:
             message_buffer[lead_id] = []
             # Start timer for this new batch
