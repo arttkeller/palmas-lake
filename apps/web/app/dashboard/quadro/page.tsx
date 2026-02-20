@@ -967,11 +967,11 @@ export default function LeadsKanban() {
                                                             : "bg-blue-50 text-blue-700 border border-blue-200/50"
                                                     )}>
                                                         {lead.objective === 'investir' ? (
-                                                            <>💰 Investidor — Atendimento Prioritário</>
+                                                            <><LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f911/lottie.json" size={16} fallback={<span>🤑</span>} /> Investidor — Atendimento Prioritário</>
                                                         ) : lead.objective === 'morar' ? (
                                                             <>🏠 Morador</>
                                                         ) : (
-                                                            <>🏠💰 Morar + Investir</>
+                                                            <><LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f911/lottie.json" size={16} fallback={<span>🤑</span>} />🏠 Morar + Investir</>
                                                         )}
                                                     </div>
                                                 )}
