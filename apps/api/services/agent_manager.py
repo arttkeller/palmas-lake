@@ -144,8 +144,16 @@ Mensagem atual do Cliente:
 
                 content = run_response.content
                 if not content or not content.strip():
-                    print(f"[Maria] WARNING: Agent returned empty content for {lead_id}, using fallback")
-                    return "Oi! Como posso te ajudar? 😊"
+                    # Agent made tool calls but didn't generate text — re-run to get a response
+                    print(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running for text response...")
+                    followup_response = await asyncio.wait_for(
+                        asyncio.to_thread(agent_maria.run, "Agora responda ao cliente com base na ação que você acabou de executar. Seja natural e continue a conversa."),
+                        timeout=60
+                    )
+                    content = followup_response.content
+                    if not content or not content.strip():
+                        print(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
+                        return "Oi! Como posso te ajudar? 😊"
                 return content
 
             except Exception as e:
@@ -259,7 +267,7 @@ Mensagem atual do Cliente:
                 if conv_res.data:
                     # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(30).execute()
+                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").execute()
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente
