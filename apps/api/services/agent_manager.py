@@ -99,7 +99,8 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                 model=OpenAIChat(
                     id="gpt-5.2",
                     reasoning_effort=self.reasoning_effort_main,
-                    max_completion_tokens=500
+                    max_completion_tokens=500,
+                    timeout=60
                 ),
                 description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
                 instructions=system_prompt,
@@ -138,8 +139,11 @@ Mensagem atual do Cliente:
 
             # 5. Executar Agente (em thread separada para não bloquear o event loop)
             print(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
-            
-            run_response = await asyncio.to_thread(agent_maria.run, prompt_input)
+
+            run_response = await asyncio.wait_for(
+                asyncio.to_thread(agent_maria.run, prompt_input),
+                timeout=90
+            )
             
             return run_response.content
 
@@ -288,19 +292,27 @@ Mensagem atual do Cliente:
         # 5. Gerar resposta com regras específicas do canal
         response_text = await self.generate_response(history, lead_id=lead_id, channel=channel)
         
-        # 5. Análise de Sentimento (Pós-resposta)
-        try:
-             # Usa mensagens do lead do histórico
-             lead_msgs = [m['content'] for m in history if m['role'] == 'user']
-             msgs_text = "\n".join(lead_msgs[-5:]) # Últimas 5
-             await self._analyze_and_update_sentiment(lead_id, msgs_text)
-        except Exception as sentiment_err:
-             print(f"Sentiment analysis error: {sentiment_err}")
-
         end_time = time.time()
         print(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
-        
+
+        # 6. Análise de Sentimento (fire-and-forget — NÃO bloqueia entrega da resposta)
+        try:
+             lead_msgs = [m['content'] for m in history if m['role'] == 'user']
+             msgs_text = "\n".join(lead_msgs[-5:])
+             asyncio.create_task(self._safe_analyze_sentiment(lead_id, msgs_text))
+        except Exception as sentiment_err:
+             print(f"Sentiment analysis scheduling error: {sentiment_err}")
+
         return response_text
+
+    async def _safe_analyze_sentiment(self, lead_id: str, msgs_text: str):
+        """Wrapper seguro para análise de sentimento em background."""
+        try:
+            await self._analyze_and_update_sentiment(lead_id, msgs_text)
+        except Exception as e:
+            import traceback
+            print(f"[Sentiment] Background error for {lead_id}: {e}")
+            traceback.print_exc()
 
     async def _analyze_and_update_sentiment(self, lead_id: str, messages_text: str):
         """Analisa sentimento usando Agent Agno com GPT-5-mini"""
@@ -405,14 +417,18 @@ Mensagem atual do Cliente:
                 model=OpenAIChat(
                     id="gpt-5-mini",
                     reasoning_effort=self.reasoning_effort_analysis,
-                    max_completion_tokens=1000
+                    max_completion_tokens=1000,
+                    timeout=30
                 ),
                 description="Você é um analisador de dados imobiliários.",
                 markdown=True
             )
             
             print(f"[Sentiment] Running Agno Agent (GPT-5-mini)...")
-            response = await asyncio.to_thread(agent_sentiment.run, prompt)
+            response = await asyncio.wait_for(
+                asyncio.to_thread(agent_sentiment.run, prompt),
+                timeout=45
+            )
             content = response.content
 
             # Guard against empty/None response from model

@@ -96,6 +96,23 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
         message_buffer[lead_id].append((message_content, message_id))
 
 async def process_buffer_after_delay(lead_id: str):
+    """Process buffered messages after BUFFER_DELAY of inactivity.
+    Wrapped in global try/except to prevent silent task death."""
+    try:
+        await _process_buffer_inner(lead_id)
+    except Exception as e:
+        import traceback
+        print(f"[Buffer] CRITICAL: Unhandled error processing {lead_id}: {e}")
+        traceback.print_exc()
+        sentry_sdk.capture_exception(e)
+        # Clean up state so new messages can still be buffered
+        message_buffer.pop(lead_id, None)
+        channel_map.pop(lead_id, None)
+        pushname_map.pop(lead_id, None)
+        _last_msg_time.pop(lead_id, None)
+
+
+async def _process_buffer_inner(lead_id: str):
     import time
 
     # Resettable timer: wait BUFFER_DELAY seconds after the LAST message
