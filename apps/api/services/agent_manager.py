@@ -414,7 +414,12 @@ Mensagem atual do Cliente:
             print(f"[Sentiment] Running Agno Agent (GPT-5-mini)...")
             response = await asyncio.to_thread(agent_sentiment.run, prompt)
             content = response.content
-            
+
+            # Guard against empty/None response from model
+            if not content or not content.strip():
+                print(f"[Sentiment] GPT-5-mini returned empty response, skipping analysis for {lead_id}")
+                return
+
             # Limpeza de JSON
             content = content.replace("```json", "").replace("```", "").strip()
             # Tentar extrair apenas o objeto JSON se houver texto em volta
@@ -422,7 +427,10 @@ Mensagem atual do Cliente:
             json_match = re.search(r'\{.*\}', content, re.DOTALL)
             if json_match:
                 content = json_match.group(0)
-            
+            else:
+                print(f"[Sentiment] No JSON object found in response: {content[:200]}")
+                return
+
             sentiment_data = json.loads(content)
             
             # Deterministic override for scheduled/positive leads (Requirements 8.1, 8.2)
