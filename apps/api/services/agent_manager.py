@@ -144,10 +144,13 @@ Mensagem atual do Cliente:
 
                 content = run_response.content
                 if not content or not content.strip():
-                    # Agent made tool calls but didn't generate text — re-run to get a response
-                    print(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running for text response...")
+                    # Agent made tool calls but didn't generate text — re-run WITH FULL CONTEXT
+                    print(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running with full context...")
+                    followup_prompt = f"""{prompt_input}
+
+[INSTRUÇÃO: Você acabou de executar uma ação/tool call com sucesso. Agora responda ao cliente de forma natural e breve, confirmando o que foi feito e continuando a conversa. NÃO se apresente novamente.]"""
                     followup_response = await asyncio.wait_for(
-                        asyncio.to_thread(agent_maria.run, "Agora responda ao cliente com base na ação que você acabou de executar. Seja natural e continue a conversa."),
+                        asyncio.to_thread(agent_maria.run, followup_prompt),
                         timeout=60
                     )
                     content = followup_response.content
@@ -267,7 +270,7 @@ Mensagem atual do Cliente:
                 if conv_res.data:
                     # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").execute()
+                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(200).execute()
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente
@@ -276,9 +279,6 @@ Mensagem atual do Cliente:
                         for m in past_msgs:
                             role = "assistant" if m["sender_type"] == "ai" else "user"
                             content = m["content"]
-                            # Evitar duplicar a mensagem que acabamos de receber se ela já foi salva
-                            if content.strip() == current_message_content.split(']')[-1].strip():
-                                continue 
                             history.append({"role": role, "content": content})
                             
         except Exception as e:
