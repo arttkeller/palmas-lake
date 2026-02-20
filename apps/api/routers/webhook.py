@@ -349,15 +349,21 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         supabase = create_client()
 
         is_instagram = lead_identifier.startswith("ig:")
-        
+
         if is_instagram:
             ig_id = lead_identifier[3:]
             print(f"🗑️ [CLEAR] Iniciando limpeza para Instagram IGSID: {ig_id}")
             lead_res = supabase.table("leads").select("id").eq("instagram_id", ig_id).execute()
         else:
-            phone = lead_identifier.split('@')[0] if '@' in lead_identifier else lead_identifier
-            print(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone}")
+            raw_phone = lead_identifier.split('@')[0] if '@' in lead_identifier else lead_identifier
+            # Normalize phone (adds 9th digit for DDDs >= 29) to match how leads are stored
+            from services.uazapi_service import UazapiService
+            phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
+            print(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone} (raw: {raw_phone})")
             lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
+            # Fallback: try raw phone for leads stored before normalization
+            if not lead_res.data and phone != raw_phone:
+                lead_res = supabase.table("leads").select("id").eq("phone", raw_phone).execute()
         
         if not lead_res.data:
             print(f"🗑️ [CLEAR] Lead não encontrado para {lead_identifier}")
