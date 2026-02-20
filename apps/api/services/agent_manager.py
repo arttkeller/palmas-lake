@@ -99,7 +99,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                 model=OpenAIChat(
                     id="gpt-5.2",
                     reasoning_effort=self.reasoning_effort_main,
-                    max_completion_tokens=2000
+                    max_completion_tokens=500
                 ),
                 description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
                 instructions=system_prompt,
@@ -190,7 +190,7 @@ Mensagem atual do Cliente:
                             now = datetime.now(timezone.utc)
                             diff = (now - created_at).total_seconds()
                             
-                            if diff < 60: # Janela de 60s para evitar duplicatas (Meta pode retransmitir webhooks)
+                            if diff < 15: # Janela de 15s para evitar duplicatas (webhook retries)
                                 print(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
                                 return "IGNORED_DUPLICATE"
         except Exception as e:
@@ -254,7 +254,7 @@ Mensagem atual do Cliente:
                 if conv_res.data:
                     # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(500).execute()
+                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(30).execute()
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente
