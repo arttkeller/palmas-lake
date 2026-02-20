@@ -99,7 +99,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                     model=OpenAIChat(
                         id="gpt-5.2",
                         reasoning_effort=self.reasoning_effort_main,
-                        max_completion_tokens=500,
+                        max_completion_tokens=2048,
                         timeout=60
                     ),
                     description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
