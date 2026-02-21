@@ -247,7 +247,14 @@ Mensagem atual do Cliente:
                 # Build source-specific context
                 source_info = ""
                 if source == "instagram":
-                    source_info = """
+                    # If name is still the generic IGSID fallback, don't let the AI use it
+                    if full_name.startswith("Instagram ") and full_name[10:].isdigit():
+                        full_name = "Visitante"
+                        source_info = """
+    <channel>Instagram DM</channel>
+    <channel_rule>Este lead veio pelo Instagram. O nome real NAO foi obtido (perfil privado). NAO use o nome "Visitante" na conversa — cumprimente de forma generica ("Ola! Tudo bem?") sem usar nome. Pergunte o nome na proxima etapa.</channel_rule>"""
+                    else:
+                        source_info = """
     <channel>Instagram DM</channel>
     <channel_rule>Este lead veio pelo Instagram. O nome dele ja foi obtido automaticamente do perfil do Instagram. NAO pergunte o nome novamente. Comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
                 elif current_step != "name" and not full_name.startswith("Lead "):

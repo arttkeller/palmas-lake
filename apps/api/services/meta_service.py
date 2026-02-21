@@ -225,7 +225,7 @@ class MetaService:
         }
         try:
             print(f"[MetaService] Fetching Instagram profile for {user_id}...")
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, timeout=5)
             print(f"[MetaService] Profile response: {response.status_code} - {response.text}")
             response.raise_for_status()
             data = response.json()
@@ -308,3 +308,29 @@ class MetaService:
             if hasattr(e, 'response') and e.response is not None:
                 print(f"[MetaService] Response body: {e.response.text}")
             return None
+
+    def mark_instagram_seen(self, recipient_id: str) -> bool:
+        """
+        Send 'mark_seen' sender action to accept message requests and mark as read.
+        Must be called before sending a reply to ensure the conversation is accepted.
+        """
+        if not self.page_id or not self.page_access_token:
+            print("[MetaService] No Page token/ID for mark_seen")
+            return False
+
+        url = f"{self.base_url}/{self.page_id}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.page_access_token}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "recipient": {"id": recipient_id},
+            "sender_action": "mark_seen",
+        }
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=5)
+            print(f"[MetaService] mark_seen for {recipient_id}: {response.status_code}")
+            return response.status_code == 200
+        except Exception as e:
+            print(f"[MetaService] mark_seen failed (non-blocking): {e}")
+            return False
