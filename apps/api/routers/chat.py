@@ -23,6 +23,22 @@ def get_conversation_by_lead(lead_id: str):
         raise HTTPException(status_code=404, detail="Conversation not found for this lead")
     return conversation
 
+@router.get("/chat/conversations/all-by-lead/{lead_id}")
+def get_all_conversations_by_lead(lead_id: str):
+    """
+    Returns ALL conversations for a lead (WhatsApp + Instagram).
+    """
+    conversations = service.get_all_conversations_by_lead(lead_id)
+    return conversations if conversations else []
+
+@router.get("/chat/messages/by-lead/{lead_id}")
+def get_messages_by_lead(lead_id: str):
+    """
+    Returns ALL messages across ALL conversations for a lead, with platform info.
+    """
+    messages = service.get_messages_by_lead(lead_id)
+    return messages if messages else []
+
 @router.get("/chat/messages/{conversation_id}")
 def get_messages(conversation_id: str):
     """

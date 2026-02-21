@@ -7,6 +7,7 @@ export interface Message {
     message_type: 'text' | 'image' | 'audio';
     created_at: string;
     metadata?: string | Record<string, any>;
+    platform?: 'whatsapp' | 'instagram';
 }
 
 export interface Conversation {

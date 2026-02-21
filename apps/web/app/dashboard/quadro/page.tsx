@@ -54,6 +54,7 @@ interface Lead {
     classificationType?: 'cliente_final' | 'corretor' | 'investidor';
     isHot?: boolean;
     source?: 'instagram' | 'facebook' | 'site' | 'indicacao' | 'whatsapp';
+    instagramId?: string;
     temperature?: LeadTemperature;
     lastInteractionAt?: string;
 }
@@ -445,6 +446,7 @@ export default function LeadsKanban() {
                 classificationType,
                 isHot: item.is_hot,
                 source: item.source,
+                instagramId: item.instagram_id,
                 temperature: (item.temperature ? normalizeTemperature(item.temperature) : null) as LeadTemperature,
                 lastInteractionAt: item.last_interaction ?? item.last_interaction_at,
             };
@@ -520,27 +522,28 @@ export default function LeadsKanban() {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 2000);
 
-            const convRes = await fetch(
-                `${API_BASE_URL}/api/chat/conversations/by-lead/${lead.id}`,
+            // Fetch ALL messages across ALL conversations (WhatsApp + Instagram)
+            const msgsRes = await fetch(
+                `${API_BASE_URL}/api/chat/messages/by-lead/${lead.id}`,
                 { signal: controller.signal }
             );
             clearTimeout(timeout);
 
-            if (convRes.ok) {
-                const convData = await convRes.json();
-                const conversationId = convData.id;
-                setActiveConversationId(conversationId);
-
-                // Fetch messages via API (Requirements 2.2)
-                const msgsRes = await fetch(
-                    `${API_BASE_URL}/api/chat/messages/${conversationId}`
-                );
-                if (msgsRes.ok) {
-                    const msgs = await msgsRes.json();
-                    setConversationMessages(msgs || []);
-                    setIsLoadingMessages(false);
-                    return;
-                }
+            if (msgsRes.ok) {
+                const msgs = await msgsRes.json();
+                setConversationMessages(msgs || []);
+                // Also fetch conversations to set active ID
+                try {
+                    const convRes = await fetch(
+                        `${API_BASE_URL}/api/chat/conversations/by-lead/${lead.id}`
+                    );
+                    if (convRes.ok) {
+                        const convData = await convRes.json();
+                        setActiveConversationId(convData.id);
+                    }
+                } catch { /* non-critical */ }
+                setIsLoadingMessages(false);
+                return;
             }
         } catch (err) {
             // API unavailable, falling back to Supabase direct
@@ -988,7 +991,18 @@ export default function LeadsKanban() {
                                                 <div className="flex items-center justify-between pt-3 border-t border-black/5">
                                                     <div className="flex items-center gap-2">
                                                         {/* Channel Icon */}
-                                                        {lead.source === 'instagram' ? (
+                                                        {/* Multi-channel: show both icons when lead has instagram_id + phone */}
+                                                        {lead.instagramId && lead.phone ? (
+                                                            <div className="flex items-center gap-1 text-xs font-medium text-foreground/80">
+                                                                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
+                                                                    <WhatsAppLogo className="w-3 h-3 text-white" />
+                                                                </div>
+                                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
+                                                                    <Instagram className="w-3 h-3 text-white" />
+                                                                </div>
+                                                                <span>Multi-canal</span>
+                                                            </div>
+                                                        ) : lead.source === 'instagram' ? (
                                                             <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
                                                                 <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
                                                                     <Instagram className="w-3 h-3 text-white" />

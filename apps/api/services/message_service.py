@@ -424,12 +424,11 @@ class MessageService:
     def get_conversation_by_lead(self, lead_id: str):
         """
         Returns the conversation for a specific lead.
-        
-        Implements error handling (Requirements 3.4, 7.4).
-        
+        For backwards compatibility, returns the first conversation found.
+
         Args:
             lead_id: UUID of the lead
-        
+
         Returns:
             Conversation data with lead details, or None if not found
         """
@@ -441,10 +440,56 @@ class MessageService:
             return None
         except Exception as e:
             logger.error(f"Error getting conversation by lead {lead_id}: {e}")
-            # Check for schema-related errors (Requirements 7.4)
             if "schema" in str(e).lower():
                 logger.error(f"[SCHEMA ERROR] Conversation query failed - verify schema 'palmaslake-agno' is correct")
             return None
+
+    def get_all_conversations_by_lead(self, lead_id: str):
+        """
+        Returns ALL conversations for a lead (WhatsApp + Instagram).
+        Used by the CRM frontend to display multi-channel conversations.
+
+        Args:
+            lead_id: UUID of the lead
+
+        Returns:
+            List of conversations with platform info, or empty list
+        """
+        try:
+            res = self.supabase.table("conversations").select("*, leads(full_name, phone, profile_picture_url, last_interaction, instagram_id, source)").eq("lead_id", lead_id).order("updated_at", direction="desc").execute()
+            return res.data if res.data else []
+        except Exception as e:
+            logger.error(f"Error getting all conversations for lead {lead_id}: {e}")
+            return []
+
+    def get_messages_by_lead(self, lead_id: str):
+        """
+        Returns ALL messages across ALL conversations for a lead, with platform info.
+        Messages are sorted by created_at and include which platform they came from.
+
+        Args:
+            lead_id: UUID of the lead
+
+        Returns:
+            List of messages with 'platform' field injected, sorted by created_at
+        """
+        try:
+            convs = self.supabase.table("conversations").select("id, platform").eq("lead_id", lead_id).execute()
+            if not convs.data:
+                return []
+
+            all_messages = []
+            for conv in convs.data:
+                msgs = self.supabase.table("messages").select("*").eq("conversation_id", conv["id"]).execute()
+                if msgs.data:
+                    for msg in msgs.data:
+                        msg["platform"] = conv.get("platform", "whatsapp")
+                    all_messages.extend(msgs.data)
+
+            return sorted(all_messages, key=lambda x: x['created_at'])
+        except Exception as e:
+            logger.error(f"Error getting messages by lead {lead_id}: {e}")
+            return []
 
     def get_messages(self, conversation_id: str):
         """

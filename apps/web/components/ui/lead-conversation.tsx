@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Send, Loader2, MessageSquare, Bot, User } from 'lucide-react';
+import { Send, Loader2, MessageSquare, Bot, User, Instagram, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/chat';
 
@@ -235,13 +235,14 @@ function MessageBubble({ message }: MessageBubbleProps) {
   const isOutgoing = message.sender_type === 'user' || message.sender_type === 'ai';
   const isAI = message.sender_type === 'ai';
   const isLead = message.sender_type === 'lead';
+  const platform = (message as any).platform as string | undefined;
 
   const parsedContent = parseMessageContent(message.content);
 
   // Check for reaction in metadata
   const msgAny = message as any;
-  const metadata = typeof msgAny.metadata === 'string' 
-    ? JSON.parse(msgAny.metadata || '{}') 
+  const metadata = typeof msgAny.metadata === 'string'
+    ? JSON.parse(msgAny.metadata || '{}')
     : (msgAny.metadata || {});
   const reaction = metadata?.reaction;
 
@@ -306,15 +307,21 @@ function MessageBubble({ message }: MessageBubbleProps) {
               {parsedContent}
             </p>
 
-            {/* Timestamp */}
+            {/* Timestamp + Platform */}
             <span
               className={cn(
-                'block text-right text-[10px] mt-1',
+                'flex items-center justify-end gap-1 text-[10px] mt-1',
                 isOutgoing && !isAI
                   ? 'text-white/70'
                   : 'text-muted-foreground'
               )}
             >
+              {platform === 'instagram' && (
+                <Instagram className="w-3 h-3 inline-block" />
+              )}
+              {platform === 'whatsapp' && (
+                <MessageCircle className="w-3 h-3 inline-block" />
+              )}
               {formatTime(message.created_at)}
             </span>
           </div>
