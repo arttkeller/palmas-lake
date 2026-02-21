@@ -287,6 +287,7 @@ class MetaService:
         }
         payload = {
             "recipient": {"id": recipient_id},
+            "messaging_type": "RESPONSE",
             "message": {"text": clean_text},
         }
         try:

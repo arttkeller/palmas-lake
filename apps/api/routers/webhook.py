@@ -732,6 +732,13 @@ async def handle_webhook(request: Request):
                 lead_identifier = f"ig:{sender_id}"
                 print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
 
+                # Accept message request immediately (mark as seen/read)
+                # This must happen ASAP so the conversation is accepted before we reply
+                try:
+                    meta_service.mark_instagram_seen(sender_id)
+                except Exception as seen_err:
+                    print(f"[Meta Webhook] mark_seen failed (non-blocking): {seen_err}")
+
                 # --- IDEMPOTENCY CHECK: Ignore if msg_id already exists in DB ---
                 if msg_id:
                     try:
