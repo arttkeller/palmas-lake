@@ -51,6 +51,48 @@ class AgentManager:
         self.reasoning_effort_main = "medium"
         self.reasoning_effort_analysis = "medium"
 
+    @staticmethod
+    def _extract_name_from_response(ai_response: str, user_message: str) -> str:
+        """
+        Fallback: extract lead name from AI response when atualizar_nome tool wasn't called.
+        Looks for patterns like "Prazer, X!", "Olá, X!", "Bem-vinda, X!" in the AI response.
+        Returns the extracted name or empty string if not found.
+        """
+        import re
+        # Patterns where the AI greets the user by name
+        patterns = [
+            r'[Pp]razer,?\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*[!❤️🤩🥰😊✨🌟💚]',
+            r'[Oo]l[áa],?\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*[!❤️🤩🥰😊✨🌟💚]',
+            r'[Bb]em[-\s]?vind[ao],?\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*[!❤️🤩🥰😊✨🌟💚]',
+            r'[Qq]ue\s+bom,?\s+([A-ZÀ-Ú][a-zà-ú]+(?:\s+[A-ZÀ-Ú][a-zà-ú]+)*)\s*[!❤️🤩🥰😊✨🌟💚]',
+            # Simple: name followed by comma/exclamation in first sentence
+            r'^[^.!?]*?(?:[Pp]razer|[Oo]l[áa])[,!]?\s+([A-ZÀ-Ú][a-zà-ú]+)',
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, ai_response)
+            if match:
+                name = match.group(1).strip()
+                # Sanity check: name should be 2-30 chars, not a common word
+                skip_words = {"Sou", "Tudo", "Bem", "Bom", "Como", "Que", "Maria", "Lake", "Palmas", "Towers"}
+                if 2 <= len(name) <= 30 and name not in skip_words:
+                    return name
+
+        # Second strategy: if user's message is very short (likely just a name)
+        clean_msg = user_message.strip().strip('"\'').strip()
+        # Remove [ID: xxx] prefix from buffered messages
+        clean_msg = re.sub(r'\[ID:\s*[^\]]+\]\s*', '', clean_msg).strip()
+        if clean_msg and 2 <= len(clean_msg) <= 30:
+            words = clean_msg.split()
+            # 1-3 words, all capitalized or title-cased = likely a name
+            if 1 <= len(words) <= 3 and all(w[0].isupper() for w in words if w):
+                skip_words = {"Oi", "Olá", "Ola", "Bom", "Boa", "Sim", "Não", "Nao", "Ok", "Tudo", "Dia", "Tarde", "Noite",
+                              "Obrigado", "Obrigada", "Office", "Flat", "Apartamento", "Sala", "Cobertura"}
+                if words[0] not in skip_words:
+                    return clean_msg
+
+        return ""
+
     def _load_system_prompt(self, channel: str = "whatsapp") -> str:
         """Lê o prompt do arquivo MD e injeta variáveis dinâmicas"""
         try:
@@ -315,6 +357,21 @@ Mensagem atual do Cliente:
 
         end_time = time.time()
         print(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
+
+        # 5b. Fallback: detect name from AI response if atualizar_nome tool wasn't called
+        try:
+            # Re-check current name in DB (if tool was called, name is already updated)
+            _fb_lead = _lookup_lead(supabase, lead_id, "id, full_name")
+            if _fb_lead.data:
+                _fb_name = _fb_lead.data[0].get("full_name", "")
+                if _fb_name.startswith("Lead ") or _fb_name == "Visitante":
+                    _extracted = self._extract_name_from_response(response_text, current_message_content)
+                    if _extracted:
+                        print(f"[Fallback] AI didn't call atualizar_nome. Extracting name: '{_extracted}'")
+                        supabase.table("leads").update({"full_name": _extracted}).eq("id", _fb_lead.data[0]["id"]).execute()
+                        print(f"[Fallback] Name updated to '{_extracted}' for lead {_fb_lead.data[0]['id']}")
+        except Exception as name_fallback_err:
+            print(f"[Fallback] Name extraction error (non-blocking): {name_fallback_err}")
 
         # 6. Análise de Sentimento (fire-and-forget — NÃO bloqueia entrega da resposta)
         try:
