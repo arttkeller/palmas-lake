@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Send, Loader2, MessageSquare, Bot, User, Instagram, MessageCircle } from 'lucide-react';
+import { Send, Loader2, MessageSquare, Bot, BotOff, User, Instagram, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/chat';
 
@@ -17,6 +17,10 @@ export interface LeadConversationProps {
   onSendMessage?: (message: string) => Promise<void>;
   /** Whether sending is in progress */
   isSending?: boolean;
+  /** Whether AI is paused for this lead */
+  isAiPaused?: boolean;
+  /** Callback to toggle AI pause */
+  onToggleAi?: () => Promise<void>;
   /** Additional CSS classes */
   className?: string;
 }
@@ -108,6 +112,8 @@ export function LeadConversation({
   isLoading = false,
   onSendMessage,
   isSending = false,
+  isAiPaused = false,
+  onToggleAi,
   className,
 }: LeadConversationProps) {
   const [inputValue, setInputValue] = React.useState('');
@@ -171,10 +177,50 @@ export function LeadConversation({
         )}
       </div>
 
+      {/* AI Status Banner */}
+      {isAiPaused && (
+        <div className="px-4 py-2 bg-amber-50 border-t border-amber-200 flex items-center justify-between">
+          <div className="flex items-center gap-2 text-amber-700">
+            <BotOff className="w-4 h-4" />
+            <span className="text-xs font-medium">IA pausada - Atendimento humano ativo</span>
+          </div>
+          {onToggleAi && (
+            <button
+              onClick={onToggleAi}
+              className="text-xs text-amber-700 hover:text-amber-900 font-medium underline"
+            >
+              Reativar IA
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Message Input (Requirements 3.4) */}
       {onSendMessage && (
         <div className="p-4 border-t border-black/5">
           <div className="flex items-center gap-2">
+            {/* AI Toggle Button */}
+            {onToggleAi && (
+              <button
+                onClick={onToggleAi}
+                className={cn(
+                  'p-2.5 rounded-xl flex-shrink-0',
+                  'transition-all duration-200',
+                  'focus:outline-none focus:ring-2',
+                  isAiPaused
+                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 focus:ring-amber-500/50 border border-amber-300'
+                    : 'bg-violet-100 text-violet-700 hover:bg-violet-200 focus:ring-violet-500/50 border border-violet-300'
+                )}
+                aria-label={isAiPaused ? 'Reativar IA' : 'Pausar IA'}
+                title={isAiPaused ? 'IA pausada - Clique para reativar' : 'IA ativa - Clique para pausar'}
+              >
+                {isAiPaused ? (
+                  <BotOff className="w-5 h-5" />
+                ) : (
+                  <Bot className="w-5 h-5" />
+                )}
+              </button>
+            )}
             <input
               ref={inputRef}
               type="text"

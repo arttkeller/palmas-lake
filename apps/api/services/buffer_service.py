@@ -142,6 +142,28 @@ async def _process_buffer_inner(lead_id: str):
         print(f"[Buffer] Skipping processing for deleted lead {lead_id}")
         return
 
+    # Skip AI processing if ai_paused is True for this lead
+    try:
+        from services.supabase_client import create_client as _create_sb
+        _sb = _create_sb()
+        if lead_id.startswith("ig:"):
+            _ig_id = lead_id[3:]
+            _pause_check = _sb.table("leads").select("ai_paused").eq("instagram_id", _ig_id).execute()
+        else:
+            _phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
+            _pause_check = _sb.table("leads").select("ai_paused").eq("phone", _phone).execute()
+
+        if _pause_check.data and _pause_check.data[0].get("ai_paused"):
+            print(f"[Buffer] AI is PAUSED for {lead_id}, skipping AI processing")
+            async with buffer_locks[lead_id]:
+                message_buffer.pop(lead_id, None)
+                channel_map.pop(lead_id, None)
+                pushname_map.pop(lead_id, None)
+                _last_msg_time.pop(lead_id, None)
+            return
+    except Exception as pause_err:
+        print(f"[Buffer] Error checking ai_paused (proceeding normally): {pause_err}")
+
     # Pop messages under lock (brief) — release BEFORE agent processing
     # so new incoming messages can be buffered immediately
     async with buffer_locks[lead_id]:

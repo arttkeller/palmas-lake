@@ -48,6 +48,7 @@ class MariaTools(Toolkit):
         self.register(self.enviar_imagens)
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
+        self.register(self.transferir_para_humano)
 
     def _lead_query(self, query):
         """
@@ -679,3 +680,59 @@ class MariaTools(Toolkit):
             ).execute()
         except Exception as e:
             print(f"Error updating lead status: {e}")
+
+    def transferir_para_humano(self, motivo: str, resumo_conversa: str):
+        """
+        Transfere o atendimento para o gerente comercial humano.
+        Envia um resumo da conversa para o WhatsApp do gerente.
+        Use quando: o lead perguntar sobre preços/valores, quiser negociar,
+        ou quando a conversa precisar de atendimento humano especializado.
+
+        Args:
+            motivo: Motivo da transferência (ex: "Lead perguntou sobre valores")
+            resumo_conversa: Resumo breve da conversa até o momento, incluindo nome do lead, interesse e principais pontos discutidos.
+        """
+        GERENTE_PHONE = "5527998724593"
+        print(f"[Tool] Transferir para humano: {motivo}")
+
+        supabase = create_client()
+        try:
+            # 1. Buscar dados do lead
+            lead_res = self._lead_query(
+                supabase.table("leads").select("id, full_name, phone, instagram_id, source, interest_type, objective")
+            ).execute()
+
+            lead_info = lead_res.data[0] if lead_res.data else {}
+            lead_name = lead_info.get("full_name", "Desconhecido")
+            lead_phone = lead_info.get("phone", "N/A")
+            lead_source = lead_info.get("source", "whatsapp")
+            interest = lead_info.get("interest_type", "N/A")
+            objective = lead_info.get("objective", "N/A")
+
+            # 2. Montar mensagem para o gerente
+            msg = (
+                f"*Transferência de Lead*\n\n"
+                f"*Nome:* {lead_name}\n"
+                f"*Telefone:* {lead_phone}\n"
+                f"*Canal:* {lead_source}\n"
+                f"*Interesse:* {interest}\n"
+                f"*Objetivo:* {objective}\n"
+                f"*Motivo:* {motivo}\n\n"
+                f"*Resumo:*\n{resumo_conversa}"
+            )
+
+            # 3. Enviar para o gerente via WhatsApp
+            u_service = UazapiService()
+            u_service.send_whatsapp_message(GERENTE_PHONE, msg)
+            print(f"[Tool] Resumo enviado para gerente {GERENTE_PHONE}")
+
+            # 4. Pausar IA para esse lead
+            if lead_res.data:
+                supabase.table("leads").update({"ai_paused": True}).eq("id", lead_info["id"]).execute()
+                print(f"[Tool] IA pausada para lead {lead_info['id']}")
+
+        except Exception as e:
+            print(f"[Tool] Erro ao transferir para humano: {e}")
+            return f"Erro ao transferir: {e}"
+
+        return "Lead transferido com sucesso. Resumo enviado para o gerente comercial."

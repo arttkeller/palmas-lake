@@ -200,6 +200,7 @@ export default function LeadsKanban() {
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
     const [isSendingMessage, setIsSendingMessage] = useState(false);
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [isAiPaused, setIsAiPaused] = useState(false);
 
     // Wrapper to clean up conversation state when modal closes
     const closeModal = useCallback(() => {
@@ -516,6 +517,13 @@ export default function LeadsKanban() {
         // Load conversation messages - try API first, fallback to Supabase direct
         setIsLoadingMessages(true);
         setActiveConversationId(null);
+        setIsAiPaused(false);
+
+        // Load AI pause status
+        fetch(`${API_BASE_URL}/api/chat/ai-status/${lead.id}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => { if (data) setIsAiPaused(data.ai_paused); })
+            .catch(() => {});
 
         // 1. Try API backend first (Requirements 2.1)
         try {
@@ -635,22 +643,34 @@ export default function LeadsKanban() {
     // Handle send message from modal (Requirements 3.4)
     const handleSendMessage = async (message: string) => {
         if (!selectedLead) return;
-        
+
         setIsSendingMessage(true);
         try {
-            // TODO: Implement actual message sending via WhatsApp API
-            // For now, just add to local state as optimistic update
-            const newMessage: Message = {
-                id: Date.now().toString(),
-                conversation_id: '',
-                sender_type: 'user',
-                content: message,
-                message_type: 'text',
-                created_at: new Date().toISOString(),
-            };
-            setConversationMessages(prev => [...prev, newMessage]);
+            const res = await fetch(`${API_BASE_URL}/api/chat/messages/send`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lead_id: selectedLead.id, content: message }),
+            });
+            if (!res.ok) throw new Error('Failed to send message');
+            const data = await res.json();
+            // Auto-pause IA when human sends message
+            if (data.ai_paused) setIsAiPaused(true);
         } finally {
             setIsSendingMessage(false);
+        }
+    };
+
+    // Handle toggle AI pause
+    const handleToggleAi = async () => {
+        if (!selectedLead) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/chat/toggle-ai/${selectedLead.id}`, { method: 'POST' });
+            if (res.ok) {
+                const data = await res.json();
+                setIsAiPaused(data.ai_paused);
+            }
+        } catch (err) {
+            console.error('Failed to toggle AI:', err);
         }
     };
 
@@ -1152,6 +1172,8 @@ export default function LeadsKanban() {
                         messages={conversationMessages}
                         onSendMessage={handleSendMessage}
                         isLoading={isLoadingMessages}
+                        isAiPaused={isAiPaused}
+                        onToggleAi={handleToggleAi}
                         isSending={isSendingMessage}
                     />
                 }
