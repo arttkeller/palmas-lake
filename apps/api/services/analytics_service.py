@@ -117,7 +117,7 @@ class AnalyticsService:
             # 6. Response Time Analysis (REAL DATA)
             response_times = {"ai_avg_seconds": 0, "lead_avg_minutes": 0, "history": []}
             try:
-                msgs_res = self.supabase.table("messages").select("sender_type, created_at, conversation_id").order("created_at", desc=True).limit(500).execute()
+                msgs_res = self.supabase.table("messages").select("sender_type, created_at, conversation_id").order("created_at", direction="desc").limit(500).execute()
                 if msgs_res.data:
                     df_msgs_rt = pd.DataFrame(msgs_res.data)
                     response_times = compute_response_times(df_msgs_rt)
@@ -141,7 +141,7 @@ class AnalyticsService:
             # B) Scan recent messages for "Active Objections" (Sentiment Scan)
             try:
                 # Fetch last 100 messages from 'lead' to detect live friction
-                live_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", desc=True).limit(100).execute()
+                live_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(100).execute()
                 if live_msgs.data:
                     for m in live_msgs.data:
                         content = str(m['content']).lower()
@@ -189,7 +189,7 @@ class AnalyticsService:
             faq_list = []
             try:
                 # Buscar mensagens dos leads para identificar perguntas frequentes
-                faq_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", desc=True).limit(500).execute()
+                faq_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(500).execute()
                 if faq_msgs.data:
                     faq_keywords = {
                         'Localização': ['onde fica', 'localização', 'endereço', 'qual o endereço', 'fica onde', 'região'],
@@ -263,7 +263,7 @@ class AnalyticsService:
             try:
                 msgs_for_time = self.supabase.table("messages").select(
                     "conversation_id, sender_type, created_at"
-                ).order("created_at", desc=True).limit(1000).execute()
+                ).order("created_at", direction="desc").limit(1000).execute()
                 df_msgs_time = pd.DataFrame(msgs_for_time.data) if msgs_for_time.data else pd.DataFrame()
 
                 # If messages have no lead_id, try joining via conversations
@@ -359,7 +359,7 @@ class AnalyticsService:
                 conv_id = conv_res.data[0]['id']
                 
                 # Buscar últimas 20 mensagens do lead (não da IA)
-                msgs_res = self.supabase.table("messages").select("content, sender_type").eq("conversation_id", conv_id).eq("sender_type", "lead").order("created_at", desc=True).limit(20).execute()
+                msgs_res = self.supabase.table("messages").select("content, sender_type").eq("conversation_id", conv_id).eq("sender_type", "lead").order("created_at", direction="desc").limit(20).execute()
                 
                 if not msgs_res.data:
                     results.append({

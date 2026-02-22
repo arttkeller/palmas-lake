@@ -62,7 +62,7 @@ async def list_events(
         if status:
             query = query.eq("status", status)
             
-        query = query.order("start_time", desc=False).limit(limit)
+        query = query.order("start_time", direction="asc").limit(limit)
         
         result = query.execute()
         return result.data

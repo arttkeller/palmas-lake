@@ -77,7 +77,7 @@ def send_message_to_lead(req: SendMessageRequest):
         # 2. Determinar canal (última conversa ativa)
         conv_res = supabase.table("conversations").select("id, platform").eq(
             "lead_id", req.lead_id
-        ).order("updated_at", desc=True).limit(1).execute()
+        ).order("updated_at", direction="desc").limit(1).execute()
         platform = conv_res.data[0]["platform"] if conv_res.data else "whatsapp"
         print(f"[SendMsg] Platform: {platform}")
 
