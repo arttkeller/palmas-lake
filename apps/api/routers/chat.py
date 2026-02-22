@@ -61,42 +61,60 @@ def send_message_to_lead(req: SendMessageRequest):
     Send a manual message from the dashboard to a lead via WhatsApp/Instagram.
     Auto-pauses AI for this lead.
     """
-    supabase = create_client()
+    import traceback as tb
+    print(f"[SendMsg] === START === lead_id={req.lead_id}, content={req.content[:50]}")
 
-    # 1. Buscar lead
-    lead_res = supabase.table("leads").select("*").eq("id", req.lead_id).execute()
-    if not lead_res.data:
-        raise HTTPException(status_code=404, detail="Lead not found")
-    lead_data = lead_res.data[0]
+    try:
+        supabase = create_client()
 
-    # 2. Determinar canal (última conversa ativa)
-    conv_res = supabase.table("conversations").select("id, platform").eq(
-        "lead_id", req.lead_id
-    ).order("updated_at", desc=True).limit(1).execute()
-    platform = conv_res.data[0]["platform"] if conv_res.data else "whatsapp"
+        # 1. Buscar lead
+        lead_res = supabase.table("leads").select("*").eq("id", req.lead_id).execute()
+        if not lead_res.data:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        lead_data = lead_res.data[0]
+        print(f"[SendMsg] Lead found: {lead_data.get('full_name')}, phone={lead_data.get('phone')}")
 
-    # 3. Enviar via canal apropriado
-    if platform == "instagram" and lead_data.get("instagram_id"):
-        from services.meta_service import MetaService
-        meta = MetaService()
-        meta.send_instagram_message(lead_data["instagram_id"], req.content)
-    else:
-        from services.uazapi_service import UazapiService
-        uazapi = UazapiService()
-        phone = lead_data.get("phone", "")
-        uazapi.send_whatsapp_message(phone, req.content)
+        # 2. Determinar canal (última conversa ativa)
+        conv_res = supabase.table("conversations").select("id, platform").eq(
+            "lead_id", req.lead_id
+        ).order("updated_at", desc=True).limit(1).execute()
+        platform = conv_res.data[0]["platform"] if conv_res.data else "whatsapp"
+        print(f"[SendMsg] Platform: {platform}")
 
-    # 4. Salvar no banco
-    if platform == "instagram" and lead_data.get("instagram_id"):
-        remote_jid = f'ig:{lead_data["instagram_id"]}'
-    else:
-        remote_jid = lead_data.get("phone", "")
-    service.save_message(remote_jid, req.content, "user")
+        # 3. Enviar via canal apropriado
+        if platform == "instagram" and lead_data.get("instagram_id"):
+            from services.meta_service import MetaService
+            meta = MetaService()
+            meta.send_instagram_message(lead_data["instagram_id"], req.content)
+        else:
+            from services.uazapi_service import UazapiService
+            uazapi = UazapiService()
+            phone = lead_data.get("phone", "")
+            print(f"[SendMsg] Sending WhatsApp to phone={phone}")
+            result = uazapi.send_whatsapp_message(phone, req.content)
+            print(f"[SendMsg] WhatsApp send result: {result}")
 
-    # 5. Auto-pausar IA
-    supabase.table("leads").update({"ai_paused": True}).eq("id", req.lead_id).execute()
+        # 4. Salvar no banco
+        if platform == "instagram" and lead_data.get("instagram_id"):
+            remote_jid = f'ig:{lead_data["instagram_id"]}'
+        else:
+            remote_jid = lead_data.get("phone", "")
+        print(f"[SendMsg] Saving message with remote_jid={remote_jid}")
+        service.save_message(remote_jid, req.content, "user")
+        print(f"[SendMsg] Message saved OK")
 
-    return {"status": "sent", "platform": platform, "ai_paused": True}
+        # 5. Auto-pausar IA
+        supabase.table("leads").update({"ai_paused": True}).eq("id", req.lead_id).execute()
+        print(f"[SendMsg] AI paused OK")
+
+        return {"status": "sent", "platform": platform, "ai_paused": True}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[SendMsg] UNHANDLED ERROR: {e}")
+        tb.print_exc()
+        raise HTTPException(status_code=500, detail=f"Send failed: {str(e)}")
 
 
 @router.post("/chat/toggle-ai/{lead_id}")
