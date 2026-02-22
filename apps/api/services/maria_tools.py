@@ -38,6 +38,9 @@ class MariaTools(Toolkit):
         # Instagram conversations use lead_id in the format ig:<IGSID>
         self.instagram_id = lead_id[3:] if lead_id.startswith("ig:") else None
         
+        # Flag to track if enviar_mensagem was called (prevents buffer_service from re-sending)
+        self._messages_sent_via_tool = False
+
         # Registrar tools explicitamente
         self.register(self.enviar_mensagem)
         self.register(self.reagir_nome)
@@ -76,6 +79,7 @@ class MariaTools(Toolkit):
             texto: O conteúdo da mensagem de resposta.
             reply_id: O ID da mensagem à qual você está respondendo (opcional).
         """
+        self._messages_sent_via_tool = True
         print(f"[Tool] Enviar Mensagem: {texto[:50]}...")
         u_service = UazapiService()
         msg_service = MessageService()

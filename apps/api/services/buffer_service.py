@@ -195,8 +195,12 @@ async def _process_buffer_inner(lead_id: str):
                 print(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
             elif response == "IGNORED_DUPLICATE":
                 print(f"[Buffer] Anti-duplicate triggered for {lead_id}, skipping send")
+            elif response == "__TOOL_SENT__":
+                print(f"[Buffer] Messages already sent via tool for {lead_id}, skipping re-send")
 
-            if response and response != "IGNORED_DUPLICATE":
+            # Send messages only if agent returned content AND it wasn't already sent via tool
+            skip_responses = ("IGNORED_DUPLICATE", "__TOOL_SENT__")
+            if response and response not in skip_responses:
                 # Split messages by double newline to send "picotado"
                 parts = [p.strip() for p in response.split('\n\n') if p.strip()]
 
@@ -227,8 +231,10 @@ async def _process_buffer_inner(lead_id: str):
                     # Small delay between parts to feel natural
                     await asyncio.sleep(1.5)
 
-                # Apos IA responder, agendar follow-up Stage 1 (2h)
-                # Se o lead nao responder em 2h, o cron job do Supabase dispara a mensagem
+            # Apos IA responder, agendar follow-up Stage 1 (2h)
+            # Se o lead nao responder em 2h, o cron job do Supabase dispara a mensagem
+            # Runs for both regular and tool-sent responses (but not duplicates/empty)
+            if response and response not in ("IGNORED_DUPLICATE", None, ""):
                 try:
                     from services.follow_up_service import schedule_follow_up_after_ai_response
                     from services.supabase_client import create_client

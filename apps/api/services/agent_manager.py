@@ -50,6 +50,7 @@ class AgentManager:
         self.prompt_path = os.path.join(os.path.dirname(__file__), "../prompts/MARIA_SYSTEM.md")
         self.reasoning_effort_main = "medium"
         self.reasoning_effort_analysis = "medium"
+        self._last_messages_sent_via_tool = False
 
     @staticmethod
     def _extract_name_from_response(ai_response: str, user_message: str) -> str:
@@ -185,6 +186,16 @@ Mensagem atual do Cliente:
                 )
 
                 content = run_response.content
+
+                # Track if agent sent messages directly via enviar_mensagem tool
+                tool_sent = isinstance(maria_tools, MariaTools) and maria_tools._messages_sent_via_tool
+                self._last_messages_sent_via_tool = tool_sent
+
+                if tool_sent:
+                    print(f"[Maria] Messages already sent via enviar_mensagem tool for {lead_id}, buffer will skip re-send")
+                    # Return content (even if empty) — buffer_service uses __TOOL_SENT__ marker
+                    return content or ""
+
                 if not content or not content.strip():
                     # Agent made tool calls but didn't generate text — re-run WITH FULL CONTEXT
                     print(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running with full context...")
@@ -349,9 +360,10 @@ Mensagem atual do Cliente:
         
         # 5. Gerar resposta com regras específicas do canal
         response_text = await self.generate_response(history, lead_id=lead_id, channel=channel)
+        messages_already_sent = self._last_messages_sent_via_tool
 
-        # Guard: ensure we always have a response to send
-        if not response_text or not response_text.strip():
+        # Guard: ensure we always have a response to send (unless tool already sent)
+        if not messages_already_sent and (not response_text or not response_text.strip()):
             print(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
             response_text = "Oi! Como posso te ajudar? 😊"
 
@@ -380,6 +392,11 @@ Mensagem atual do Cliente:
              asyncio.create_task(self._safe_analyze_sentiment(lead_id, msgs_text))
         except Exception as sentiment_err:
              print(f"Sentiment analysis scheduling error: {sentiment_err}")
+
+        # If messages were already sent via enviar_mensagem tool, tell buffer_service to skip re-send
+        if messages_already_sent:
+            print(f"[Maria] Returning __TOOL_SENT__ for {lead_id} — buffer will skip re-sending")
+            return "__TOOL_SENT__"
 
         return response_text
 
