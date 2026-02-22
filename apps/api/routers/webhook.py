@@ -24,6 +24,90 @@ analytics_cache_service.setup_background_processing()
 # Comando especial para limpar dados de teste
 CLEAR_COMMAND = "#apagar"
 
+import re as _re
+
+# ──────────────────────────────────────────────────────────────
+# SPAM / BOT / ADVERTISEMENT FILTER
+# ──────────────────────────────────────────────────────────────
+
+# Keywords that strongly indicate promotional/spam messages
+_SPAM_KEYWORDS = {
+    "promoção", "promocao", "oferta imperdível", "oferta imperdivel",
+    "desconto exclusivo", "compre agora", "comprar agora",
+    "clique aqui", "click aqui", "saiba mais em",
+    "aproveite já", "aproveite ja", "por tempo limitado",
+    "ligue agora", "televendas", "0800", "assine já", "assine ja",
+    "faça seu pedido", "faca seu pedido", "plano de",
+    "fibra", "mega", "combo", "r$/mês", "r$/mes",
+    "cashback", "frete grátis", "frete gratis",
+    "link na bio", "arraste pra cima",
+}
+
+# Regex patterns for spam detection
+_SPAM_PATTERNS = [
+    _re.compile(r'R\$\s*\d+[.,]\d{2}', _re.IGNORECASE),           # Price: R$ 99,90
+    _re.compile(r'\d+x\s*de\s*R\$', _re.IGNORECASE),               # Installments: 12x de R$
+    _re.compile(r'(?:http[s]?://\S+){2,}', _re.IGNORECASE),        # Multiple URLs
+    _re.compile(r'bit\.ly|tinyurl|short\.link|cutt\.ly', _re.IGNORECASE),  # URL shorteners
+    _re.compile(r'0800[-\s]?\d{3}[-\s]?\d{4}', _re.IGNORECASE),   # 0800 toll-free
+    _re.compile(r'(?:opção|opcao)\s*\d\s*:', _re.IGNORECASE),      # "Opção 1:" menu style
+    _re.compile(r'(?:plano|pacote)\s+\w+.*\d+\s*(?:mega|gb|mbps)', _re.IGNORECASE),  # Internet plans
+    _re.compile(r'(?:claro|vivo|tim|oi|net)\s+(?:fibra|combo|multi|controle|pós|pre)', _re.IGNORECASE),  # Telecom brands
+    _re.compile(r'(?:chatgpt|netflix|globoplay|disney|hbo|spotify|deezer)\s+(?:plus|premium|grátis|free)', _re.IGNORECASE),  # Streaming bundles
+]
+
+# Patterns that indicate automated/bot messages
+_BOT_PATTERNS = [
+    _re.compile(r'(?:confirme|valide|verifique)\s+(?:sua|seu)\s+(?:identidade|conta|cadastro)', _re.IGNORECASE),
+    _re.compile(r'(?:código|codigo)\s+(?:de\s+)?(?:verificação|verificacao|segurança|seguranca)', _re.IGNORECASE),
+    _re.compile(r'seu\s+(?:código|codigo)\s+é\s*:?\s*\d', _re.IGNORECASE),
+    _re.compile(r'(?:pix|transferência|transferencia)\s+(?:recebid[ao]|confirmad[ao]|pendente)', _re.IGNORECASE),
+    _re.compile(r'(?:boleto|fatura|cobrança|cobranca)\s+(?:vencid|disponível|gerad)', _re.IGNORECASE),
+    _re.compile(r'(?:entrega|pedido|encomenda)\s+(?:n[°ºo]|número|numero|código|codigo)', _re.IGNORECASE),
+]
+
+
+def _is_spam_or_bot(text: str) -> bool:
+    """
+    Detect spam, bot messages, or advertisements.
+    Returns True if the message should be ignored.
+    """
+    if not text or len(text) < 10:
+        return False
+
+    text_lower = text.lower()
+
+    # 1. Keyword match (need at least 2 matches for short texts, 1 for long promo-like texts)
+    keyword_hits = sum(1 for kw in _SPAM_KEYWORDS if kw in text_lower)
+    if keyword_hits >= 2:
+        print(f"[SpamFilter] Keyword match ({keyword_hits} hits)")
+        return True
+
+    # 2. Regex pattern match
+    pattern_hits = sum(1 for p in _SPAM_PATTERNS if p.search(text))
+    if pattern_hits >= 2:
+        print(f"[SpamFilter] Pattern match ({pattern_hits} hits)")
+        return True
+
+    # 3. Combined: 1 keyword + 1 pattern = spam
+    if keyword_hits >= 1 and pattern_hits >= 1:
+        print(f"[SpamFilter] Combined match (kw={keyword_hits}, pat={pattern_hits})")
+        return True
+
+    # 4. Bot message patterns (1 match is enough)
+    for p in _BOT_PATTERNS:
+        if p.search(text):
+            print(f"[SpamFilter] Bot pattern match")
+            return True
+
+    # 5. Heuristic: very long message (>500 chars) with prices = promo
+    if len(text) > 500 and any(p.search(text) for p in _SPAM_PATTERNS[:2]):
+        print(f"[SpamFilter] Long promo message ({len(text)} chars)")
+        return True
+
+    return False
+
+
 _AUDIO_TYPE_HINTS = {"audio", "ptt", "voice", "voicenote", "voice_note"}
 _AUDIO_KEYS = {
     "audiomessage",
@@ -550,7 +634,12 @@ async def handle_uazapi_webhook(request: Request):
                 print(f"🗑️ [CLEAR] Comando de limpeza recebido de {remote_jid}")
                 await handle_clear_command(remote_jid)
                 return {"status": "cleared"}
-            
+
+            # Filtrar spam, bots e propagandas — NÃO salvar no CRM nem responder
+            if _is_spam_or_bot(text):
+                print(f"🚫 [SpamFilter] Mensagem de {remote_jid} rejeitada como spam/bot/propaganda")
+                return {"status": "spam_filtered"}
+
             msg_id = None
             if event == "messages.upsert":
                 msg_id = msg_data.get("key", {}).get("id")
@@ -772,6 +861,11 @@ async def handle_webhook(request: Request):
                 if text.strip().lower() == CLEAR_COMMAND:
                     print(f"🗑️ [CLEAR] Comando de limpeza recebido de {lead_identifier} (Instagram)")
                     await handle_clear_command(lead_identifier, channel="instagram")
+                    continue
+
+                # Filtrar spam, bots e propagandas — NÃO salvar no CRM nem responder
+                if _is_spam_or_bot(text):
+                    print(f"🚫 [SpamFilter] Mensagem Instagram de {lead_identifier} rejeitada como spam/bot/propaganda")
                     continue
 
                 # Fetch Instagram profile (name + username) for the sender
