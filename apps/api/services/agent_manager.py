@@ -712,15 +712,20 @@ Mensagem atual do Cliente:
             # Save full analysis for reference
             update_payload["last_analysis"] = sentiment_data
 
-            # Final safety check: re-read current status and enforce Positivo for scheduled leads
+            # Final safety check: re-read current status and NEVER downgrade from protected statuses
             try:
                 current_lead = supabase.table("leads").select("status").eq("id", db_lead_id).execute()
                 current_status = (current_lead.data[0].get("status", "") if current_lead.data else "").lower()
-                if current_status in ("visita_agendada", "visita_realizada", "proposta_enviada"):
+                protected_final = ("visita_agendada", "visita_realizada", "proposta_enviada", "transferido", "sold")
+                if current_status in protected_final:
                     update_payload["sentiment_label"] = "Positivo"
                     if update_payload.get("sentiment_score", 0) < 70:
                         update_payload["sentiment_score"] = 70
-                    print(f"[Sentiment] Final override: status={current_status} → sentiment forced to Positivo")
+                    # NEVER downgrade from protected status via sentiment analysis
+                    if "status" in update_payload and update_payload["status"] != current_status:
+                        print(f"[Sentiment] BLOCKED downgrade: '{current_status}' → '{update_payload['status']}', keeping protected status")
+                        del update_payload["status"]
+                    print(f"[Sentiment] Final override: status={current_status} → sentiment forced to Positivo, status protected")
             except Exception as e:
                 print(f"[Sentiment] Final safety check error (non-blocking): {e}")
             
