@@ -685,7 +685,7 @@ class MariaTools(Toolkit):
         except Exception as e:
             print(f"Error updating lead status: {e}")
 
-    def transferir_para_humano(self, motivo: str, resumo_conversa: str):
+    def transferir_para_humano(self, motivo: str, resumo_conversa: str, nome_lead: Optional[str] = None, interesse: Optional[str] = None, objetivo: Optional[str] = None):
         """
         Transfere o atendimento para o gerente comercial humano.
         Envia um resumo da conversa para o WhatsApp do gerente.
@@ -695,23 +695,43 @@ class MariaTools(Toolkit):
         Args:
             motivo: Motivo da transferência (ex: "Lead perguntou sobre valores")
             resumo_conversa: Resumo breve da conversa até o momento, incluindo nome do lead, interesse e principais pontos discutidos.
+            nome_lead: Nome do lead se conhecido na conversa (opcional, complementa dados do banco).
+            interesse: Tipo de imóvel mencionado pelo lead - apartamento, flat, office, sala_comercial (opcional).
+            objetivo: Objetivo do lead - morar ou investir (opcional).
         """
         GERENTE_PHONE = "5527998724593"
         print(f"[Tool] Transferir para humano: {motivo}")
+        print(f"[Tool] Params: nome_lead={nome_lead}, interesse={interesse}, objetivo={objetivo}")
 
         supabase = create_client()
         try:
-            # 1. Buscar dados do lead
+            # 1. Buscar dados do lead no banco
             lead_res = self._lead_query(
                 supabase.table("leads").select("id, full_name, phone, instagram_id, source, interest_type, objective")
             ).execute()
 
             lead_info = lead_res.data[0] if lead_res.data else {}
-            lead_name = lead_info.get("full_name", "Desconhecido")
-            lead_phone = lead_info.get("phone", "N/A")
-            lead_source = lead_info.get("source", "whatsapp")
-            interest = lead_info.get("interest_type", "N/A")
-            objective = lead_info.get("objective", "N/A")
+            print(f"[Tool] DB lead_info: {lead_info}")
+
+            # Fallback: parâmetro da IA > banco de dados > self.phone > default
+            lead_name = nome_lead or lead_info.get("full_name") or "Desconhecido"
+            lead_phone = lead_info.get("phone") or self.phone or "N/A"
+            lead_source = lead_info.get("source") or "whatsapp"
+            interest_val = interesse or lead_info.get("interest_type") or "N/A"
+            objective_val = objetivo or lead_info.get("objective") or "N/A"
+
+            # Salvar no banco dados fornecidos pela IA que o DB não tem
+            if lead_info:
+                update_data = {}
+                if nome_lead and not lead_info.get("full_name"):
+                    update_data["full_name"] = nome_lead
+                if interesse and not lead_info.get("interest_type"):
+                    update_data["interest_type"] = interesse.lower()
+                if objetivo and not lead_info.get("objective"):
+                    update_data["objective"] = objetivo.lower()
+                if update_data:
+                    supabase.table("leads").update(update_data).eq("id", lead_info["id"]).execute()
+                    print(f"[Tool] Updated lead with missing data: {update_data}")
 
             # 2. Montar mensagem para o gerente
             msg = (
@@ -719,8 +739,8 @@ class MariaTools(Toolkit):
                 f"*Nome:* {lead_name}\n"
                 f"*Telefone:* {lead_phone}\n"
                 f"*Canal:* {lead_source}\n"
-                f"*Interesse:* {interest}\n"
-                f"*Objetivo:* {objective}\n"
+                f"*Interesse:* {interest_val}\n"
+                f"*Objetivo:* {objective_val}\n"
                 f"*Motivo:* {motivo}\n\n"
                 f"*Resumo:*\n{resumo_conversa}"
             )
@@ -737,6 +757,8 @@ class MariaTools(Toolkit):
 
         except Exception as e:
             print(f"[Tool] Erro ao transferir para humano: {e}")
+            import traceback
+            traceback.print_exc()
             return f"Erro ao transferir: {e}"
 
         return "Lead transferido com sucesso. Resumo enviado para o gerente comercial."
