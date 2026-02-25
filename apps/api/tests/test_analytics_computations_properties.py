@@ -44,6 +44,7 @@ source_values = st.sampled_from(["whatsapp", "instagram", "site", "indicacao", "
 
 # Converted statuses (used in source analysis)
 converted_statuses_list = [
+    "transferido", "transferred",
     "qualificado", "qualified",
     "visita_agendada", "visit_scheduled",
     "visita_realizada", "visit_done",

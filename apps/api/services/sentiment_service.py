@@ -44,7 +44,8 @@ class SchemaError(SentimentServiceError):
 # Scores range from -100 (very negative) to 100 (very positive)
 STATUS_SENTIMENT_MAP = {
     'vendido': 100,           # Sold - maximum positive
-    'qualificado': 80,        # Qualified - highly positive
+    'transferido': 80,        # Transferred to human - highly positive
+    'qualificado': 80,        # Qualified (legacy) - highly positive
     'visita_agendada': 70,    # Visit scheduled - very positive
     'proposta_enviada': 60,   # Proposal sent - positive
     'visita_realizada': 50,   # Visit completed - moderately positive

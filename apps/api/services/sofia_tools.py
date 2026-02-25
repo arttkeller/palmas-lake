@@ -20,10 +20,12 @@ class SofiaTools(Toolkit):
         self.register(self.enviar_mensagem)
         self.register(self.reagir_nome)
         self.register(self.atualizar_nome)
-        self.register(self.agenda)
+        # Tool de agendamento desativada para IA (humano agenda pelo dashboard)
+        # self.register(self.agenda)
         self.register(self.enviar_imagens)
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
+        self.register(self.transferir_para_humano)
 
     def enviar_mensagem(self, texto: str, reply_id: Optional[str] = None):
         """
@@ -205,7 +207,7 @@ class SofiaTools(Toolkit):
     def atualizar_status_lead(self, temperature: str, status: Optional[str] = None):
         """
         Atualiza o status e a temperatura do lead no CRM.
-        
+
         Args:
             temperature: Classificação (quente, morno, frio).
             status: Novo status do lead no funil (opcional).
@@ -216,7 +218,89 @@ class SofiaTools(Toolkit):
             update_data = {"temperature": temperature}
             if status:
                 update_data["status"] = status
-                
+
             supabase.table("leads").update(update_data).eq("phone", self.phone).execute()
         except Exception as e:
             print(f"Error updating lead status: {e}")
+
+    def transferir_para_humano(self, motivo: str, resumo_conversa: str, nome_lead: Optional[str] = None, interesse: Optional[str] = None, objetivo: Optional[str] = None):
+        """
+        Transfere o atendimento para o gerente comercial humano.
+        Envia um resumo da conversa para o WhatsApp do gerente.
+        Use quando: visita for agendada com sucesso, lead perguntar sobre preços/valores,
+        quiser negociar, ou quando a conversa precisar de atendimento humano especializado.
+        🚨 OBRIGATÓRIO após TODA visita agendada.
+
+        Args:
+            motivo: Motivo da transferência (ex: "Visita agendada - lead qualificado")
+            resumo_conversa: Resumo breve da conversa até o momento, incluindo nome do lead, interesse e principais pontos discutidos.
+            nome_lead: Nome do lead se conhecido na conversa (opcional, complementa dados do banco).
+            interesse: Tipo de imóvel mencionado pelo lead (opcional).
+            objetivo: Objetivo do lead - morar ou investir (opcional).
+        """
+        GERENTE_PHONE = "5527998724593"
+        print(f"[Tool] Transferir para humano: {motivo}")
+        print(f"[Tool] Params: nome_lead={nome_lead}, interesse={interesse}, objetivo={objetivo}")
+
+        supabase = create_client()
+        try:
+            # 1. Buscar dados do lead no banco
+            lead_res = supabase.table("leads").select(
+                "id, full_name, phone, source, interest_type, objective"
+            ).eq("phone", self.phone).execute()
+
+            lead_info = lead_res.data[0] if lead_res.data else {}
+            print(f"[Tool] DB lead_info: {lead_info}")
+
+            # Fallback: parâmetro da IA > banco de dados > self.phone > default
+            lead_name = nome_lead or lead_info.get("full_name") or "Desconhecido"
+            lead_phone = lead_info.get("phone") or self.phone or "N/A"
+            lead_source = lead_info.get("source") or "whatsapp"
+            interest_val = interesse or lead_info.get("interest_type") or "N/A"
+            objective_val = objetivo or lead_info.get("objective") or "N/A"
+
+            # Salvar no banco dados fornecidos pela IA que o DB não tem
+            if lead_info:
+                update_data = {}
+                if nome_lead and not lead_info.get("full_name"):
+                    update_data["full_name"] = nome_lead
+                if interesse and not lead_info.get("interest_type"):
+                    update_data["interest_type"] = interesse.lower()
+                if objetivo and not lead_info.get("objective"):
+                    update_data["objective"] = objetivo.lower()
+                if update_data:
+                    supabase.table("leads").update(update_data).eq("id", lead_info["id"]).execute()
+                    print(f"[Tool] Updated lead with missing data: {update_data}")
+
+            # 2. Montar mensagem para o gerente
+            msg = (
+                f"*Transferência de Lead — Palmas Lake Residence*\n\n"
+                f"*Nome:* {lead_name}\n"
+                f"*Telefone:* {lead_phone}\n"
+                f"*Canal:* {lead_source}\n"
+                f"*Interesse:* {interest_val}\n"
+                f"*Objetivo:* {objective_val}\n"
+                f"*Motivo:* {motivo}\n\n"
+                f"*Resumo:*\n{resumo_conversa}"
+            )
+
+            # 3. Enviar para o gerente via WhatsApp
+            u_service = UazapiService()
+            u_service.send_whatsapp_message(GERENTE_PHONE, msg)
+            print(f"[Tool] Resumo enviado para gerente {GERENTE_PHONE}")
+
+            # 4. Pausar IA e marcar como transferido
+            if lead_res.data:
+                supabase.table("leads").update({
+                    "ai_paused": True,
+                    "status": "transferido"
+                }).eq("id", lead_info["id"]).execute()
+                print(f"[Tool] IA pausada e lead {lead_info['id']} marcado como transferido")
+
+        except Exception as e:
+            print(f"[Tool] Erro ao transferir para humano: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Erro ao transferir: {e}"
+
+        return "Lead transferido com sucesso. Resumo enviado para o gerente comercial."

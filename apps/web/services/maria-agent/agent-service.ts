@@ -564,8 +564,8 @@ function handleQualificationPhase(
   
   // Check if qualification is complete
   if (isQualificationComplete(updatedQualification)) {
-    // AI can move from novo_lead to qualificado
-    const statusAction = getAIStatusUpdateAction('novo_lead', 'qualificado');
+    // AI can move from novo_lead to transferido
+    const statusAction = getAIStatusUpdateAction('novo_lead', 'transferido');
     const actions: AgentAction[] = [
       { type: 'send_material', materialType: 'folder' },
     ];
@@ -717,8 +717,8 @@ function handleSchedulingPhase(
   
   // If scheduling is complete
   if (newVisitState.step === 'complete') {
-    // AI can move from qualificado to visita_agendada
-    const statusAction = getAIStatusUpdateAction('qualificado', 'visita_agendada');
+    // Scheduling is now done by humans — AI no longer changes status here
+    const statusAction = null;
     const actions: AgentAction[] = [
       { type: 'notify_team', priority: 'medium' },
     ];
@@ -825,10 +825,10 @@ export function containsUnauthorizedDiscount(text: string): boolean {
 /**
  * Validates if Maria (AI) can perform a status transition
  * AI can only move:
- * - novo_lead → qualificado (when qualification is complete)
- * - qualificado → visita_agendada (when visit is scheduled)
- * 
+ * - novo_lead → transferido (when qualification is complete)
+ *
  * User must manually move:
+ * - transferido → visita_agendada (when visit is scheduled)
  * - visita_agendada → visita_realizada (after visit happens)
  * - visita_realizada → proposta_enviada (when proposal is sent)
  */

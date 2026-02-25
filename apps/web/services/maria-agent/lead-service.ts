@@ -63,12 +63,11 @@ const VALID_STATUS_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
 
 /**
  * Status transitions that Maria (AI) can perform automatically
- * - novo_lead → qualificado: when all qualification data is collected
- * - qualificado → visita_agendada: when a visit is scheduled
+ * - novo_lead → transferido: when all qualification data is collected and AI transfers to human
  */
 export const AI_ALLOWED_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
-  novo_lead: ['qualificado'],
-  qualificado: ['visita_agendada'],
+  novo_lead: ['transferido'],
+  qualificado: ['transferido'],
   visita_agendada: [], // User must mark as realized
   visita_realizada: [], // User must send proposal
   proposta_enviada: [],
@@ -82,11 +81,11 @@ export const AI_ALLOWED_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
  */
 export const USER_ONLY_TRANSITIONS: Record<LeadStatus, LeadStatus[]> = {
   novo_lead: [],
-  qualificado: [],
+  qualificado: ['visita_agendada'],
   visita_agendada: ['visita_realizada'],
   visita_realizada: ['proposta_enviada'],
   proposta_enviada: [],
-  transferido: [],
+  transferido: ['visita_agendada'],
 };
 
 // ============================================
@@ -106,7 +105,7 @@ export function isValidStatusTransition(
 
 /**
  * Checks if Maria (AI) can perform this status transition
- * AI can only move: novo_lead → qualificado, qualificado → visita_agendada
+ * AI can only move: novo_lead → transferido
  */
 export function canAIPerformTransition(
   currentStatus: LeadStatus,
@@ -143,7 +142,7 @@ export function getStatusAfterQualification(
   qualificationState: QualificationState
 ): LeadStatus {
   if (currentStatus === 'novo_lead' && isQualificationComplete(qualificationState)) {
-    return 'qualificado';
+    return 'transferido';
   }
   return currentStatus;
 }
@@ -391,7 +390,7 @@ export async function updateLeadQualificationAsync(
 
   // Auto-update status if qualification is complete
   if (isQualificationComplete(qualificationState) && lead.status === 'novo_lead') {
-    updates.status = 'qualificado';
+    updates.status = 'transferido';
   }
 
   // Update name if provided in qualification

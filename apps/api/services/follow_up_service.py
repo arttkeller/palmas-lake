@@ -242,7 +242,7 @@ class FollowUpService:
 
                 # Pular leads com status que não devem receber follow-up
                 status = (lead.get("status") or "").lower()
-                if status in ["convertido", "perdido", "visita_agendada", "visita_realizada"]:
+                if status in ["convertido", "perdido", "visita_agendada", "visita_realizada", "transferido"]:
                     self._mark_cancelled(follow_up["id"])
                     results["skipped"] += 1
                     continue

@@ -41,7 +41,7 @@ export default function ChannelDonut({ data }: ChannelDonutProps) {
                     Canais de Aquisição
                     <InstagramIcon size={20} />
                 </GlassmorphismCardTitle>
-                <GlassmorphismCardDescription>Origem dos leads qualificados</GlassmorphismCardDescription>
+                <GlassmorphismCardDescription>Origem dos leads transferidos</GlassmorphismCardDescription>
             </GlassmorphismCardHeader>
             <GlassmorphismCardContent>
                 <div className="h-[300px] w-full relative" style={{ minHeight: MIN_CHART_HEIGHT, minWidth: MIN_CHART_WIDTH }}>

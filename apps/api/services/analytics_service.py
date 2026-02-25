@@ -61,7 +61,7 @@ class AnalyticsService:
             total_leads = len(df_leads)
             
             # Calculate Conversion Rate (Leads que avançaram no funil)
-            converted = df_leads[df_leads['status'].isin(['visita_agendada', 'visita_realizada', 'proposta_enviada', 'venda_realizada', 'visit_scheduled', 'sold', 'qualificado'])]
+            converted = df_leads[df_leads['status'].isin(['visita_agendada', 'visita_realizada', 'proposta_enviada', 'venda_realizada', 'visit_scheduled', 'sold', 'qualificado', 'transferido'])]
             conversion_rate = (len(converted) / total_leads * 100) if total_leads > 0 else 0
             
             # Contar leads em atendimento (distinct lead_ids from conversations)

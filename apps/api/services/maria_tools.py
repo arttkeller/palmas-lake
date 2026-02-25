@@ -18,7 +18,7 @@ BRASILIA_TZ = pytz.timezone("America/Sao_Paulo")
 
 # Status ordering for lead merge (higher = more advanced in funnel)
 _STATUS_ORDER = {
-    "novo_lead": 0, "qualificado": 1, "visita_agendada": 2,
+    "novo_lead": 0, "transferido": 1, "qualificado": 1, "visita_agendada": 2,
     "visita_realizada": 3, "proposta_enviada": 4, "convertido": 5,
 }
 
@@ -46,8 +46,9 @@ class MariaTools(Toolkit):
         self.register(self.reagir_nome)
         self.register(self.atualizar_nome)
         self.register(self.atualizar_interesse)
-        self.register(self.consultar_disponibilidade)
-        self.register(self.agenda)
+        # Tools de agendamento desativadas para IA (humano agenda pelo dashboard)
+        # self.register(self.consultar_disponibilidade)
+        # self.register(self.agenda)
         self.register(self.enviar_imagens)
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
@@ -273,7 +274,6 @@ class MariaTools(Toolkit):
             
             update_data = {
                 "interest_type": tipo_normalizado,
-                "status": "qualificado"  # Atualiza status quando captura interesse
             }
             if objetivo:
                 update_data["objective"] = objetivo.lower()
@@ -672,8 +672,8 @@ class MariaTools(Toolkit):
         supabase = create_client()
         try:
             update_data = {"temperature": temperature}
-            # Block protected statuses — only agenda() tool can set these
-            protected = ("visita_agendada", "visita_realizada", "proposta_enviada")
+            # Block protected statuses — only specific tools can set these
+            protected = ("visita_agendada", "visita_realizada", "proposta_enviada", "transferido")
             if status and status.lower() not in protected:
                 update_data["status"] = status
             elif status:
@@ -750,10 +750,13 @@ class MariaTools(Toolkit):
             u_service.send_whatsapp_message(GERENTE_PHONE, msg)
             print(f"[Tool] Resumo enviado para gerente {GERENTE_PHONE}")
 
-            # 4. Pausar IA para esse lead
+            # 4. Pausar IA e marcar como transferido
             if lead_res.data:
-                supabase.table("leads").update({"ai_paused": True}).eq("id", lead_info["id"]).execute()
-                print(f"[Tool] IA pausada para lead {lead_info['id']}")
+                supabase.table("leads").update({
+                    "ai_paused": True,
+                    "status": "transferido"
+                }).eq("id", lead_info["id"]).execute()
+                print(f"[Tool] IA pausada e lead {lead_info['id']} marcado como transferido")
 
         except Exception as e:
             print(f"[Tool] Erro ao transferir para humano: {e}")

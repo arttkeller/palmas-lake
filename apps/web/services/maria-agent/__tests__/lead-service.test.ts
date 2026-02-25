@@ -6,7 +6,7 @@
  * **Feature: palmas-lake-agent-maria, Property 9: Notificação de Lead Quente**
  * **Validates: Requirements 12.5**
  * 
- * Tests that when a lead completes qualification, their status is updated to "Qualificado"
+ * Tests that when a lead completes qualification, their status is updated to "Transferido"
  * Tests that when a lead is identified as HOT, notifications are sent via WhatsApp and email
  */
 
@@ -142,10 +142,10 @@ describe('Lead Service - Property Tests', () => {
    * **Feature: palmas-lake-agent-maria, Property 8: Atualização de Status no CRM**
    * **Validates: Requirements 12.2**
    * 
-   * *For any* lead that completes qualification, the status in CRM must be updated to "Qualificado"
+   * *For any* lead that completes qualification, the status in CRM must be updated to "Transferido"
    */
   describe('Property 8: Atualização de Status no CRM', () => {
-    it('should update status to "qualificado" when a new lead completes qualification', () => {
+    it('should update status to "transferido" when a new lead completes qualification', () => {
       fc.assert(
         fc.property(
           newLeadArb,
@@ -154,8 +154,8 @@ describe('Lead Service - Property Tests', () => {
             // Act: Update lead with complete qualification
             const updatedLead = updateLeadStatusOnQualification(lead, completeState);
             
-            // Assert: Status should be 'qualificado'
-            expect(updatedLead.status).toBe('qualificado');
+            // Assert: Status should be 'transferido'
+            expect(updatedLead.status).toBe('transferido');
             expect(updatedLead.qualification_state).toEqual(completeState);
           }
         ),

@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional
 # Canonical funnel stages in order
 FUNNEL_STAGES = [
     "novo_lead",
-    "qualificado",
+    "transferido",
     "visita_agendada",
     "visita_realizada",
     "proposta_enviada",
@@ -27,8 +27,10 @@ STATUS_TO_STAGE = {
     "new": "novo_lead",
     "novo": "novo_lead",
     "novo_lead": "novo_lead",
-    "qualified": "qualificado",
-    "qualificado": "qualificado",
+    "transferred": "transferido",
+    "transferido": "transferido",
+    "qualified": "transferido",
+    "qualificado": "transferido",
     "visit_scheduled": "visita_agendada",
     "visita_agendada": "visita_agendada",
     "visit_done": "visita_realizada",
@@ -127,6 +129,7 @@ def compute_source_analysis(
     """
     if converted_statuses is None:
         converted_statuses = [
+            "transferido", "transferred",
             "qualificado", "qualified",
             "visita_agendada", "visit_scheduled",
             "visita_realizada", "visit_done",

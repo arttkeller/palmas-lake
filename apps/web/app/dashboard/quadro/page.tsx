@@ -38,7 +38,7 @@ interface Lead {
     email?: string;
     interest?: string;
     budget?: string;
-    status: 'novo_lead' | 'qualificado' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
+    status: 'novo_lead' | 'transferido' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
     priority?: 'low' | 'medium' | 'high';
     lastActivity?: string;
     assignedTo?: {
@@ -60,7 +60,7 @@ interface Lead {
 }
 
 interface Column {
-    id: 'novo_lead' | 'qualificado' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
+    id: 'novo_lead' | 'transferido' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
     title: string;
     leads: Lead[];
     color: string;
@@ -71,7 +71,7 @@ interface Column {
 
 const COLUMN_LOTTIE_URLS: Record<string, string> = {
     novo_lead: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f331/lottie.json',
-    qualificado: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f31f/lottie.json',
+    transferido: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4cb/lottie.json',
     visita_agendada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/lottie.json',
     visita_realizada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f91d/lottie.json',
     proposta_enviada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/lottie.json',
@@ -79,7 +79,7 @@ const COLUMN_LOTTIE_URLS: Record<string, string> = {
 
 const COLUMN_LOTTIE_FALLBACKS: Record<string, string> = {
     novo_lead: '🌱',
-    qualificado: '🌟',
+    transferido: '📋',
     visita_agendada: '🔔',
     visita_realizada: '🤝',
     proposta_enviada: '🚀',
@@ -87,7 +87,7 @@ const COLUMN_LOTTIE_FALLBACKS: Record<string, string> = {
 
 const initialColumns: Column[] = [
     { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.novo_lead },
-    { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.qualificado },
+    { id: 'transferido', title: 'Transferido', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.transferido },
     { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_agendada },
     { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_realizada },
     { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.proposta_enviada },
@@ -401,7 +401,7 @@ export default function LeadsKanban() {
 
         const newColumns: Column[] = [
             { id: 'novo_lead', title: 'Novo Lead', color: 'bg-blue-500', gradient: 'from-blue-500/20 to-blue-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.novo_lead },
-            { id: 'qualificado', title: 'Qualificado', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.qualificado },
+            { id: 'transferido', title: 'Transferido', color: 'bg-amber-500', gradient: 'from-amber-500/20 to-amber-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.transferido },
             { id: 'visita_agendada', title: 'Visita Agendada', color: 'bg-violet-500', gradient: 'from-violet-500/20 to-violet-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_agendada },
             { id: 'visita_realizada', title: 'Visita Realizada', color: 'bg-orange-500', gradient: 'from-orange-500/20 to-orange-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.visita_realizada },
             { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.proposta_enviada },
@@ -467,12 +467,13 @@ export default function LeadsKanban() {
 
     // Use shared normalizeStatus and map to Kanban column IDs
     // Requirements: 6.1
-    const mapStatus = (status: string): 'novo_lead' | 'qualificado' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada' => {
+    const mapStatus = (status: string): 'novo_lead' | 'transferido' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada' => {
         const canonical = normalizeStatusShared(status);
         // Map canonical statuses to Kanban column IDs
         switch (canonical) {
             case 'novo_lead': return 'novo_lead';
-            case 'qualificado': return 'qualificado';
+            case 'qualificado': return 'transferido'; // Backward compat: qualificado → transferido
+            case 'transferido': return 'transferido';
             case 'visita_agendada': return 'visita_agendada';
             case 'visita_realizada': return 'visita_realizada';
             case 'proposta_enviada': return 'proposta_enviada';

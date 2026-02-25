@@ -95,7 +95,7 @@ const completeQualificationStateArb: fc.Arbitrary<QualificationState> = fc.recor
  */
 function determineLeadStatus(qualificationState: QualificationState): LeadStatus {
   if (qualificationState.step === 'complete') {
-    return 'qualificado';
+    return 'transferido';
   }
   return 'novo_lead';
 }
@@ -142,10 +142,10 @@ describe('Maria Agent - Lead Data Model', () => {
      * **Feature: palmas-lake-agent-maria, Property 8: Atualização de Status no CRM**
      * **Validates: Requirements 12.2**
      * 
-     * For any lead that completes qualification, the status in CRM 
-     * must be updated to "Qualificado"
+     * For any lead that completes qualification, the status in CRM
+     * must be updated to "Transferido"
      */
-    it('should update status to "qualificado" when qualification is complete', () => {
+    it('should update status to "transferido" when qualification is complete', () => {
       fc.assert(
         fc.property(
           completeQualificationStateArb,
@@ -167,8 +167,8 @@ describe('Maria Agent - Lead Data Model', () => {
             // Act: Update lead after qualification
             const updatedLead = updateLeadAfterQualification(lead, qualificationState);
 
-            // Assert: Status must be 'qualificado'
-            expect(updatedLead.status).toBe('qualificado');
+            // Assert: Status must be 'transferido'
+            expect(updatedLead.status).toBe('transferido');
             expect(updatedLead.qualification_state?.step).toBe('complete');
           }
         ),
@@ -177,9 +177,9 @@ describe('Maria Agent - Lead Data Model', () => {
     });
 
     /**
-     * Inverse property: Incomplete qualification should NOT result in 'qualificado' status
+     * Inverse property: Incomplete qualification should NOT result in 'transferido' status
      */
-    it('should NOT update status to "qualificado" when qualification is incomplete', () => {
+    it('should NOT update status to "transferido" when qualification is incomplete', () => {
       fc.assert(
         fc.property(
           incompleteQualificationStateArb,
@@ -211,9 +211,9 @@ describe('Maria Agent - Lead Data Model', () => {
     });
 
     /**
-     * Idempotence: Updating a qualified lead should maintain 'qualificado' status
+     * Idempotence: Updating a transferred lead should maintain 'transferido' status
      */
-    it('should maintain "qualificado" status on subsequent updates', () => {
+    it('should maintain "transferido" status on subsequent updates', () => {
       fc.assert(
         fc.property(
           completeQualificationStateArb,
@@ -223,7 +223,7 @@ describe('Maria Agent - Lead Data Model', () => {
               id: 'test-id',
               full_name: qualificationState.name || 'Test Lead',
               phone: qualificationState.phone || '11999999999',
-              status: 'qualificado',
+              status: 'transferido',
               qualification_state: qualificationState,
               is_hot: false,
               tags: [],
@@ -234,8 +234,8 @@ describe('Maria Agent - Lead Data Model', () => {
             // Act: Update lead again with same qualification
             const updatedLead = updateLeadAfterQualification(lead, qualificationState);
 
-            // Assert: Status should still be 'qualificado'
-            expect(updatedLead.status).toBe('qualificado');
+            // Assert: Status should still be 'transferido'
+            expect(updatedLead.status).toBe('transferido');
           }
         ),
         { numRuns: 100 }

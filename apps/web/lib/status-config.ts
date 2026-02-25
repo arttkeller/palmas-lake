@@ -14,6 +14,7 @@
 export type CanonicalStatus =
   | 'novo_lead'
   | 'qualificado'
+  | 'transferido'
   | 'visita_agendada'
   | 'visita_realizada'
   | 'proposta_enviada'
@@ -26,6 +27,7 @@ export type CanonicalStatus =
 export const VALID_STATUSES: readonly CanonicalStatus[] = [
   'novo_lead',
   'qualificado',
+  'transferido',
   'visita_agendada',
   'visita_realizada',
   'proposta_enviada',
@@ -52,6 +54,11 @@ export const STATUS_CONFIG: Record<CanonicalStatus, StatusConfig> = {
     value: 'qualificado',
     label: 'Qualificado',
     className: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  },
+  transferido: {
+    value: 'transferido',
+    label: 'Transferido',
+    className: 'bg-amber-100 text-amber-800 border-amber-200',
   },
   visita_agendada: {
     value: 'visita_agendada',
@@ -98,6 +105,7 @@ export function normalizeStatus(status: string): CanonicalStatus {
 
   // Alias / substring matching
   if (s.includes('new') || s.includes('novo')) return 'novo_lead';
+  if (s.includes('transferido') || s.includes('transfer')) return 'transferido';
   if (s.includes('qualificado') || s.includes('contacted') || s.includes('contata')) return 'qualificado';
   if (s.includes('visita_agendada') || s.includes('visit_scheduled') || s.includes('agenda')) return 'visita_agendada';
   if (s.includes('visita_realizada')) return 'visita_realizada';

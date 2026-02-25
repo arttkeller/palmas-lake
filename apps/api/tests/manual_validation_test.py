@@ -728,7 +728,7 @@ class TestStatusSentimentMapping:
         """
         Test that positive statuses have positive sentiment values.
         """
-        positive_statuses = ['vendido', 'qualificado', 'visita_agendada', 'proposta_enviada', 'visita_realizada', 'contatado']
+        positive_statuses = ['vendido', 'transferido', 'qualificado', 'visita_agendada', 'proposta_enviada', 'visita_realizada', 'contatado']
         
         for status in positive_statuses:
             assert STATUS_SENTIMENT_MAP[status] > 0, \

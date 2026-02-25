@@ -287,6 +287,11 @@ export function LeadDetailModal({
                     <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f331/lottie.json" size={18} fallback={<span>🌱</span>} />
                     Novo Lead
                   </>
+                ) : lead.status === 'transferido' ? (
+                  <>
+                    <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f91d/lottie.json" size={18} fallback={<span>🤝</span>} />
+                    Transferido
+                  </>
                 ) : lead.status === 'qualificado' ? (
                   <>
                     <LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f31f/lottie.json" size={18} fallback={<span>🌟</span>} />

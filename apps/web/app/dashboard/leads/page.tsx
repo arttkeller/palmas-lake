@@ -108,7 +108,7 @@ function SentimentIcon({ sentiment, label, status }: { sentiment: number; label?
     
     if (!effectiveLabel || effectiveLabel === 'Neutro') {
         const normalizedStatus = (status || '').toLowerCase().replace(/\s+/g, '_');
-        if (['visita_agendada', 'visita_realizada', 'proposta_enviada', 'qualificado'].includes(normalizedStatus)) {
+        if (['visita_agendada', 'visita_realizada', 'proposta_enviada', 'qualificado', 'transferido'].includes(normalizedStatus)) {
             effectiveLabel = 'Positivo';
         } else if (sentiment > 20) {
             effectiveLabel = 'Positivo';
