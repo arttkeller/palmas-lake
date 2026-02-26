@@ -61,7 +61,7 @@ projeto/
 │       └── public/          # Assets estaticos (logo, favicon)
 │
 ├── database/
-│   └── migrations/          # 15 arquivos SQL (executar em ordem)
+│   └── migrations/          # 18 arquivos SQL (executar em ordem)
 │
 ├── start_dev.ps1            # Script para iniciar dev (Windows)
 └── GUIA_CLONAGEM.md         # Este documento
@@ -72,10 +72,15 @@ projeto/
 - **Agente IA multicanal**: Responde WhatsApp e Instagram DMs automaticamente
 - **Qualificacao de leads**: Coleta nome, interesse, objetivo, prazo, regiao
 - **Transferencia silenciosa**: Apos qualificacao, transfere para humano sem avisar o lead
+- **Round-robin de vendedores**: Distribui leads qualificados entre vendedores ativos em rotacao
+- **Deep link na transferencia**: Mensagem de transferencia inclui link direto para o lead no CRM
+- **Notificacoes real-time**: Alerta o vendedor no CRM quando recebe um lead (toast + badge + historico)
+- **Follow-up inteligente**: Leads com vendedor recebem notificacao de sugestao de follow-up (IA gera mensagem personalizada); leads sem vendedor recebem follow-up automatico por template
+- **Auto-resolve**: Notificacoes saem de "pendente" quando vendedor envia primeira mensagem; timestamp salvo para calculo de SLA
 - **CRM Kanban**: Pipeline visual (Novo Lead -> Transferido -> Visita Agendada -> ...)
 - **Chat em tempo real**: Ver e responder conversas do dashboard
 - **Agendamento de visitas**: Calendario com Google Calendar integrado
-- **Follow-ups automaticos**: 3 estagios (2h, 24h, 48h) para leads inativos
+- **Follow-ups automaticos**: 3 estagios (2h, 24h, 48h) para leads inativos (sem vendedor)
 - **Analytics**: Funil, sentimento, tempo de resposta, distribuicao de temperatura
 - **Transcricao de audio**: Audio do WhatsApp transcrito via Groq Whisper
 - **Analise de sentimento**: Classificacao automatica de humor do lead
@@ -209,6 +214,9 @@ database/migrations/012_add_users_table.sql         # Tabela de usuarios do CRM
 database/migrations/013_fix_realtime_delete_events.sql
 database/migrations/014_isolate_auth_users_by_project.sql  # ⚠️ ATUALIZAR NOME DO PROJETO
 database/migrations/015_add_event_reminder_1h_fields.sql
+database/migrations/016_round_robin_assignments.sql   # Round-robin e lead_assignments
+database/migrations/017_trigger_phone_after_insert.sql # Trigger para preencher phone em leads
+database/migrations/018_notifications.sql              # Tabela de notificacoes + Realtime
 ```
 
 > **ANTES DE EXECUTAR**: Abra cada arquivo e substitua `"palmaslake-agno"` pelo nome do seu schema.
@@ -240,7 +248,9 @@ registration_project = 'minha-empresa'
 ### 4.6 Configurar Realtime
 
 No Supabase Dashboard > **Database > Replication**:
-- Habilite Realtime para as tabelas: `leads`, `messages`, `analytics_cache`, `follow_up_queue`
+- Habilite Realtime para as tabelas: `leads`, `messages`, `analytics_cache`, `follow_up_queue`, `notifications`
+
+> **NOTA**: A migration `018_notifications.sql` ja executa `ALTER PUBLICATION supabase_realtime ADD TABLE` para `notifications`, mas confirme que esta ativo no dashboard.
 
 ### 4.7 Habilitar extensoes
 
@@ -262,7 +272,10 @@ CREATE EXTENSION IF NOT EXISTS pg_net;
 | `events` | Eventos/visitas agendadas |
 | `follow_up_queue` | Fila de follow-ups automaticos (3 estagios) |
 | `analytics_cache` | Metricas pre-computadas do dashboard |
-| `users` | Usuarios do CRM com roles (admin/user) |
+| `users` | Usuarios do CRM com roles (admin/user) e telefone |
+| `round_robin_state` | Estado do round-robin (qual vendedor e o proximo) |
+| `lead_assignments` | Historico de designacoes de leads a vendedores (com `responded_at` para SLA) |
+| `notifications` | Notificacoes real-time para vendedores (transferencia e follow-up) |
 
 ---
 
@@ -300,6 +313,9 @@ GROQ_AUDIO_MODEL=whisper-large-v3-turbo  # padrao
 # Monitoramento (Sentry)
 SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 SENTRY_ENVIRONMENT=production
+
+# URL do frontend (usada nos deep links de transferencia)
+FRONTEND_URL=https://SEU-FRONTEND.vercel.app  # ou http://localhost:3000 em dev
 
 # CORS (default: aceita tudo)
 CORS_ORIGINS=https://meu-frontend.vercel.app,http://localhost:3000
@@ -366,6 +382,8 @@ Todos estes arquivos tem `const SCHEMA = 'palmaslake-agno'` que precisa ser atua
 | `apps/web/services/maria-agent/visit-service.ts` | ~19 |
 | `apps/web/hooks/useAnalyticsCache.ts` | ~16 |
 | `apps/web/hooks/useRealtimeSubscription.ts` | ~8 |
+| `apps/web/hooks/useNotifications.ts` | ~7 |
+| `apps/web/components/NotificationProvider.tsx` | ~10 |
 
 > **DICA**: Use busca global no seu editor por `palmaslake-agno` e substitua tudo pelo seu schema.
 
@@ -437,24 +455,40 @@ Se voce tiver **apenas 1 agente**, pode ignorar este arquivo. Ele e usado para u
 Pontos que DEVEM ser alterados:
 
 ```python
-# Linha ~702 — Numero do gerente que recebe transferencias
+# Linha ~702 — Numero do gerente que recebe transferencias (fallback quando nao ha vendedores)
 GERENTE_PHONE = "5527998724593"  # TROCAR pelo numero do seu gerente
 
 # Dentro de transferir_para_humano() — Template da mensagem de transferencia
-message = f"""*TRANSFERENCIA DE LEAD*
-*Lead:* {nome_lead}
-*Interesse:* {interesse}
-*Objetivo:* {objetivo}
-...
-"""
-# Adaptar o template com os campos relevantes do seu negocio
+# A funcao agora usa round-robin para distribuir leads entre vendedores ativos
+# e inclui deep link para o CRM na mensagem de WhatsApp.
+# Adaptar o template com os campos relevantes do seu negocio.
 ```
+
+A funcao `transferir_para_humano()` agora:
+1. **Round-robin**: Usa `assign_next_seller()` para designar o lead ao proximo vendedor ativo
+2. **Deep link**: Adiciona URL `FRONTEND_URL/dashboard/quadro?leadId=...` na mensagem
+3. **Notificacao CRM**: Insere registro na tabela `notifications` para o vendedor ver no dashboard
+4. **Fallback**: Se nao houver vendedores, envia para `GERENTE_PHONE`
 
 Se tiver carrossel de imagens:
 ```python
 # Dentro de enviar_carrossel() — URLs das imagens e textos
 # Trocar pelas imagens e descricoes dos seus produtos
 ```
+
+### 7.7 Servico de follow-up inteligente — `apps/api/services/follow_up_suggestion.py`
+
+Este servico gera sugestoes personalizadas de follow-up usando GPT-4o-mini. E usado quando um lead ja tem vendedor designado — em vez de enviar template automatico, cria notificacao com sugestao personalizada.
+
+```python
+# O prompt interno referencia o produto. Adaptar se necessario:
+# "assistente de vendas de um empreendimento imobiliario de alto padrao"
+# Trocar pela descricao do seu negocio
+```
+
+### 7.8 Round-robin de vendedores — `apps/api/services/round_robin_service.py`
+
+O servico distribui leads qualificados entre vendedores com `role = 'user'` e `active = true`. Nao precisa de adaptacao — funciona automaticamente com qualquer numero de vendedores cadastrados na tabela `users`.
 
 ### 7.4 Modelos de IA — `apps/api/services/agent_manager.py`
 
@@ -648,7 +682,22 @@ const initialColumns: Column[] = [
 
 > Lembre-se: se mudar os IDs das colunas, precisa atualizar tambem `lib/status-config.ts`, `types/lead.ts`, `lead-service.ts` e o schema do banco.
 
-### 8.9 Sentry (monitoramento)
+### 8.9 Notificacoes e Alertas
+
+Novos componentes do sistema de notificacoes:
+
+| Componente | Arquivo | Funcao |
+|-----------|---------|--------|
+| `useNotifications` | `apps/web/hooks/useNotifications.ts` | Hook com fetch + realtime (INSERT/UPDATE) |
+| `NotificationProvider` | `apps/web/components/NotificationProvider.tsx` | Toast popups via sonner |
+| `NavBarWithBadges` | `apps/web/components/NavBarWithBadges.tsx` | Badge de pendentes na nav |
+| `BellIcon` | `apps/web/components/icons/bell.tsx` | Icone animado do sininho |
+| Pagina de Alertas | `apps/web/app/dashboard/notificacoes/page.tsx` | Historico de notificacoes |
+| Nav config | `apps/web/lib/navigation-config.ts` | Item "Alertas" no menu |
+
+Estes componentes nao precisam de adaptacao — funcionam automaticamente com qualquer schema desde que o `SCHEMA` esteja correto em `useNotifications.ts` e `NotificationProvider.tsx`.
+
+### 8.10 Sentry (monitoramento)
 
 Arquivo: `apps/web/next.config.ts`
 
@@ -662,7 +711,7 @@ org: "sua-org-sentry",
 project: "seu-projeto-sentry",
 ```
 
-### 8.10 Supabase hostname (imagens)
+### 8.11 Supabase hostname (imagens)
 
 No mesmo `next.config.ts`, atualize o hostname do Supabase Storage:
 
@@ -773,6 +822,7 @@ Apos obter as URLs publicas da API e frontend:
 |-------|----------------|
 | `apps/web/.env.local` | `NEXT_PUBLIC_API_URL=https://SUA-API.dominio.com` |
 | `apps/api/.env` | `CORS_ORIGINS=https://SEU-FRONTEND.vercel.app` |
+| `apps/api/.env` | `FRONTEND_URL=https://SEU-FRONTEND.vercel.app` (para deep links na transferencia) |
 | UazAPI Dashboard | Webhook URL: `https://SUA-API.dominio.com/api/webhook/uazapi` |
 | Meta Developer | Webhook URL: `https://SUA-API.dominio.com/api/webhook/meta` |
 | Migration 009 (SQL) | URL do cron: `https://SUA-API.dominio.com/api/webhook/follow-up-cron` |
@@ -802,6 +852,8 @@ Valores que voce pode ajustar sem reescrever logica:
 | `INACTIVITY_THRESHOLD_HOURS` | `apps/api/services/temperature_service.py` | `24` (horas) | Horas sem interacao = lead esfria |
 | `_DEDUP_TTL` | `apps/api/services/buffer_service.py` | `120` (seg) | Tempo para ignorar mensagens duplicadas |
 | Horarios de agenda | `apps/api/services/calendar_service.py` | `[9,10,11,14,15,16,17,18]` | Slots disponiveis para agendamento |
+| `FRONTEND_URL` | `apps/api/.env` | `http://localhost:3000` | URL do frontend (deep links na transferencia) |
+| `GERENTE_PHONE` | `apps/api/services/maria_tools.py` | `5527998724593` | WhatsApp fallback quando nao ha vendedores |
 
 ---
 
@@ -811,20 +863,21 @@ Apos completar todas as adaptacoes, verifique cada item:
 
 ### Infraestrutura
 - [ ] Projeto Supabase criado
-- [ ] Todas as 15 migrations executadas com o novo nome de schema
-- [ ] Realtime habilitado para `leads`, `messages`, `analytics_cache`, `follow_up_queue`
+- [ ] Todas as 18 migrations executadas com o novo nome de schema
+- [ ] Realtime habilitado para `leads`, `messages`, `analytics_cache`, `follow_up_queue`, `notifications`
 - [ ] Extensoes `pg_cron` e `pg_net` habilitadas
-- [ ] Variaveis de ambiente configuradas (API e Web)
+- [ ] Variaveis de ambiente configuradas (API e Web), incluindo `FRONTEND_URL`
 
 ### Schema do banco
 - [ ] `supabase_client.py` atualizado com novo schema
-- [ ] Todos os `const SCHEMA = '...'` no frontend atualizados (9+ arquivos)
+- [ ] Todos os `const SCHEMA = '...'` no frontend atualizados (11+ arquivos, incluindo `useNotifications.ts` e `NotificationProvider.tsx`)
 - [ ] `NEXT_PUBLIC_AUTH_REGISTRATION_PROJECT` atualizado
 
 ### IA e produto
 - [ ] `MARIA_SYSTEM.md` reescrito para o novo produto/empresa
 - [ ] `GERENTE_PHONE` atualizado em `maria_tools.py` (e `sofia_tools.py` se usar)
 - [ ] Templates de follow-up atualizados (`follow_up_templates.py`)
+- [ ] Prompt de follow-up inteligente adaptado (`follow_up_suggestion.py`)
 - [ ] Mapeamento de tipos de interesse atualizado
 - [ ] Modelo de IA escolhido (custo vs qualidade)
 
@@ -847,7 +900,13 @@ Apos completar todas as adaptacoes, verifique cada item:
 ### Testes de funcionamento
 - [ ] Enviar mensagem no WhatsApp → IA responde
 - [ ] Completar qualificacao → Lead aparece como "Transferido" no Kanban
-- [ ] Transferencia → Resumo chega no WhatsApp do gerente
+- [ ] Transferencia → Resumo chega no WhatsApp do vendedor (round-robin) com deep link
+- [ ] Deep link → Clicar abre o CRM no modal do lead (logado: direto; deslogado: login → redirect)
+- [ ] Notificacao → Toast aparece no CRM do vendedor em tempo real
+- [ ] Badge → Sininho na nav mostra contagem de pendentes
+- [ ] Historico → Pagina /dashboard/notificacoes mostra todas as notificacoes
+- [ ] Auto-resolve → Enviar mensagem pelo CRM marca notificacoes como "respondido"
+- [ ] Follow-up inteligente → Lead com vendedor gera notificacao de sugestao (nao envia template automatico)
 - [ ] Dashboard acessivel e mostrando leads em tempo real
 - [ ] Follow-ups sendo agendados (verificar tabela `follow_up_queue`)
 - [ ] Chat do dashboard permite enviar mensagem manual
@@ -890,6 +949,16 @@ Se quiser mudar os estagios do funil (ex: adicionar "Negociacao"), precisa atual
 5. `apps/api/services/follow_up_service.py` — decidir se skip follow-ups para esse status
 6. `apps/api/services/analytics_computations.py` — adicionar ao funil
 
+### Deep link e auth redirect
+
+O sistema preserva deep links durante o fluxo de login:
+1. Vendedor clica link `https://SEU-FRONTEND/dashboard/quadro?leadId=UUID` no WhatsApp
+2. Se nao estiver logado, `middleware.ts` redireciona para `/?next=%2Fdashboard%2Fquadro%3FleadId%3DUUID`
+3. Apos login, `animated-characters-login-page.tsx` le o parametro `next` e redireciona para a URL original
+4. O modal do lead abre automaticamente
+
+Nao precisa de adaptacao — funciona automaticamente.
+
 ### Seguranca
 
 - **NUNCA** commite credenciais (`.env`, `credentials.json`) no repositorio
@@ -900,4 +969,4 @@ Se quiser mudar os estagios do funil (ex: adicionar "Negociacao"), precisa atual
 
 ---
 
-*Documento gerado para o projeto CRM + Agente IA. Ultima atualizacao: Fevereiro 2026.*
+*Documento gerado para o projeto CRM + Agente IA. Ultima atualizacao: 25 Fevereiro 2026.*
