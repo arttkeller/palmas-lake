@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Sparkles, UserPlus, LogIn } from "lucide-react";
+import { Sparkles, UserPlus, LogIn, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase";
 import { UserIcon } from "@/components/ui/user";
@@ -140,6 +140,7 @@ export default function AnimatedLoginPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [showPassword, setShowPassword] = useState(false);
   const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -284,6 +285,12 @@ export default function AnimatedLoginPage() {
         setIsLoading(false);
         return;
       }
+      const cleanPhone = phone.replace(/\D/g, "");
+      if (!cleanPhone || cleanPhone.length < 10) {
+        setError("Por favor, informe um celular válido com DDD.");
+        setIsLoading(false);
+        return;
+      }
       if (password !== confirmPassword) {
         setError("As senhas não coincidem.");
         setIsLoading(false);
@@ -294,6 +301,7 @@ export default function AnimatedLoginPage() {
         setIsLoading(false);
         return;
       }
+      const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -301,6 +309,7 @@ export default function AnimatedLoginPage() {
           emailRedirectTo: `${window.location.origin}/auth/callback`,
           data: {
             full_name: fullName.trim(),
+            whatsapp_number: formattedPhone,
             registration_project: AUTH_REGISTRATION_PROJECT,
             project_schema: AUTH_REGISTRATION_PROJECT,
           },
@@ -314,6 +323,7 @@ export default function AnimatedLoginPage() {
         );
         setMode("login");
         setFullName("");
+        setPhone("");
         setPassword("");
         setConfirmPassword("");
       }
@@ -685,6 +695,27 @@ export default function AnimatedLoginPage() {
                     placeholder="Seu nome completo"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
+                    onFocus={() => setIsTyping(true)}
+                    onBlur={() => setIsTyping(false)}
+                    required
+                    className="h-12 pl-10 bg-background border-border/60 focus:border-primary"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Phone field (register mode only) */}
+            {mode === "register" && (
+              <div className="space-y-2">
+                <Label htmlFor="phone">Celular (WhatsApp)</Label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    placeholder="(27) 99872-4593"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     onFocus={() => setIsTyping(true)}
                     onBlur={() => setIsTyping(false)}
                     required

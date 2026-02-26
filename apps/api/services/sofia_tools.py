@@ -238,7 +238,8 @@ class SofiaTools(Toolkit):
             interesse: Tipo de imóvel mencionado pelo lead (opcional).
             objetivo: Objetivo do lead - morar ou investir (opcional).
         """
-        GERENTE_PHONE = "5527998724593"
+        from services.round_robin_service import RoundRobinService
+
         print(f"[Tool] Transferir para humano: {motivo}")
         print(f"[Tool] Params: nome_lead={nome_lead}, interesse={interesse}, objetivo={objetivo}")
 
@@ -255,7 +256,7 @@ class SofiaTools(Toolkit):
             # Fallback: parâmetro da IA > banco de dados > self.phone > default
             lead_name = nome_lead or lead_info.get("full_name") or "Desconhecido"
             lead_phone = lead_info.get("phone") or self.phone or "N/A"
-            lead_source = lead_info.get("source") or "whatsapp"
+            lead_source = lead_info.get("source") or "instagram"
             interest_val = interesse or lead_info.get("interest_type") or "N/A"
             objective_val = objetivo or lead_info.get("objective") or "N/A"
 
@@ -272,7 +273,27 @@ class SofiaTools(Toolkit):
                     supabase.table("leads").update(update_data).eq("id", lead_info["id"]).execute()
                     print(f"[Tool] Updated lead with missing data: {update_data}")
 
-            # 2. Montar mensagem para o gerente
+            # 2. Round-robin: atribuir proximo vendedor (ou fallback para gerente)
+            lead_id = lead_info.get("id")
+
+            assignment = None
+            if lead_id:
+                rr_service = RoundRobinService()
+                assignment = rr_service.assign_next_seller(
+                    lead_id=lead_id,
+                    transfer_reason=motivo,
+                    channel="instagram",
+                )
+
+            if assignment and assignment.seller:
+                target_phone = assignment.seller.whatsapp_number
+                seller_label = assignment.seller.full_name
+            else:
+                from services.round_robin_service import FALLBACK_PHONE
+                target_phone = FALLBACK_PHONE
+                seller_label = "Gerente Comercial"
+
+            # 3. Montar mensagem para o vendedor/gerente
             msg = (
                 f"*Transferência de Lead — Palmas Lake Residence*\n\n"
                 f"*Nome:* {lead_name}\n"
@@ -284,12 +305,12 @@ class SofiaTools(Toolkit):
                 f"*Resumo:*\n{resumo_conversa}"
             )
 
-            # 3. Enviar para o gerente via WhatsApp
+            # 4. Enviar via WhatsApp para o vendedor atribuido
             u_service = UazapiService()
-            u_service.send_whatsapp_message(GERENTE_PHONE, msg)
-            print(f"[Tool] Resumo enviado para gerente {GERENTE_PHONE}")
+            u_service.send_whatsapp_message(target_phone, msg)
+            print(f"[Tool] Resumo enviado para {seller_label} ({target_phone})")
 
-            # 4. Pausar IA e marcar como transferido
+            # 5. Pausar IA e marcar como transferido
             if lead_res.data:
                 supabase.table("leads").update({
                     "ai_paused": True,
@@ -303,4 +324,4 @@ class SofiaTools(Toolkit):
             traceback.print_exc()
             return f"Erro ao transferir: {e}"
 
-        return "Lead transferido com sucesso. Resumo enviado para o gerente comercial."
+        return "Lead transferido com sucesso. Resumo enviado para o vendedor."

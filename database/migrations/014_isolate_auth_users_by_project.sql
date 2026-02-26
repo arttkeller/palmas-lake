@@ -24,14 +24,19 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    INSERT INTO "palmaslake-agno".users (id, email, full_name, role)
+    INSERT INTO "palmaslake-agno".users (id, email, full_name, whatsapp_number, role)
     VALUES (
         NEW.id,
         COALESCE(NEW.email, ''),
         COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+        NULLIF(TRIM(COALESCE(NEW.raw_user_meta_data->>'whatsapp_number', '')), ''),
         'user'
     )
-    ON CONFLICT (id) DO NOTHING;
+    ON CONFLICT (id) DO UPDATE SET
+        whatsapp_number = COALESCE(
+            NULLIF(TRIM(COALESCE(NEW.raw_user_meta_data->>'whatsapp_number', '')), ''),
+            "palmaslake-agno".users.whatsapp_number
+        );
 
     RETURN NEW;
 END;

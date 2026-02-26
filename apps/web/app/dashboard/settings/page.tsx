@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Save, Users, Shield, ShieldCheck, Trash2, Loader2, LogOut } from 'lucide-react';
+import { Save, Users, Shield, ShieldCheck, Trash2, Loader2, LogOut, Phone, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,23 @@ interface CrmUser {
     full_name: string;
     role: 'admin' | 'user';
     created_at: string | null;
+    is_seller?: boolean;
+    seller_active?: boolean;
+    whatsapp_number?: string;
+    seller_order?: number;
+    last_assigned_at?: string | null;
+}
+
+interface RotationState {
+    current_seller_id: string | null;
+    total_assignments: number;
+    updated_at: string | null;
+    current_seller?: {
+        id: string;
+        full_name: string;
+        whatsapp_number: string;
+        seller_order: number;
+    } | null;
 }
 
 export default function SettingsPage() {
@@ -40,6 +57,11 @@ export default function SettingsPage() {
     const [allUsers, setAllUsers] = useState<CrmUser[]>([]);
     const [loadingUsers, setLoadingUsers] = useState(false);
     const [updatingRole, setUpdatingRole] = useState<string | null>(null);
+
+    // Seller management state
+    const [updatingSeller, setUpdatingSeller] = useState<string | null>(null);
+    const [rotationState, setRotationState] = useState<RotationState | null>(null);
+    const [editingWhatsApp, setEditingWhatsApp] = useState<{ [id: string]: string }>({});
 
     // Sync profile name from context
     useEffect(() => {
@@ -65,9 +87,24 @@ export default function SettingsPage() {
         }
     }, [isAdmin]);
 
+    // Fetch rotation state
+    const fetchRotationState = useCallback(async () => {
+        if (!isAdmin) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/sellers/state`);
+            if (res.ok) {
+                const data = await res.json();
+                setRotationState(data);
+            }
+        } catch (err) {
+            console.error('Error fetching rotation state:', err);
+        }
+    }, [isAdmin]);
+
     useEffect(() => {
         fetchUsers();
-    }, [fetchUsers]);
+        fetchRotationState();
+    }, [fetchUsers, fetchRotationState]);
 
     // Save profile
     const handleSaveProfile = async () => {
@@ -136,6 +173,102 @@ export default function SettingsPage() {
             console.error('Error deleting user:', err);
         }
     };
+
+    // Toggle seller status
+    const handleToggleSeller = async (userId: string, currentIsSeller: boolean) => {
+        setUpdatingSeller(userId);
+        try {
+            const newValue = !currentIsSeller;
+            const res = await fetch(`${API_BASE_URL}/api/sellers/${userId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    is_seller: newValue,
+                    seller_active: newValue,
+                    seller_order: newValue ? (allUsers.filter(u => u.is_seller).length + 1) : null,
+                }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u));
+                fetchRotationState();
+            }
+        } catch (err) {
+            console.error('Error toggling seller:', err);
+        } finally {
+            setUpdatingSeller(null);
+        }
+    };
+
+    // Toggle seller active in rotation
+    const handleToggleActive = async (userId: string, currentActive: boolean) => {
+        setUpdatingSeller(userId);
+        try {
+            const endpoint = currentActive
+                ? `${API_BASE_URL}/api/sellers/${userId}/deactivate`
+                : `${API_BASE_URL}/api/sellers/${userId}/activate`;
+            const res = await fetch(endpoint, { method: 'POST' });
+            if (res.ok) {
+                const updated = await res.json();
+                setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u));
+                fetchRotationState();
+            }
+        } catch (err) {
+            console.error('Error toggling active:', err);
+        } finally {
+            setUpdatingSeller(null);
+        }
+    };
+
+    // Save WhatsApp number
+    const handleSaveWhatsApp = async (userId: string) => {
+        const number = editingWhatsApp[userId];
+        if (number === undefined) return;
+
+        const cleaned = number.replace(/\D/g, '');
+        if (cleaned && (cleaned.length < 12 || cleaned.length > 13)) {
+            alert('Numero invalido. Use o formato: 5527999991234');
+            return;
+        }
+
+        setUpdatingSeller(userId);
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/sellers/${userId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ whatsapp_number: cleaned || null }),
+            });
+            if (res.ok) {
+                const updated = await res.json();
+                setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u));
+                setEditingWhatsApp(prev => {
+                    const next = { ...prev };
+                    delete next[userId];
+                    return next;
+                });
+            }
+        } catch (err) {
+            console.error('Error saving whatsapp:', err);
+        } finally {
+            setUpdatingSeller(null);
+        }
+    };
+
+    // Computed: active sellers in order
+    const activeSellers = allUsers
+        .filter(u => u.is_seller && u.seller_active)
+        .sort((a, b) => (a.seller_order || 999) - (b.seller_order || 999));
+
+    // Find next seller (the one AFTER current_seller_id in the rotation)
+    const nextSellerId = (() => {
+        if (!rotationState?.current_seller_id || activeSellers.length === 0) {
+            return activeSellers[0]?.id || null;
+        }
+        const currentIdx = activeSellers.findIndex(s => s.id === rotationState.current_seller_id);
+        if (currentIdx === -1) return activeSellers[0]?.id || null;
+        const nextIdx = (currentIdx + 1) % activeSellers.length;
+        return activeSellers[nextIdx]?.id || null;
+    })();
 
     return (
         <div className="space-y-6">
@@ -228,7 +361,7 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-2 mb-6">
                         <Users className="h-5 w-5 text-primary" />
                         <h3 className="text-lg font-medium leading-6 text-foreground">
-                            Gestao de Usuarios
+                            Gestao de Usuarios e Vendedores
                         </h3>
                     </div>
 
@@ -248,6 +381,8 @@ export default function SettingsPage() {
                                         <TableHead>Nome</TableHead>
                                         <TableHead>Email</TableHead>
                                         <TableHead>Role</TableHead>
+                                        <TableHead>Vendedor</TableHead>
+                                        <TableHead>WhatsApp</TableHead>
                                         <TableHead className="text-right">Acoes</TableHead>
                                     </TableRow>
                                 </TableHeader>
@@ -279,6 +414,69 @@ export default function SettingsPage() {
                                                     <Loader2 className="inline ml-2 h-3 w-3 animate-spin text-muted-foreground" />
                                                 )}
                                             </TableCell>
+                                            <TableCell>
+                                                <button
+                                                    onClick={() => handleToggleSeller(u.id, !!u.is_seller)}
+                                                    disabled={updatingSeller === u.id}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                                        u.is_seller
+                                                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-300/50 hover:bg-emerald-200'
+                                                            : 'bg-muted/50 text-muted-foreground border border-border hover:bg-muted'
+                                                    }`}
+                                                >
+                                                    <span className={`w-2 h-2 rounded-full ${
+                                                        u.is_seller
+                                                            ? u.seller_active ? 'bg-emerald-500' : 'bg-amber-500'
+                                                            : 'bg-slate-300'
+                                                    }`} />
+                                                    {u.is_seller
+                                                        ? u.seller_active ? 'Ativo' : 'Pausa'
+                                                        : 'Nao'}
+                                                    {updatingSeller === u.id && (
+                                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                                    )}
+                                                </button>
+                                                {u.is_seller && (
+                                                    <button
+                                                        onClick={() => handleToggleActive(u.id, !!u.seller_active)}
+                                                        disabled={updatingSeller === u.id}
+                                                        className="ml-1 text-[10px] text-muted-foreground hover:text-foreground underline"
+                                                    >
+                                                        {u.seller_active ? 'pausar' : 'ativar'}
+                                                    </button>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {u.is_seller ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <Input
+                                                            type="text"
+                                                            placeholder="5527999991234"
+                                                            value={editingWhatsApp[u.id] !== undefined
+                                                                ? editingWhatsApp[u.id]
+                                                                : u.whatsapp_number || ''}
+                                                            onChange={(e) => setEditingWhatsApp(prev => ({
+                                                                ...prev,
+                                                                [u.id]: e.target.value.replace(/\D/g, '')
+                                                            }))}
+                                                            onBlur={() => {
+                                                                if (editingWhatsApp[u.id] !== undefined) {
+                                                                    handleSaveWhatsApp(u.id);
+                                                                }
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') handleSaveWhatsApp(u.id);
+                                                            }}
+                                                            className="w-[140px] h-8 text-xs"
+                                                        />
+                                                        {u.whatsapp_number && (
+                                                            <Phone className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-xs">—</span>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-right">
                                                 {u.id !== user?.id && (
                                                     <Button
@@ -296,6 +494,92 @@ export default function SettingsPage() {
                                     ))}
                                 </TableBody>
                             </Table>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Fila de Distribuicao (Admin Only) */}
+            {isAdmin && (
+                <div className="rounded-xl bg-card p-6 shadow-sm border border-border">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium leading-6 text-foreground">
+                            Fila de Distribuicao
+                        </h3>
+                        {rotationState && (
+                            <span className="text-xs text-muted-foreground">
+                                Total atribuidos: {rotationState.total_assignments}
+                            </span>
+                        )}
+                    </div>
+
+                    {activeSellers.length === 0 ? (
+                        <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200">
+                            <span className="text-amber-600 text-sm">
+                                Nenhum vendedor ativo. Leads sendo enviados para o gerente (numero fixo).
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {/* Seller pills */}
+                            <div className="flex flex-wrap gap-3">
+                                {activeSellers.map((seller, idx) => {
+                                    const isNext = seller.id === nextSellerId;
+                                    const initials = (seller.full_name || 'V')
+                                        .split(' ')
+                                        .map(n => n[0])
+                                        .join('')
+                                        .slice(0, 2)
+                                        .toUpperCase();
+
+                                    return (
+                                        <div
+                                            key={seller.id}
+                                            className={`relative flex flex-col items-center gap-1 p-3 rounded-xl min-w-[80px] transition-colors ${
+                                                isNext
+                                                    ? 'bg-emerald-100 border-2 border-emerald-400'
+                                                    : 'bg-white/60 border border-border'
+                                            }`}
+                                        >
+                                            {isNext && (
+                                                <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 text-[9px] font-bold bg-emerald-500 text-white rounded-full whitespace-nowrap">
+                                                    Proximo
+                                                </span>
+                                            )}
+                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                                {initials}
+                                            </div>
+                                            <span className="text-[11px] font-medium text-foreground text-center leading-tight">
+                                                {seller.full_name?.split(' ')[0] || 'Vendedor'}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground">
+                                                #{seller.seller_order || idx + 1}
+                                            </span>
+                                            {!seller.whatsapp_number && (
+                                                <span className="text-[9px] text-amber-600">Sem WhatsApp</span>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Flow visualization */}
+                            <div className="flex items-center gap-1 text-muted-foreground text-xs">
+                                {activeSellers.map((s, i) => (
+                                    <span key={s.id} className="flex items-center gap-1">
+                                        <span className={s.id === nextSellerId ? 'font-bold text-emerald-600' : ''}>
+                                            {s.full_name?.split(' ')[0]}
+                                        </span>
+                                        {i < activeSellers.length - 1 && <ArrowRight className="h-3 w-3" />}
+                                    </span>
+                                ))}
+                                {activeSellers.length > 1 && (
+                                    <span className="flex items-center gap-1">
+                                        <ArrowRight className="h-3 w-3" />
+                                        <span className="text-muted-foreground/50">(repete)</span>
+                                    </span>
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>

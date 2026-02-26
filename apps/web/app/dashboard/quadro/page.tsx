@@ -178,6 +178,7 @@ export default function LeadsKanban() {
     const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
     const [draggingLeadId, setDraggingLeadId] = useState<string | null>(null);
     const [allLeadsData, setAllLeadsData] = useState<any[]>([]);
+    const [sellersMap, setSellersMap] = useState<Record<string, string>>({});
     const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
     // Stable Supabase client — avoids re-creating on every render
     const supabase = useMemo(() => createClient(), []);
@@ -247,17 +248,35 @@ export default function LeadsKanban() {
         isInitialLoadRef.current = false;
     }, [supabase]); // stable — supabase is memoized, no other changing deps
 
+    // Fetch sellers map (UUID → name) for assigned_to display
+    const fetchSellers = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/sellers`);
+            if (res.ok) {
+                const sellers = await res.json();
+                const map: Record<string, string> = {};
+                for (const s of sellers) {
+                    map[s.id] = s.full_name || s.whatsapp_number || 'Vendedor';
+                }
+                setSellersMap(map);
+            }
+        } catch {
+            // Sellers endpoint may not exist yet — ignore
+        }
+    }, []);
+
     // Initial fetch — runs once
     useEffect(() => {
         fetchLeads();
-    }, [fetchLeads]);
+        fetchSellers();
+    }, [fetchLeads, fetchSellers]);
 
     // Re-process columns whenever leads data, search, or filter changes
     useEffect(() => {
         if (allLeadsData.length > 0) {
             processLeads(allLeadsData, searchTerm);
         }
-    }, [searchTerm, allLeadsData, activeFilter]);
+    }, [searchTerm, allLeadsData, activeFilter, sellersMap]);
 
     useEffect(() => {
         const channel = supabase
@@ -438,7 +457,9 @@ export default function LeadsKanban() {
                 priority: item.is_hot ? 'high' : 'medium',
                 lastActivity: item.created_at ? new Date(item.created_at).toLocaleDateString('pt-BR') : 'Hoje',
                 tags: tags,
-                assignedTo: { name: 'Arthur' },
+                assignedTo: item.assigned_to && sellersMap[item.assigned_to]
+                    ? { name: sellersMap[item.assigned_to] }
+                    : undefined,
                 interestType: item.interest_type,
                 objective,
                 purchaseTimeline: item.purchase_timeline,
@@ -1051,6 +1072,17 @@ export default function LeadsKanban() {
                                                         </div>
                                                     </div>
 
+                                                    {/* Seller Avatar */}
+                                                    {lead.assignedTo && (
+                                                        <div
+                                                            className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-sm"
+                                                            title={`Vendedor: ${lead.assignedTo.name}`}
+                                                        >
+                                                            <span className="text-[10px] font-bold text-white leading-none">
+                                                                {lead.assignedTo.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </GlassmorphismCard>
@@ -1083,6 +1115,21 @@ export default function LeadsKanban() {
 
                         return (
                             <>
+                                {/* Seller Assignment Section */}
+                                {rawLead?.assigned_to && sellersMap[rawLead.assigned_to] && (
+                                    <LeadDetailModalSection title="Vendedor Responsável" className="mb-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-emerald-500/25">
+                                                {sellersMap[rawLead.assigned_to].split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-semibold text-foreground">{sellersMap[rawLead.assigned_to]}</p>
+                                                <p className="text-xs text-muted-foreground">Atribuido automaticamente pelo sistema</p>
+                                            </div>
+                                        </div>
+                                    </LeadDetailModalSection>
+                                )}
+
                                 {/* Tags & Adjectives Section - Requirements 2.4, 2.5 */}
                                 <LeadDetailModalSection title="Tags e Classificação">
                                     {tagsList.length > 0 || adjList.length > 0 ? (

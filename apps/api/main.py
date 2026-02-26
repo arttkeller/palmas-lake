@@ -26,7 +26,7 @@ sentry_sdk.init(
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users
+from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users, sellers
 
 
 @asynccontextmanager
@@ -69,6 +69,7 @@ if os.getenv("ENVIRONMENT") != "production":
     app.include_router(debug.router, prefix="/api", tags=["debug"])
 app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
 app.include_router(users.router, prefix="/api", tags=["users"])
+app.include_router(sellers.router, prefix="/api", tags=["sellers"])
 
 @app.get("/")
 def read_root():

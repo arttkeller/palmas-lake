@@ -25,6 +25,10 @@ class SupabaseREST:
     def table(self, table_name: str):
         return QueryBuilder(self.url, self.headers, table_name)
 
+    def rpc(self, function_name: str, params: dict = None):
+        """Call a PostgreSQL function via PostgREST RPC."""
+        return RPCBuilder(self.url, self.headers, function_name, params or {})
+
 class QueryBuilder:
     def __init__(self, url, headers, table):
         self.url = f"{url.rstrip('/')}/rest/v1/{table}"
@@ -173,6 +177,41 @@ class QueryBuilder:
                  def __init__(self, data):
                      self.data = data
              return Response(None)
+
+class RPCBuilder:
+    """Calls a PostgreSQL function via PostgREST RPC (POST /rest/v1/rpc/<fn>)."""
+
+    def __init__(self, base_url, headers, function_name, params):
+        self.url = f"{base_url.rstrip('/')}/rest/v1/rpc/{function_name}"
+        self.headers = headers
+        self.params = params
+
+    def execute(self):
+        try:
+            res = requests.post(
+                self.url, headers=self.headers, json=self.params, timeout=15
+            )
+
+            class Response:
+                def __init__(self, data):
+                    self.data = data
+
+            if res.status_code >= 400:
+                print(f"[RPC] Error {res.status_code}: {res.text}")
+                return Response(None)
+
+            if res.status_code == 204 or not res.text:
+                return Response(None)
+
+            return Response(res.json())
+        except Exception as e:
+            print(f"[RPC] Request error: {e}")
+
+            class Response:
+                def __init__(self, data):
+                    self.data = data
+            return Response(None)
+
 
 def create_client():
     return SupabaseREST()
