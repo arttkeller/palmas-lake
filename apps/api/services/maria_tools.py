@@ -777,7 +777,27 @@ class MariaTools(Toolkit):
             u_service.send_whatsapp_message(target_phone, msg)
             print(f"[Tool] Resumo enviado para {seller_label} ({target_phone})")
 
-            # 5. Pausar IA e marcar como transferido
+            # 5. Criar notificação no CRM para o vendedor
+            if assignment and assignment.seller and lead_id:
+                try:
+                    supabase.table("notifications").insert({
+                        "seller_id": assignment.seller.id,
+                        "lead_id": lead_id,
+                        "type": "transfer",
+                        "title": f"Lead {lead_name} foi designado a você",
+                        "body": resumo_conversa,
+                        "metadata": {
+                            "motivo": motivo,
+                            "canal": lead_source,
+                            "interesse": interest_val,
+                            "objetivo": objective_val
+                        }
+                    }).execute()
+                    print(f"[Tool] Notificação criada para {seller_label}")
+                except Exception as notif_err:
+                    print(f"[Tool] Erro ao criar notificação (não fatal): {notif_err}")
+
+            # 6. Pausar IA e marcar como transferido
             if lead_res.data:
                 supabase.table("leads").update({
                     "ai_paused": True,

@@ -226,7 +226,7 @@ class FollowUpService:
 
             # Buscar follow-ups pendentes que já passaram do horário
             res = self.supabase.table("follow_up_queue").select(
-                "*, leads(id, phone, full_name, temperature, status, follow_up_stage)"
+                "*, leads(id, phone, full_name, temperature, status, follow_up_stage, assigned_to)"
             ).eq("status", "pending").lte("scheduled_at", now_iso).execute()
 
             if not res.data:
@@ -253,8 +253,12 @@ class FollowUpService:
                     results["failed"] += 1
                     continue
 
-                # Enviar mensagem
-                success = self._send_follow_up_message(follow_up, lead)
+                # Se lead tem vendedor designado, criar notificação em vez de enviar direto
+                assigned_to = lead.get("assigned_to")
+                if assigned_to:
+                    success = self._create_follow_up_notification(follow_up, lead, assigned_to)
+                else:
+                    success = self._send_follow_up_message(follow_up, lead)
 
                 if success:
                     stage = follow_up.get("stage", 1)
@@ -317,6 +321,46 @@ class FollowUpService:
         except Exception as e:
             traceback.print_exc()
             print(f"[FollowUp] Erro ao enviar mensagem: {e}")
+            return False
+
+    def _create_follow_up_notification(self, follow_up: Dict, lead: Dict, seller_id: str) -> bool:
+        """Cria notificação de follow-up para o vendedor designado ao lead."""
+        try:
+            from services.follow_up_suggestion import generate_follow_up_suggestion
+
+            stage = follow_up.get("stage", 1)
+            stage_config = STAGE_CONFIG.get(stage, STAGE_CONFIG[1])
+            lead_name = lead.get("full_name") or "Lead"
+            first_name = lead_name.split()[0] if lead_name else "Lead"
+
+            # Gerar sugestão de mensagem com IA
+            suggestion = generate_follow_up_suggestion(
+                lead_id=lead["id"],
+                lead_name=lead_name,
+                stage=stage,
+                stage_label=stage_config["label"]
+            )
+
+            # Inserir notificação
+            self.supabase.table("notifications").insert({
+                "seller_id": seller_id,
+                "lead_id": lead["id"],
+                "type": "follow_up",
+                "title": f"Hora de fazer follow-up com {first_name}",
+                "body": suggestion,
+                "metadata": {
+                    "stage": stage,
+                    "stage_label": stage_config["label"],
+                    "lead_phone": lead.get("phone")
+                }
+            }).execute()
+
+            print(f"[FollowUp] Notificação criada para vendedor {seller_id} — lead {first_name} (stage {stage})")
+            return True
+
+        except Exception as e:
+            print(f"[FollowUp] Erro ao criar notificação de follow-up: {e}")
+            traceback.print_exc()
             return False
 
     def _mark_failed(self, follow_up_id: str, reason: str = ""):

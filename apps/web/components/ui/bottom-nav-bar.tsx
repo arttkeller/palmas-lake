@@ -62,11 +62,13 @@ const sharedTransition = {
 export interface BottomNavBarProps {
   items?: NavItem[];
   className?: string;
+  badgeCounts?: Record<string, number>;
 }
 
-export function BottomNavBar({ 
-  items = navigationItems, 
-  className 
+export function BottomNavBar({
+  items = navigationItems,
+  className,
+  badgeCounts = {}
 }: BottomNavBarProps): React.JSX.Element {
   const pathname = usePathname();
   const router = useRouter();
@@ -126,8 +128,8 @@ export function BottomNavBar({
                         'flex flex-col md:flex-row items-center justify-center gap-0.5 md:gap-2',
                         'px-2 py-1.5 md:px-4 md:py-2 relative z-10',
                         'bg-transparent transition-colors rounded-xl md:rounded-2xl text-xs md:text-sm',
-                        active 
-                          ? 'text-foreground font-semibold' 
+                        active
+                          ? 'text-foreground font-semibold'
                           : 'text-muted-foreground group-hover:text-foreground'
                       )}
                       variants={itemVariants}
@@ -140,10 +142,15 @@ export function BottomNavBar({
                       data-active={active}
                     >
                       <span className={cn(
-                        'transition-colors duration-300',
+                        'relative transition-colors duration-300',
                         active ? item.activeIconColor : item.iconColor
                       )}>
                         <Icon className="h-5 w-5" />
+                        {badgeCounts[item.name] > 0 && (
+                          <span className="absolute -top-2 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5 z-20">
+                            {badgeCounts[item.name] > 99 ? '99+' : badgeCounts[item.name]}
+                          </span>
+                        )}
                       </span>
                       <span className="hidden md:inline font-medium">{item.label}</span>
                     </motion.a>
@@ -188,8 +195,13 @@ export function BottomNavBar({
                       )}
                       data-testid={`nav-item-${item.name}`}
                     >
-                      <span className={cn('transition-colors duration-300', item.iconColor)}>
+                      <span className={cn('relative transition-colors duration-300', item.iconColor)}>
                         <Icon className="h-5 w-5" />
+                        {badgeCounts[item.name] > 0 && (
+                          <span className="absolute -top-2 -right-2 min-w-[16px] h-[16px] flex items-center justify-center rounded-full bg-red-500 text-white text-[9px] font-bold px-0.5 z-20">
+                            {badgeCounts[item.name] > 99 ? '99+' : badgeCounts[item.name]}
+                          </span>
+                        )}
                       </span>
                       <span className="hidden md:inline font-medium">{item.label}</span>
                     </a>

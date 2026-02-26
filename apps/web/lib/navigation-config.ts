@@ -7,6 +7,7 @@ import { UsersIcon } from '@/components/icons/users';
 import { CalendarDaysIcon } from '@/components/icons/calendar-days';
 import { ChartColumnIcon } from '@/components/icons/chart-column';
 import { SettingsIcon } from '@/components/icons/settings';
+import { BellIcon } from '@/components/icons/bell';
 
 /**
  * Navigation item interface for the bottom navigation bar
@@ -71,10 +72,19 @@ export const navigationItems: NavItem[] = [
     iconColor: 'group-hover:text-teal-500:text-teal-400',
     activeIconColor: 'text-teal-500'
   },
-  { 
-    name: 'settings', 
-    href: '/dashboard/settings', 
-    icon: SettingsIcon, 
+  {
+    name: 'notificacoes',
+    href: '/dashboard/notificacoes',
+    icon: BellIcon,
+    label: 'Alertas',
+    gradient: 'radial-gradient(circle, rgba(234,179,8,0.15) 0%, rgba(202,138,4,0.06) 50%, rgba(161,98,7,0) 100%)',
+    iconColor: 'group-hover:text-yellow-500:text-yellow-400',
+    activeIconColor: 'text-yellow-500'
+  },
+  {
+    name: 'settings',
+    href: '/dashboard/settings',
+    icon: SettingsIcon,
     label: 'Configurações',
     gradient: 'radial-gradient(circle, rgba(239,68,68,0.15) 0%, rgba(220,38,38,0.06) 50%, rgba(185,28,28,0) 100%)',
     iconColor: 'group-hover:text-red-500:text-red-400',

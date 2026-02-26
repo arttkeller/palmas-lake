@@ -107,6 +107,27 @@ def send_message_to_lead(req: SendMessageRequest):
         supabase.table("leads").update({"ai_paused": True}).eq("id", req.lead_id).execute()
         print(f"[SendMsg] AI paused OK")
 
+        # 6. Auto-resolver notificações pendentes deste lead
+        try:
+            from datetime import datetime, timezone
+            supabase.table("notifications").update({
+                "status": "responded",
+                "responded_at": datetime.now(timezone.utc).isoformat()
+            }).eq("lead_id", req.lead_id).in_(
+                "status", ["pending", "read"]
+            ).execute()
+            print(f"[SendMsg] Notifications resolved for lead {req.lead_id}")
+        except Exception as notif_err:
+            print(f"[SendMsg] Error resolving notifications (non-fatal): {notif_err}")
+
+        # 7. Atualizar responded_at no lead_assignments
+        try:
+            supabase.table("lead_assignments").update({
+                "responded_at": datetime.now(timezone.utc).isoformat()
+            }).eq("lead_id", req.lead_id).is_("responded_at", "null").execute()
+        except Exception as assign_err:
+            print(f"[SendMsg] Error updating assignment (non-fatal): {assign_err}")
+
         return {"status": "sent", "platform": platform, "ai_paused": True}
 
     except HTTPException:
