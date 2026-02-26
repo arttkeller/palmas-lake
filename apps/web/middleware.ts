@@ -30,7 +30,9 @@ export async function middleware(request: NextRequest) {
   // If user is NOT authenticated and trying to access protected route
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
+    const returnTo = request.nextUrl.pathname + request.nextUrl.search;
     url.pathname = "/";
+    url.search = `?next=${encodeURIComponent(returnTo)}`;
     return NextResponse.redirect(url);
   }
 

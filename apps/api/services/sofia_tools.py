@@ -294,6 +294,9 @@ class SofiaTools(Toolkit):
                 seller_label = "Gerente Comercial"
 
             # 3. Montar mensagem para o vendedor/gerente
+            frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+            crm_link = f"{frontend_url}/dashboard/quadro?leadId={lead_id}" if lead_id else ""
+
             msg = (
                 f"*Transferência de Lead — Palmas Lake Residence*\n\n"
                 f"*Nome:* {lead_name}\n"
@@ -304,6 +307,8 @@ class SofiaTools(Toolkit):
                 f"*Motivo:* {motivo}\n\n"
                 f"*Resumo:*\n{resumo_conversa}"
             )
+            if crm_link:
+                msg += f"\n\n*Abrir no CRM:*\n{crm_link}"
 
             # 4. Enviar via WhatsApp para o vendedor atribuido
             u_service = UazapiService()

@@ -335,7 +335,8 @@ export default function AnimatedLoginPage() {
       if (signInError) {
         setError("Email ou senha incorretos. Tente novamente.");
       } else {
-        router.push("/dashboard/quadro");
+        const nextUrl = searchParams.get("next");
+        router.push(nextUrl || "/dashboard/quadro");
       }
     }
 
