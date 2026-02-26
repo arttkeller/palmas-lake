@@ -71,18 +71,18 @@ interface Column {
 
 const COLUMN_LOTTIE_URLS: Record<string, string> = {
     novo_lead: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f331/lottie.json',
-    transferido: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f4cb/lottie.json',
+    transferido: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/lottie.json',
     visita_agendada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f514/lottie.json',
     visita_realizada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f91d/lottie.json',
-    proposta_enviada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/1f680/lottie.json',
+    proposta_enviada: 'https://fonts.gstatic.com/s/e/notoemoji/latest/270d_fe0f/lottie.json',
 };
 
 const COLUMN_LOTTIE_FALLBACKS: Record<string, string> = {
     novo_lead: '🌱',
-    transferido: '📋',
+    transferido: '🤖',
     visita_agendada: '🔔',
     visita_realizada: '🤝',
-    proposta_enviada: '🚀',
+    proposta_enviada: '✍️',
 };
 
 const initialColumns: Column[] = [

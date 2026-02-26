@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Save, Users, Shield, ShieldCheck, Trash2, Loader2, LogOut, ArrowRight } from 'lucide-react';
-import { PhoneLottieIcon } from '@/components/icons/phone-lottie';
+import { VibrateIcon } from '@/components/ui/vibrate';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -471,7 +471,7 @@ export default function SettingsPage() {
                                                             className="w-[140px] h-8 text-xs"
                                                         />
                                                         {u.whatsapp_number && (
-                                                            <PhoneLottieIcon size={18} className="flex-shrink-0" />
+                                                            <VibrateIcon size={18} className="flex-shrink-0" />
                                                         )}
                                                     </div>
                                                 ) : (
