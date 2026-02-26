@@ -1,6 +1,3 @@
-import { 
-  type LucideIcon 
-} from 'lucide-react';
 import { SquareKanbanIcon } from '@/components/icons/square-kanban';
 import { MessageCircleMoreIcon } from '@/components/icons/message-circle-more';
 import { UsersIcon } from '@/components/icons/users';
@@ -15,7 +12,7 @@ import { BellIcon } from '@/components/icons/bell';
 export interface NavItem {
   name: string;
   href: string;
-  icon: LucideIcon | typeof SquareKanbanIcon;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   gradient: string;
   iconColor: string;
