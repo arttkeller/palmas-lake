@@ -780,20 +780,46 @@ class MariaTools(Toolkit):
             # 5. Criar notificação no CRM para o vendedor
             if assignment and assignment.seller and lead_id:
                 try:
-                    supabase.table("notifications").insert({
-                        "seller_id": assignment.seller.id,
-                        "lead_id": lead_id,
-                        "type": "transfer",
-                        "title": f"Lead {lead_name} foi designado a você",
-                        "body": resumo_conversa,
-                        "metadata": {
-                            "motivo": motivo,
-                            "canal": lead_source,
-                            "interesse": interest_val,
-                            "objetivo": objective_val
-                        }
-                    }).execute()
-                    print(f"[Tool] Notificação criada para {seller_label}")
+                    # Resolver seller_id real (fallback tem id="" que viola FK UUID)
+                    notification_seller_id = assignment.seller.id
+                    if not notification_seller_id or assignment.is_fallback:
+                        # Buscar admin/user pelo whatsapp_number do fallback
+                        admin_lookup = supabase.table("users").select("id").eq(
+                            "whatsapp_number", target_phone
+                        ).limit(1).execute()
+                        if not admin_lookup.data:
+                            # Tentar sem código do país (55)
+                            phone_without_country = target_phone[2:] if target_phone.startswith("55") and len(target_phone) > 10 else target_phone
+                            admin_lookup = supabase.table("users").select("id").eq(
+                                "whatsapp_number", phone_without_country
+                            ).limit(1).execute()
+                        if not admin_lookup.data:
+                            # Último recurso: pegar o primeiro admin
+                            admin_lookup = supabase.table("users").select("id").eq(
+                                "role", "admin"
+                            ).limit(1).execute()
+                        if admin_lookup.data:
+                            notification_seller_id = admin_lookup.data[0]["id"]
+                            print(f"[Tool] Fallback: notificação será criada para user {notification_seller_id}")
+                        else:
+                            print(f"[Tool] Nenhum admin encontrado para notificação de fallback")
+                            notification_seller_id = None
+
+                    if notification_seller_id:
+                        supabase.table("notifications").insert({
+                            "seller_id": notification_seller_id,
+                            "lead_id": lead_id,
+                            "type": "transfer",
+                            "title": f"Lead {lead_name} foi designado a você",
+                            "body": resumo_conversa,
+                            "metadata": {
+                                "motivo": motivo,
+                                "canal": lead_source,
+                                "interesse": interest_val,
+                                "objetivo": objective_val
+                            }
+                        }).execute()
+                        print(f"[Tool] Notificação criada para {seller_label}")
                 except Exception as notif_err:
                     print(f"[Tool] Erro ao criar notificação (não fatal): {notif_err}")
 

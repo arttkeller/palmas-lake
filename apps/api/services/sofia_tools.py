@@ -1,6 +1,7 @@
 from typing import Optional, List
 import json
 import asyncio
+import os
 from services.uazapi_service import UazapiService
 from services.message_service import MessageService
 from services.calendar_service import CalendarService
@@ -316,22 +317,46 @@ class SofiaTools(Toolkit):
             print(f"[Tool] Resumo enviado para {seller_label} ({target_phone})")
 
             # 5. Criar notificação no CRM para o vendedor
-            if assignment and assignment.seller and lead_id:
+            if lead_id:
                 try:
-                    supabase.table("notifications").insert({
-                        "seller_id": assignment.seller.id,
-                        "lead_id": lead_id,
-                        "type": "transfer",
-                        "title": f"Lead {lead_name} foi designado a você",
-                        "body": resumo_conversa,
-                        "metadata": {
-                            "motivo": motivo,
-                            "canal": lead_source,
-                            "interesse": interest_val,
-                            "objetivo": objective_val
-                        }
-                    }).execute()
-                    print(f"[Tool] Notificação criada para {seller_label}")
+                    # Resolver seller_id real (fallback tem id="" que viola FK UUID)
+                    notification_seller_id = assignment.seller.id if (assignment and assignment.seller) else ""
+                    if not notification_seller_id or (assignment and assignment.is_fallback):
+                        # Tentar encontrar user admin pelo telefone
+                        admin_lookup = supabase.table("users").select("id").eq(
+                            "whatsapp_number", target_phone
+                        ).limit(1).execute()
+                        if not admin_lookup.data:
+                            phone_without_country = target_phone[2:] if target_phone.startswith("55") and len(target_phone) > 10 else target_phone
+                            admin_lookup = supabase.table("users").select("id").eq(
+                                "whatsapp_number", phone_without_country
+                            ).limit(1).execute()
+                        if not admin_lookup.data:
+                            admin_lookup = supabase.table("users").select("id").eq(
+                                "role", "admin"
+                            ).limit(1).execute()
+                        if admin_lookup.data:
+                            notification_seller_id = admin_lookup.data[0]["id"]
+                        else:
+                            notification_seller_id = None
+
+                    if notification_seller_id:
+                        supabase.table("notifications").insert({
+                            "seller_id": notification_seller_id,
+                            "lead_id": lead_id,
+                            "type": "transfer",
+                            "title": f"Lead {lead_name} foi designado a você",
+                            "body": resumo_conversa,
+                            "metadata": {
+                                "motivo": motivo,
+                                "canal": lead_source,
+                                "interesse": interest_val,
+                                "objetivo": objective_val
+                            }
+                        }).execute()
+                        print(f"[Tool] Notificação criada para {seller_label}")
+                    else:
+                        print(f"[Tool] Nenhum user encontrado para notificação — seller_id vazio e admin não encontrado")
                 except Exception as notif_err:
                     print(f"[Tool] Erro ao criar notificação (não fatal): {notif_err}")
 
