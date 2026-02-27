@@ -23,6 +23,9 @@ analytics_cache_service.setup_background_processing()
 
 # Comando especial para limpar dados de teste
 CLEAR_COMMAND = "#apagar"
+# Comando para resetar TODO o banco (só funciona do número admin)
+RESET_DB_COMMAND = "#resetdb"
+ADMIN_PHONE = "27998724593"
 
 import re as _re
 
@@ -549,6 +552,138 @@ def _send_clear_response(lead_identifier: str, channel: str, message: str):
         uazapi_svc = UazapiService()
         uazapi_svc.send_whatsapp_message(lead_identifier, message)
 
+async def handle_reset_db_command(sender_jid: str) -> bool:
+    """
+    Reseta TODO o banco de dados (leads, conversas, mensagens, eventos, etc.).
+    Só aceita execução do número admin (ADMIN_PHONE).
+    """
+    # Extrair número do sender (remove @s.whatsapp.net)
+    raw_phone = sender_jid.split('@')[0] if '@' in sender_jid else sender_jid
+    # Normalizar para comparação (remove 55, nono dígito, etc.)
+    clean_phone = raw_phone.lstrip('+').replace(' ', '').replace('-', '')
+    # Aceitar com ou sem código do país (55)
+    admin_variants = {ADMIN_PHONE, f"55{ADMIN_PHONE}"}
+
+    if clean_phone not in admin_variants:
+        print(f"🚫 [RESETDB] Tentativa NEGADA de {raw_phone} (não é admin {ADMIN_PHONE})")
+        _send_clear_response(sender_jid, "whatsapp",
+            "❌ Comando negado.\n\nEsse comando só pode ser executado pelo administrador."
+        )
+        return False
+
+    print(f"🔴 [RESETDB] RESET TOTAL DO BANCO iniciado por {raw_phone}")
+
+    try:
+        # Cancel ALL pending buffered messages
+        from services.buffer_service import message_buffer, cancel_buffer
+        for lead_id in list(message_buffer.keys()):
+            cancel_buffer(lead_id)
+
+        from services.supabase_client import create_client
+        supabase = create_client()
+
+        deleted = {}
+
+        # 1. messages (FK → conversations)
+        try:
+            res = supabase.table("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["messages"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] messages: {deleted['messages']} deletadas")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em messages: {e}")
+            deleted["messages"] = f"erro: {e}"
+
+        # 2. conversations (FK → leads)
+        try:
+            res = supabase.table("conversations").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["conversations"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] conversations: {deleted['conversations']} deletadas")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em conversations: {e}")
+            deleted["conversations"] = f"erro: {e}"
+
+        # 3. notifications (FK → leads com CASCADE, mas deleta explícito)
+        try:
+            res = supabase.table("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["notifications"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] notifications: {deleted['notifications']} deletadas")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em notifications: {e}")
+            deleted["notifications"] = f"erro: {e}"
+
+        # 4. follow_up_queue (FK → leads)
+        try:
+            res = supabase.table("follow_up_queue").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["follow_up_queue"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] follow_up_queue: {deleted['follow_up_queue']} deletados")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em follow_up_queue: {e}")
+            deleted["follow_up_queue"] = f"erro: {e}"
+
+        # 5. lead_assignments (FK → leads)
+        try:
+            res = supabase.table("lead_assignments").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["lead_assignments"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] lead_assignments: {deleted['lead_assignments']} deletados")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em lead_assignments: {e}")
+            deleted["lead_assignments"] = f"erro: {e}"
+
+        # 6. events (FK → leads)
+        try:
+            res = supabase.table("events").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["events"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] events: {deleted['events']} deletados")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em events: {e}")
+            deleted["events"] = f"erro: {e}"
+
+        # 7. analytics_cache (sem FK)
+        try:
+            res = supabase.table("analytics_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["analytics_cache"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] analytics_cache: {deleted['analytics_cache']} deletados")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em analytics_cache: {e}")
+            deleted["analytics_cache"] = f"erro: {e}"
+
+        # 8. leads (por último, pois é referenciada por quase tudo)
+        try:
+            res = supabase.table("leads").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+            deleted["leads"] = len(res.data) if res.data else 0
+            print(f"🔴 [RESETDB] leads: {deleted['leads']} deletados")
+        except Exception as e:
+            print(f"🔴 [RESETDB] Erro em leads: {e}")
+            deleted["leads"] = f"erro: {e}"
+
+        # Montar relatório
+        report_lines = []
+        for table, count in deleted.items():
+            if isinstance(count, int):
+                report_lines.append(f"• {table}: {count} registros removidos")
+            else:
+                report_lines.append(f"• {table}: {count}")
+
+        report = "\n".join(report_lines)
+
+        _send_clear_response(sender_jid, "whatsapp",
+            f"🔴 RESET COMPLETO DO BANCO!\n\n"
+            f"Todos os dados foram apagados:\n{report}\n\n"
+            f"⚠️ Tabela 'users' preservada (vendedores/admins).\n"
+            f"O sistema está limpo para novos testes!"
+        )
+
+        print(f"🔴 [RESETDB] Reset completo finalizado: {deleted}")
+        return True
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"🔴 [RESETDB] Erro geral: {e}")
+        _send_clear_response(sender_jid, "whatsapp", f"❌ Erro no reset: {str(e)}")
+        return False
+
+
 @router.post("/webhook/uazapi")
 async def handle_uazapi_webhook(request: Request):
     """
@@ -629,6 +764,12 @@ async def handle_uazapi_webhook(request: Request):
             text = None
 
         if remote_jid and text:
+            # Verificar comando especial #resetdb (apenas admin)
+            if text.strip().lower() == RESET_DB_COMMAND:
+                print(f"🔴 [RESETDB] Comando de reset recebido de {remote_jid}")
+                await handle_reset_db_command(remote_jid)
+                return {"status": "reset_db"}
+
             # Verificar comando especial #apagar
             if text.strip().lower() == CLEAR_COMMAND:
                 print(f"🗑️ [CLEAR] Comando de limpeza recebido de {remote_jid}")
