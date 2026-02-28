@@ -10,7 +10,7 @@ import { DollarSign, MapPin, MoreVertical, Plus, Loader2, Calendar, Home, Flame,
 import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import { LottieIcon } from '@/components/ui/lottie-icon';
 import { cn } from '@/lib/utils';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createClient } from '@/lib/supabase';
@@ -221,7 +221,7 @@ export default function LeadsKanban() {
         setError('');
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/leads`);
+            const res = await apiFetch(`/api/leads`);
             if (res.ok) {
                 const apiData = await res.json();
                 setAllLeadsData(apiData);
@@ -251,7 +251,7 @@ export default function LeadsKanban() {
     // Fetch sellers map (UUID → name) for assigned_to display
     const fetchSellers = useCallback(async () => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/sellers`);
+            const res = await apiFetch(`/api/sellers`);
             if (res.ok) {
                 const sellers = await res.json();
                 const map: Record<string, string> = {};
@@ -542,7 +542,7 @@ export default function LeadsKanban() {
         setIsAiPaused(false);
 
         // Load AI pause status
-        fetch(`${API_BASE_URL}/api/chat/ai-status/${lead.id}`)
+        apiFetch(`/api/chat/ai-status/${lead.id}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => { if (data) setIsAiPaused(data.ai_paused); })
             .catch(() => {});
@@ -553,8 +553,8 @@ export default function LeadsKanban() {
             const timeout = setTimeout(() => controller.abort(), 2000);
 
             // Fetch ALL messages across ALL conversations (WhatsApp + Instagram)
-            const msgsRes = await fetch(
-                `${API_BASE_URL}/api/chat/messages/by-lead/${lead.id}`,
+            const msgsRes = await apiFetch(
+                `/api/chat/messages/by-lead/${lead.id}`,
                 { signal: controller.signal }
             );
             clearTimeout(timeout);
@@ -564,8 +564,8 @@ export default function LeadsKanban() {
                 setConversationMessages(msgs || []);
                 // Also fetch conversations to set active ID
                 try {
-                    const convRes = await fetch(
-                        `${API_BASE_URL}/api/chat/conversations/by-lead/${lead.id}`
+                    const convRes = await apiFetch(
+                        `/api/chat/conversations/by-lead/${lead.id}`
                     );
                     if (convRes.ok) {
                         const convData = await convRes.json();
@@ -668,7 +668,7 @@ export default function LeadsKanban() {
 
         setIsSendingMessage(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/chat/messages/send`, {
+            const res = await apiFetch(`/api/chat/messages/send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ lead_id: selectedLead.id, content: message }),
@@ -686,7 +686,7 @@ export default function LeadsKanban() {
     const handleToggleAi = async () => {
         if (!selectedLead) return;
         try {
-            const res = await fetch(`${API_BASE_URL}/api/chat/toggle-ai/${selectedLead.id}`, { method: 'POST' });
+            const res = await apiFetch(`/api/chat/toggle-ai/${selectedLead.id}`, { method: 'POST' });
             if (res.ok) {
                 const data = await res.json();
                 setIsAiPaused(data.ai_paused);
@@ -760,7 +760,7 @@ export default function LeadsKanban() {
 
         try {
             // Primary: update via API (handles schema + sentiment)
-            const res = await fetch(`${API_BASE_URL}/api/leads/${lead.id}`, {
+            const res = await apiFetch(`/api/leads/${lead.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: dbStatus })

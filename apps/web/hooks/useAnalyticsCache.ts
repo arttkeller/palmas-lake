@@ -10,7 +10,7 @@ import {
   createPlaceholderMetrics,
   isCacheStale,
 } from '@/types/analytics-cache';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 
 // Schema for Palmas Lake project
 const SCHEMA = 'palmaslake-agno';
@@ -162,8 +162,8 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       setError(null);
       setHasTimedOut(false);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/analytics/cached?metric_type=${metricType}`,
+      const response = await apiFetch(
+        `/api/analytics/cached?metric_type=${metricType}`,
         { signal: controller.signal }
       );
 
@@ -263,8 +263,8 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
-        const response = await fetch(
-          `${API_BASE_URL}/api/analytics/cached?metric_type=${metricType}`,
+        const response = await apiFetch(
+          `/api/analytics/cached?metric_type=${metricType}`,
           { signal: controller.signal }
         );
         clearTimeout(timeoutId);
@@ -351,8 +351,8 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
     try {
       setError(null);
 
-      const response = await fetch(
-        `${API_BASE_URL}/api/analytics/refresh?metric_type=${metricType}`,
+      const response = await apiFetch(
+        `/api/analytics/refresh?metric_type=${metricType}`,
         { method: 'POST' }
       );
 

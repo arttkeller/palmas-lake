@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import { Loader2, Plus, X, Flame, Sun, Snowflake } from 'lucide-react';
 
 // ---------- Types ----------
@@ -162,7 +162,7 @@ export function NewLeadModal({ open, onOpenChange, onLeadCreated }: NewLeadModal
         payload.conversation_summary = form.notes.trim();
       }
 
-      const res = await fetch(`${API_BASE_URL}/api/leads`, {
+      const res = await apiFetch(`/api/leads`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

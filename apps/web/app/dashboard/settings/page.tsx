@@ -7,7 +7,7 @@ import { VibrateIcon } from '@/components/ui/vibrate';
 import { useAuth } from '@/lib/auth-context';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -76,7 +76,7 @@ export default function SettingsPage() {
         if (!isAdmin) return;
         setLoadingUsers(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/users`);
+            const res = await apiFetch(`/api/users`);
             if (res.ok) {
                 const data = await res.json();
                 setAllUsers(data);
@@ -92,7 +92,7 @@ export default function SettingsPage() {
     const fetchRotationState = useCallback(async () => {
         if (!isAdmin) return;
         try {
-            const res = await fetch(`${API_BASE_URL}/api/sellers/state`);
+            const res = await apiFetch(`/api/sellers/state`);
             if (res.ok) {
                 const data = await res.json();
                 setRotationState(data);
@@ -113,7 +113,7 @@ export default function SettingsPage() {
         setSavingProfile(true);
         setProfileSaved(false);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/users/${user.id}`, {
+            const res = await apiFetch(`/api/users/${user.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ full_name: profileName }),
@@ -134,7 +134,7 @@ export default function SettingsPage() {
     const handleRoleChange = async (userId: string, newRole: 'admin' | 'user') => {
         setUpdatingRole(userId);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/users/${userId}/role`, {
+            const res = await apiFetch(`/api/users/${userId}/role`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ role: newRole }),
@@ -164,7 +164,7 @@ export default function SettingsPage() {
         if (!confirm(`Tem certeza que deseja remover o usuario ${email}?`)) return;
 
         try {
-            const res = await fetch(`${API_BASE_URL}/api/users/${userId}`, {
+            const res = await apiFetch(`/api/users/${userId}`, {
                 method: 'DELETE',
             });
             if (res.ok) {
@@ -180,7 +180,7 @@ export default function SettingsPage() {
         setUpdatingSeller(userId);
         try {
             const newValue = !currentIsSeller;
-            const res = await fetch(`${API_BASE_URL}/api/sellers/${userId}`, {
+            const res = await apiFetch(`/api/sellers/${userId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -206,9 +206,9 @@ export default function SettingsPage() {
         setUpdatingSeller(userId);
         try {
             const endpoint = currentActive
-                ? `${API_BASE_URL}/api/sellers/${userId}/deactivate`
-                : `${API_BASE_URL}/api/sellers/${userId}/activate`;
-            const res = await fetch(endpoint, { method: 'POST' });
+                ? `/api/sellers/${userId}/deactivate`
+                : `/api/sellers/${userId}/activate`;
+            const res = await apiFetch(endpoint, { method: 'POST' });
             if (res.ok) {
                 const updated = await res.json();
                 setAllUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updated } : u));
@@ -234,7 +234,7 @@ export default function SettingsPage() {
 
         setUpdatingSeller(userId);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/sellers/${userId}`, {
+            const res = await apiFetch(`/api/sellers/${userId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ whatsapp_number: cleaned || null }),

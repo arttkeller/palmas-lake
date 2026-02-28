@@ -30,14 +30,16 @@ sentry_sdk.init(
     ],
 )
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users, sellers
+from auth import verify_jwt
 
 # Startup validation: fail fast if critical env vars are missing
 REQUIRED_ENV_VARS = [
     "SUPABASE_URL",
     "SUPABASE_KEY",
+    "SUPABASE_JWT_SECRET",
     "OPENAI_API_KEY",
     "META_ACCESS_TOKEN",
     "UAZAPI_TOKEN",
@@ -80,17 +82,22 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "x-user-id"],
 )
 
-app.include_router(leads.router, prefix="/api", tags=["leads"])
+# Protected routes — require Supabase JWT (dashboard endpoints)
+_jwt = [Depends(verify_jwt)]
+app.include_router(leads.router, prefix="/api", tags=["leads"], dependencies=_jwt)
+app.include_router(analytics.router, prefix="/api", tags=["analytics"], dependencies=_jwt)
+app.include_router(chat.router, prefix="/api", tags=["chat"], dependencies=_jwt)
+app.include_router(events.router, tags=["events"], dependencies=_jwt)
+app.include_router(users.router, prefix="/api", tags=["users"], dependencies=_jwt)
+app.include_router(sellers.router, prefix="/api", tags=["sellers"], dependencies=_jwt)
+
+# Unprotected routes — called by external services (UAZAPI, Meta, Supabase cron)
 app.include_router(webhook.router, prefix="/api", tags=["webhook"])
-app.include_router(analytics.router, prefix="/api", tags=["analytics"])
-app.include_router(chat.router, prefix="/api", tags=["chat"])
-app.include_router(events.router, tags=["events"])
+app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
 app.include_router(ai_specialist.router, tags=["AI Specialist"])
+
 if os.getenv("ENVIRONMENT") == "development":
     app.include_router(debug.router, prefix="/api", tags=["debug"])
-app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
-app.include_router(users.router, prefix="/api", tags=["users"])
-app.include_router(sellers.router, prefix="/api", tags=["sellers"])
 
 @app.get("/")
 def read_root():

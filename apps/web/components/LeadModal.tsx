@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { X, Phone, Mail, MessageCircle, TrendingUp, TrendingDown, Minus, Instagram, Globe, FileText, Bot, User, Loader2, Image as ImageIcon, Tag } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase';
 import { formatInterestType } from '@/lib/interest-type-format';
@@ -483,7 +483,7 @@ export function LeadModal({
         const timeoutId = setTimeout(() => controller.abort(), 2000);
         
         try {
-          const convRes = await fetch(`${API_BASE_URL}/api/chat/conversations/by-lead/${lead.id}`, {
+          const convRes = await apiFetch(`/api/chat/conversations/by-lead/${lead.id}`, {
             signal: controller.signal
           });
           clearTimeout(timeoutId);
@@ -493,7 +493,7 @@ export function LeadModal({
             setConversationId(convData.id);
             
             // Fetch messages for this conversation
-            const msgRes = await fetch(`${API_BASE_URL}/api/chat/messages/${convData.id}`);
+            const msgRes = await apiFetch(`/api/chat/messages/${convData.id}`);
             if (msgRes.ok) {
               const msgData = await msgRes.json();
               setMessages(msgData);

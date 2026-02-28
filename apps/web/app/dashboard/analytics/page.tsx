@@ -10,7 +10,7 @@ import ResponseTimeChart from '@/components/charts/ResponseTimeChart';
 import PredictabilityCard from '@/components/charts/PredictabilityCard';
 import ChannelDonut from '@/components/charts/ChannelDonut';
 import TemperatureDonut from '@/components/charts/TemperatureDonut';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import TransferRateCard from '@/components/charts/TransferRateCard';
 import { useAnalyticsCache } from '@/hooks/useAnalyticsCache';
 import type { DashboardMetrics } from '@/types/analytics-cache';
@@ -147,7 +147,7 @@ export default function AnalyticsPage() {
     const handleExport = async () => {
         setExporting(true);
         try {
-            const response = await fetch(`${API_BASE_URL}/api/analytics/export`);
+            const response = await apiFetch(`/api/analytics/export`);
             if (response.ok) {
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);

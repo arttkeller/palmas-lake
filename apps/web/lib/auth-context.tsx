@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import type { User } from '@supabase/supabase-js';
 
 interface CrmUser {
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const fetchCrmUser = useCallback(async (authUser: User) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/users/me`, {
+            const res = await apiFetch(`/api/users/me`, {
                 headers: {
                     'x-user-id': authUser.id,
                 },

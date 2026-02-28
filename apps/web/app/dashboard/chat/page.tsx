@@ -7,7 +7,7 @@ import { Send, Phone, MoreVertical, ArrowLeft } from 'lucide-react';
 import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import clsx from 'clsx';
 import { createClient } from '@/lib/supabase';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Input } from '@/components/ui/input';
@@ -43,7 +43,7 @@ export default function ChatPage() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
             
-            const res = await fetch(`${API_BASE_URL}/api/chat/conversations`, {
+            const res = await apiFetch(`/api/chat/conversations`, {
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -78,7 +78,7 @@ export default function ChatPage() {
                 status: res.status,
                 statusText: res.statusText,
                 body: responseBody,
-                url: `${API_BASE_URL}/api/chat/conversations`
+                url: '/api/chat/conversations'
             });
         } catch (apiError) {
             // API not available - use Supabase backup
@@ -151,7 +151,7 @@ export default function ChatPage() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
             
-            const res = await fetch(`${API_BASE_URL}/api/chat/messages/${activeConversation.id}`, {
+            const res = await apiFetch(`/api/chat/messages/${activeConversation.id}`, {
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -171,7 +171,7 @@ export default function ChatPage() {
                 statusText: res.statusText,
                 body: responseBody,
                 conversationId: activeConversation.id,
-                url: `${API_BASE_URL}/api/chat/messages/${activeConversation.id}`
+                url: `/api/chat/messages/${activeConversation.id}`
             });
         } catch (apiError) {
             // API not available - use Supabase backup

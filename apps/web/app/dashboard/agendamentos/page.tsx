@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { EventManager, type Event } from "@/components/ui/event-manager"
-import { API_BASE_URL } from '@/lib/api-config'
+import { apiFetch } from '@/lib/api-fetch'
 import { createClient } from "@/lib/supabase"
 
 export default function AgendamentosPage() {
@@ -40,7 +40,7 @@ export default function AgendamentosPage() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
             
-            const res = await fetch(`${API_BASE_URL}/api/events`, {
+            const res = await apiFetch(`/api/events`, {
                 signal: controller.signal
             });
             clearTimeout(timeoutId);
@@ -75,7 +75,7 @@ export default function AgendamentosPage() {
     // Criar evento
     const handleEventCreate = async (event: Omit<Event, "id">) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/events`, {
+            const res = await apiFetch(`/api/events`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -107,7 +107,7 @@ export default function AgendamentosPage() {
             if (updates.color) body.color = updates.color
             if (updates.category) body.category = updates.category
 
-            const res = await fetch(`${API_BASE_URL}/api/events/${id}`, {
+            const res = await apiFetch(`/api/events/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -126,7 +126,7 @@ export default function AgendamentosPage() {
     // Deletar evento
     const handleEventDelete = async (id: string) => {
         try {
-            const res = await fetch(`${API_BASE_URL}/api/events/${id}`, {
+            const res = await apiFetch(`/api/events/${id}`, {
                 method: "DELETE",
             })
             if (res.ok) {

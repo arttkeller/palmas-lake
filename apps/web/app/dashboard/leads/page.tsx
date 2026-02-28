@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { API_BASE_URL } from '@/lib/api-config';
+import { apiFetch } from '@/lib/api-fetch';
 import {
     Table,
     TableBody,
@@ -195,7 +195,7 @@ export default function LeadsPage() {
 
         try {
             // Tentar API Python primeiro
-            const res = await fetch(`${API_BASE_URL}/api/leads`);
+            const res = await apiFetch(`/api/leads`);
 
             if (res.ok) {
                 const data = await res.json();
