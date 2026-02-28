@@ -112,6 +112,10 @@ class QueryBuilder:
         self.params["limit"] = count
         return self
 
+    def offset(self, start: int):
+        self.params["offset"] = start
+        return self
+
     def range(self, start: int, end: int):
         self.params["offset"] = start
         # PostgREST range is inclusive start, but limit is count. 

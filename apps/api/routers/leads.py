@@ -49,7 +49,7 @@ class Lead(LeadBase):
 def get_leads(limit: int = Query(default=100, le=500), offset: int = Query(default=0, ge=0)):
     """Returns leads with pagination. Default: 100 per page."""
     supabase = get_db()
-    response = supabase.table("leads").select("*").order("created_at", desc=True).limit(limit).offset(offset).execute()
+    response = supabase.table("leads").select("*").order("created_at", "desc").limit(limit).offset(offset).execute()
     return response.data
 
 @router.post("/leads", response_model=Lead)
