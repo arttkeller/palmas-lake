@@ -9,6 +9,7 @@ Endpoints:
 - GET  /event-reminders/status  → Status dos lembretes de visita
 """
 
+import asyncio
 from fastapi import APIRouter, Request
 from services.follow_up_service import execute_due_follow_ups, FollowUpService
 from services.event_reminder_service import (
@@ -48,8 +49,8 @@ async def follow_up_cron_webhook(request: Request):
     6. Processa lembretes de visita (1h antes do agendamento)
     """
     try:
-        follow_up_results = execute_due_follow_ups()
-        reminder_results = execute_due_event_reminders()
+        follow_up_results = await asyncio.to_thread(execute_due_follow_ups)
+        reminder_results = await asyncio.to_thread(execute_due_event_reminders)
         catchup_results = await recover_unanswered_leads()
 
         return {

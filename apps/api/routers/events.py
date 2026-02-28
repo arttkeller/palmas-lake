@@ -1,6 +1,7 @@
 """
 Events Router - API para gerenciamento de agendamentos
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
@@ -54,17 +55,17 @@ async def list_events(
     try:
         supabase = create_client()
         query = supabase.table("events").select("*")
-        
+
         if start_date:
             query = query.gte("start_time", f"{start_date}T00:00:00")
         if end_date:
             query = query.lte("start_time", f"{end_date}T23:59:59")
         if status:
             query = query.eq("status", status)
-            
+
         query = query.order("start_time", direction="asc").limit(limit)
-        
-        result = query.execute()
+
+        result = await asyncio.to_thread(query.execute)
         return result.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -75,11 +76,13 @@ async def get_event(event_id: str):
     """Busca um evento específico"""
     try:
         supabase = create_client()
-        result = supabase.table("events").select("*").eq("id", event_id).execute()
-        
+        result = await asyncio.to_thread(
+            supabase.table("events").select("*").eq("id", event_id).execute
+        )
+
         if not result.data:
             raise HTTPException(status_code=404, detail="Event not found")
-            
+
         return result.data[0]
     except HTTPException:
         raise
@@ -95,12 +98,12 @@ async def create_event(event: EventCreate):
 
         resolved_lead_phone = normalize_whatsapp_phone(event.lead_phone)
         if event.lead_id:
-            lead_res = (
+            lead_res = await asyncio.to_thread(
                 supabase
                 .table("leads")
                 .select("phone, source, instagram_id")
                 .eq("id", event.lead_id)
-                .execute()
+                .execute
             )
             lead_data = lead_res.data[0] if lead_res.data else {}
             if not resolved_lead_phone:
@@ -137,8 +140,10 @@ async def create_event(event: EventCreate):
             "created_by": "manual"
         }
         
-        result = supabase.table("events").insert(event_data).execute()
-        
+        result = await asyncio.to_thread(
+            supabase.table("events").insert(event_data).execute
+        )
+
         if result.data:
             return result.data[0]
         else:
@@ -173,8 +178,10 @@ async def update_event(event_id: str, event: EventUpdate):
         if not update_data:
             raise HTTPException(status_code=400, detail="No fields to update")
         
-        result = supabase.table("events").update(update_data).eq("id", event_id).execute()
-        
+        result = await asyncio.to_thread(
+            supabase.table("events").update(update_data).eq("id", event_id).execute
+        )
+
         if result.data:
             return result.data[0]
         else:
@@ -191,8 +198,10 @@ async def delete_event(event_id: str):
     """Remove um evento"""
     try:
         supabase = create_client()
-        result = supabase.table("events").delete().eq("id", event_id).execute()
-        
+        result = await asyncio.to_thread(
+            supabase.table("events").delete().eq("id", event_id).execute
+        )
+
         if result.data:
             return {"deleted": True, "id": event_id}
         else:

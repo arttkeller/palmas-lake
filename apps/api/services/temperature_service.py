@@ -168,10 +168,13 @@ class TemperatureService:
         if new_priority > current_priority:
             return True
         
-        # Allow downgrade only if significant change
+        # Downgrade (getting colder) requires explicit evidence —
+        # handled by classify_temperature() checking inactivity/cold keywords.
+        # Here we block arbitrary downgrades to prevent noisy score fluctuations.
         if new_priority < current_priority:
-            return True
-        
+            return False
+
+        # Same temperature — no update needed
         return False
 
 
