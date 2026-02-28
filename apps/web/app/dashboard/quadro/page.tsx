@@ -2,19 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { CardContent } from '@/components/ui/card';
-import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
+import { getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { DollarSign, MapPin, MoreVertical, Plus, Loader2, Calendar, Home, Flame, Search, X, Instagram } from 'lucide-react';
-import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
+import { MoreVertical, Plus, Loader2, Search, X } from 'lucide-react';
+import { KanbanCard } from '@/components/ui/kanban-card';
+import type { KanbanLead } from '@/components/ui/kanban-card';
 import { LottieIcon } from '@/components/ui/lottie-icon';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '@/lib/api-fetch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { createClient } from '@/lib/supabase';
-import { TemperatureBadge } from '@/components/ui/temperature-badge';
 import { TemperatureFilterBar } from '@/components/ui/temperature-filter-bar';
 import { LeadDetailModal, LeadDetailModalSection } from '@/components/ui/lead-detail-modal';
 import { LeadTagsSection } from '@/components/ui/lead-tags-section';
@@ -23,46 +21,19 @@ import { NewLeadModal } from '@/components/ui/new-lead-modal';
 import { parseTags } from '@/lib/lead-utils';
 import { useLeadFilters, calculateLeadCountsByTemperature } from '@/hooks/useLeadFilters';
 import { useLeadModal } from '@/hooks/useLeadModal';
-import type { LeadTemperature, NonNullLeadTemperature, LeadTag } from '@/lib/temperature-config';
+import { useLeadConversation } from '@/hooks/useLeadConversation';
+import type { LeadTemperature } from '@/lib/temperature-config';
 import { normalizeTemperature } from '@/lib/temperature-config';
 import { formatInterestType } from '@/lib/interest-type-format';
 import { normalizeStatus as normalizeStatusShared } from '@/lib/status-config';
 import type { Lead as LeadType } from '@/types/lead';
-import type { Message } from '@/types/chat';
 
-// Define the shape of a Lead in the Kanban (Frontend View)
-interface Lead {
-    id: string;
-    name: string;
-    phone?: string;
-    email?: string;
-    interest?: string;
-    budget?: string;
-    status: 'novo_lead' | 'transferido' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
-    priority?: 'low' | 'medium' | 'high';
-    lastActivity?: string;
-    assignedTo?: {
-        name: string;
-        avatar?: string;
-    };
-    tags?: string[];
-    interestType?: 'apartamento' | 'sala_comercial' | 'office' | 'flat' | 'loft';
-    objective?: 'morar' | 'investir' | 'morar_investir';
-    purchaseTimeline?: string;
-    knowsRegion?: boolean;
-    cityOrigin?: string;
-    classificationType?: 'cliente_final' | 'corretor' | 'investidor';
-    isHot?: boolean;
-    source?: 'instagram' | 'facebook' | 'site' | 'indicacao' | 'whatsapp';
-    instagramId?: string;
-    temperature?: LeadTemperature;
-    lastInteractionAt?: string;
-}
+// KanbanLead type is imported from @/components/ui/kanban-card
 
 interface Column {
     id: 'novo_lead' | 'transferido' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada';
     title: string;
-    leads: Lead[];
+    leads: KanbanLead[];
     color: string;
     gradient: string;
     count: number;
@@ -93,13 +64,6 @@ const initialColumns: Column[] = [
     { id: 'proposta_enviada', title: 'Proposta Enviada', color: 'bg-emerald-500', gradient: 'from-emerald-500/20 to-emerald-600/5', count: 0, leads: [], lottieUrl: COLUMN_LOTTIE_URLS.proposta_enviada },
 ];
 
-function WhatsAppLogo({ className }: { className?: string }) {
-    return (
-        <svg className={className} viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-        </svg>
-    );
-}
 
 const INVESTOR_SIGNALS = ['investidor', 'investir', 'investimento', 'investor'] as const;
 
@@ -119,7 +83,7 @@ function hasInvestorSignal(values: Array<string | null | undefined>): boolean {
     });
 }
 
-function normalizeObjectiveValue(rawObjective: unknown): Lead['objective'] | undefined {
+function normalizeObjectiveValue(rawObjective: unknown): KanbanLead['objective'] | undefined {
     if (typeof rawObjective !== 'string') return undefined;
     const normalized = normalizeLeadSignal(rawObjective);
     if (!normalized) return undefined;
@@ -129,7 +93,7 @@ function normalizeObjectiveValue(rawObjective: unknown): Lead['objective'] | und
     return undefined;
 }
 
-function inferLeadObjective(item: any): Lead['objective'] | undefined {
+function inferLeadObjective(item: any): KanbanLead['objective'] | undefined {
     const objective = normalizeObjectiveValue(item?.objective);
     if (objective) return objective;
 
@@ -145,14 +109,14 @@ function inferLeadObjective(item: any): Lead['objective'] | undefined {
 
 function inferLeadClassification(
     item: any,
-    objective?: Lead['objective']
-): Lead['classificationType'] | undefined {
+    objective?: KanbanLead['objective']
+): KanbanLead['classificationType'] | undefined {
     const rawClassification = typeof item?.classification_type === 'string'
         ? normalizeLeadSignal(item.classification_type)
         : '';
 
     if (rawClassification === 'cliente_final' || rawClassification === 'corretor' || rawClassification === 'investidor') {
-        return rawClassification as Lead['classificationType'];
+        return rawClassification as KanbanLead['classificationType'];
     }
 
     if (objective === 'investir' || objective === 'morar_investir') {
@@ -196,19 +160,15 @@ export default function LeadsKanban() {
     // Lead modal hook (Requirements 3.1, 3.5)
     const { isOpen: isModalOpen, selectedLead, openModal, closeModal: closeModalBase } = useLeadModal();
     
-    // Conversation state for modal
-    const [conversationMessages, setConversationMessages] = useState<Message[]>([]);
-    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+    // Conversation hook — replaces manual fetch + realtime subscription
+    const { messages: conversationMessages, isLoading: isLoadingMessages } = useLeadConversation(
+        selectedLead?.id ?? null,
+        isModalOpen
+    );
     const [isSendingMessage, setIsSendingMessage] = useState(false);
-    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const [isAiPaused, setIsAiPaused] = useState(false);
 
-    // Wrapper to clean up conversation state when modal closes
-    const closeModal = useCallback(() => {
-        closeModalBase();
-        setActiveConversationId(null);
-        setConversationMessages([]);
-    }, [closeModalBase]);
+    const closeModal = closeModalBase;
 
     const SCHEMA = 'palmaslake-agno';
 
@@ -350,46 +310,6 @@ export default function LeadsKanban() {
         }
     }, [allLeadsData, isModalOpen, selectedLead, openModal, closeModal]);
 
-    // Realtime subscription for modal messages
-    useEffect(() => {
-        if (!activeConversationId || !isModalOpen) return;
-
-        const channel = supabase
-            .channel(`realtime:modal-messages:${activeConversationId}`)
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: SCHEMA,
-                table: 'messages'
-            }, (payload) => {
-                const newMsg = payload.new as Message;
-
-                // Filter only messages from this conversation
-                if (newMsg.conversation_id === activeConversationId) {
-                    setConversationMessages((prev: Message[]) => {
-                        // Avoid duplicates
-                        if (prev.some((m: Message) => m.id === newMsg.id)) return prev;
-                        return [...prev, newMsg];
-                    });
-                }
-            })
-            .on('postgres_changes', {
-                event: 'UPDATE',
-                schema: SCHEMA,
-                table: 'messages'
-            }, (payload) => {
-                const updatedMsg = payload.new as Message;
-                if (updatedMsg.conversation_id === activeConversationId) {
-                    setConversationMessages((prev: Message[]) =>
-                        prev.map(m => m.id === updatedMsg.id ? updatedMsg : m)
-                    );
-                }
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [activeConversationId, isModalOpen, supabase]);
 
     // Calculate lead counts by temperature for filter bar badges (Requirements 2.5)
     const leadCounts = useMemo(() => {
@@ -455,7 +375,7 @@ export default function LeadsKanban() {
             if (classificationType === 'investidor') tags.push('💰 Investidor');
             if (item.is_hot) tags.push('🔥 HOT');
             
-            const lead: Lead = {
+            const lead: KanbanLead = {
                 id: item.id,
                 name: item.full_name || item.name || item.phone || 'Sem nome',
                 phone: item.phone,
@@ -513,18 +433,16 @@ export default function LeadsKanban() {
         }
     };
 
-    // Handle card click to open modal (Requirements 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7)
-    const handleCardClick = useCallback(async (lead: Lead) => {
-        // Look up raw lead data from allLeadsData to get all fields including tags, adjectives, sentiment_score, etc.
+    // Handle card click to open modal
+    const handleCardClick = useCallback((lead: KanbanLead) => {
         const rawLead = allLeadsData.find(item => item.id === lead.id);
 
-        // Convert to LeadType format for modal
         const leadForModal: LeadType = {
             id: lead.id,
             full_name: lead.name,
             phone: lead.phone || '',
             email: lead.email,
-            status: lead.status,
+            status: lead.status as LeadType['status'],
             temperature: lead.temperature || null,
             aiTags: [],
             interest_type: rawLead?.interest_type || lead.interestType,
@@ -532,9 +450,9 @@ export default function LeadsKanban() {
             purchase_timeline: lead.purchaseTimeline,
             knows_region: lead.knowsRegion,
             city_origin: lead.cityOrigin,
-            classification_type: lead.classificationType,
+            classification_type: lead.classificationType as LeadType['classification_type'],
             is_hot: lead.isHot,
-            source: lead.source,
+            source: lead.source as LeadType['source'],
             budget_range: lead.budget,
             tags: rawLead?.tags,
             notes: rawLead?.notes,
@@ -544,101 +462,15 @@ export default function LeadsKanban() {
         };
 
         openModal(leadForModal);
-        
-        // Load conversation messages - try API first, fallback to Supabase direct
-        setIsLoadingMessages(true);
-        setActiveConversationId(null);
         setIsAiPaused(false);
 
-        // Load AI pause status
+        // Load AI pause status (fire-and-forget)
         apiFetch(`/api/chat/ai-status/${lead.id}`)
             .then(r => r.ok ? r.json() : null)
             .then(data => { if (data) setIsAiPaused(data.ai_paused); })
             .catch(() => {});
-
-        // 1. Try API backend first (Requirements 2.1)
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 2000);
-
-            // Fetch ALL messages across ALL conversations (WhatsApp + Instagram)
-            const msgsRes = await apiFetch(
-                `/api/chat/messages/by-lead/${lead.id}`,
-                { signal: controller.signal }
-            );
-            clearTimeout(timeout);
-
-            if (msgsRes.ok) {
-                const msgs = await msgsRes.json();
-                setConversationMessages(msgs || []);
-                // Also fetch conversations to set active ID
-                try {
-                    const convRes = await apiFetch(
-                        `/api/chat/conversations/by-lead/${lead.id}`
-                    );
-                    if (convRes.ok) {
-                        const convData = await convRes.json();
-                        setActiveConversationId(convData.id);
-                    }
-                } catch { /* non-critical */ }
-                setIsLoadingMessages(false);
-                return;
-            }
-        } catch (err) {
-            // API unavailable, falling back to Supabase direct
-        }
-
-        // 2. Fallback to Supabase direct (Requirements 2.1, 2.3)
-        try {
-            const { data: convData, error: convError } = await supabase
-                .schema(SCHEMA)
-                .from('conversations')
-                .select('id')
-                .eq('lead_id', lead.id)
-                .single();
-
-            if (convError) {
-                console.error('[KanbanPage] Supabase conversation fallback error:', {
-                    schema: SCHEMA,
-                    table: 'conversations',
-                    code: convError.code,
-                    message: convError.message,
-                    details: convError.details,
-                    hint: convError.hint,
-                });
-            }
-            
-            if (convData) {
-                setActiveConversationId(convData.id);
-                const { data: messages, error: msgsError } = await supabase
-                    .schema(SCHEMA)
-                    .from('messages')
-                    .select('*')
-                    .eq('conversation_id', convData.id)
-                    .order('created_at', { ascending: true });
-
-                if (msgsError) {
-                    console.error('[KanbanPage] Supabase messages fallback error:', {
-                        schema: SCHEMA,
-                        table: 'messages',
-                        code: msgsError.code,
-                        message: msgsError.message,
-                        details: msgsError.details,
-                        hint: msgsError.hint,
-                    });
-                }
-                
-                setConversationMessages(messages || []);
-            } else {
-                setConversationMessages([]);
-            }
-        } catch (err) {
-            console.error('[KanbanPage] Both API and Supabase fallback failed for lead:', lead.id, err);
-            setConversationMessages([]);
-        } finally {
-            setIsLoadingMessages(false);
-        }
-    }, [allLeadsData, openModal, supabase]);
+        // Conversation messages handled by useLeadConversation hook
+    }, [allLeadsData, openModal]);
 
     // Open lead card from query param: /dashboard/quadro?leadId=<id>
     useEffect(() => {
@@ -705,7 +537,7 @@ export default function LeadsKanban() {
         }
     };
 
-    const handleDragStart = (e: React.DragEvent, lead: Lead, columnId: string) => {
+    const handleDragStart = (e: React.DragEvent, lead: KanbanLead, columnId: string) => {
         e.dataTransfer.setData('text/plain', JSON.stringify({ lead, sourceColumnId: columnId }));
         setDraggingLeadId(lead.id);
     };
@@ -916,185 +748,15 @@ export default function LeadsKanban() {
                                 {/* Cards Container */}
                                 <div className="flex-1 overflow-y-auto p-3 pt-0 space-y-3">
                                     {column.leads.length > 0 ? column.leads.map((lead) => (
-                                        <GlassmorphismCard
+                                        <KanbanCard
                                             key={lead.id}
-                                            variant="default"
-                                            hoverable
-                                            className={cn(
-                                                "group relative cursor-pointer",
-                                                "rounded-xl",
-                                                "hover:scale-[1.02]",
-                                                "transition-all duration-200",
-                                                draggingLeadId === lead.id && "opacity-50 scale-95"
-                                            )}
-                                            draggable
-                                            onDragStart={(e) => handleDragStart(e, lead, column.id)}
+                                            lead={lead}
+                                            columnId={column.id}
+                                            isDragging={draggingLeadId === lead.id}
+                                            onDragStart={handleDragStart}
                                             onDragEnd={handleDragEnd}
-                                            onClick={() => handleCardClick(lead)}
-                                        >
-                                            <div className="p-4 space-y-3">
-                                                {/* Header */}
-                                                <div className="flex justify-between items-start">
-                                                    <div className="space-y-1">
-                                                        <h4 className="font-bold text-sm text-foreground leading-tight">
-                                                            {lead.name || lead.phone || 'Lead sem nome'}
-                                                        </h4>
-                                                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                                                            <span className={cn(
-                                                                "w-1.5 h-1.5 rounded-full",
-                                                                lead.priority === 'high' ? 'bg-red-500' :
-                                                                lead.priority === 'medium' ? 'bg-amber-500' : 'bg-slate-300'
-                                                            )} />
-                                                            {lead.lastActivity}
-                                                        </p>
-                                                    </div>
-                                                    <div>
-                                                        {/* Temperature Badge - AI classification */}
-                                                        <TemperatureBadge 
-                                                            temperature={lead.temperature || null} 
-                                                            size="sm"
-                                                        />
-                                                        {/* Legacy isHot indicator - shown only if no temperature classification */}
-                                                        {!lead.temperature && lead.isHot && (
-                                                            <div className="p-1 bg-orange-100 rounded-lg">
-                                                                <Flame className="w-3 h-3 text-orange-500" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Details */}
-                                                <div className="space-y-2">
-                                                    {/* Phone number is shown inside the detail modal only */}
-                                                    {lead.interestType && (
-                                                        <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-blue-100 rounded-lg">
-                                                                <Home className="w-3 h-3 text-blue-600" />
-                                                            </div>
-                                                            <span>{lead.interest}</span>
-                                                        </div>
-                                                    )}
-                                                    {lead.objective && (
-                                                        <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1 bg-violet-100 rounded-lg flex items-center justify-center">
-                                                                <LottieIcon
-                                                                    url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f3af/lottie.json"
-                                                                    size={18}
-                                                                    fallback={<span>🎯</span>}
-                                                                />
-                                                            </div>
-                                                            <span>{lead.objective === 'morar' ? 'Morar' : lead.objective === 'investir' ? 'Investir' : 'Morar + Investir'}</span>
-                                                        </div>
-                                                    )}
-                                                    {lead.purchaseTimeline && (
-                                                        <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-green-100 rounded-lg">
-                                                                <Calendar className="w-3 h-3 text-green-600" />
-                                                            </div>
-                                                            <span>{lead.purchaseTimeline}</span>
-                                                        </div>
-                                                    )}
-                                                    {lead.cityOrigin && (
-                                                        <div className="flex items-center gap-2 text-xs text-foreground/80">
-                                                            <div className="p-1.5 bg-muted rounded-lg">
-                                                                <MapPin className="w-3 h-3 text-muted-foreground" />
-                                                            </div>
-                                                            <span>{lead.cityOrigin}</span>
-                                                        </div>
-                                                    )}
-                                                    {lead.budget && (
-                                                        <div className="flex items-center gap-2 text-xs">
-                                                            <div className="p-1.5 bg-emerald-100 rounded-lg">
-                                                                <DollarSign className="w-3 h-3 text-emerald-600" />
-                                                            </div>
-                                                            <span className="font-bold text-emerald-600">{lead.budget}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Investor/Morador Badge */}
-                                                {lead.objective && (
-                                                    <div className={cn(
-                                                        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold",
-                                                        lead.objective === 'investir'
-                                                            ? "bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 border border-amber-300/50"
-                                                            : "bg-blue-50 text-blue-700 border border-blue-200/50"
-                                                    )}>
-                                                        {lead.objective === 'investir' ? (
-                                                            <><LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f911/lottie.json" size={16} fallback={<span>🤑</span>} /> Investidor — Atendimento Prioritário</>
-                                                        ) : lead.objective === 'morar' ? (
-                                                            <>🏠 Morador</>
-                                                        ) : (
-                                                            <><LottieIcon url="https://fonts.gstatic.com/s/e/notoemoji/latest/1f911/lottie.json" size={16} fallback={<span>🤑</span>} />🏠 Morar + Investir</>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                                {/* WhatsApp Conversation Window Badge */}
-                                                {lead.source !== 'instagram' && (
-                                                    <WhatsAppWindowBadge
-                                                        lastInteractionAt={lead.lastInteractionAt}
-                                                        variant="compact"
-                                                    />
-                                                )}
-
-                                                {/* Footer */}
-                                                <div className="flex items-center justify-between pt-3 border-t border-black/5">
-                                                    <div className="flex items-center gap-2">
-                                                        {/* Channel Icon */}
-                                                        {/* Multi-channel: show both icons when lead has instagram_id + phone */}
-                                                        {lead.instagramId && lead.phone ? (
-                                                            <div className="flex items-center gap-1 text-xs font-medium text-foreground/80">
-                                                                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
-                                                                    <WhatsAppLogo className="w-3 h-3 text-white" />
-                                                                </div>
-                                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
-                                                                    <Instagram className="w-3 h-3 text-white" />
-                                                                </div>
-                                                                <span>Multi-canal</span>
-                                                            </div>
-                                                        ) : lead.source === 'instagram' ? (
-                                                            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
-                                                                <div className="w-5 h-5 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-orange-400 flex items-center justify-center flex-shrink-0" title="Instagram">
-                                                                    <Instagram className="w-3 h-3 text-white" />
-                                                                </div>
-                                                                <span>Instagram</span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex items-center gap-1.5 text-xs font-medium text-foreground/80">
-                                                                <div className="w-5 h-5 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0" title="WhatsApp">
-                                                                    <WhatsAppLogo className="w-3 h-3 text-white" />
-                                                                </div>
-                                                                <span>WhatsApp</span>
-                                                            </div>
-                                                        )}
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                            {lead.tags?.slice(0, 2).map(tag => (
-                                                                <Badge 
-                                                                    key={tag} 
-                                                                    variant="outline" 
-                                                                    className="text-[10px] h-5 px-2 rounded-full bg-white/50 backdrop-blur-sm border-black/10 font-medium"
-                                                                >
-                                                                    {tag}
-                                                                </Badge>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Seller Avatar */}
-                                                    {lead.assignedTo && (
-                                                        <div
-                                                            className="w-6 h-6 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center flex-shrink-0 shadow-sm"
-                                                            title={`Vendedor: ${lead.assignedTo.name}`}
-                                                        >
-                                                            <span className="text-[10px] font-bold text-white leading-none">
-                                                                {lead.assignedTo.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
-                                                            </span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </GlassmorphismCard>
+                                            onClick={handleCardClick}
+                                        />
                                     )) : (
                                         <div className="h-32 flex flex-col items-center justify-center border-2 border-dashed border-black/10 rounded-xl text-muted-foreground/50 bg-white/30 backdrop-blur-sm">
                                             <span className="text-xs">Nenhum lead nesta etapa</span>
