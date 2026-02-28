@@ -1164,8 +1164,11 @@ export default function LeadsKanban() {
                                 <LeadDetailModalSection title="Sentimento" className="mt-4">
                                     <div className="flex items-center gap-2">
                                         {(() => {
-                                            // Prioritize label from DB
-                                            const label = sentimentLabel || (
+                                            // Prioritize label from DB (normalize casing for legacy data)
+                                            const rawLabel = sentimentLabel
+                                                ? sentimentLabel.charAt(0).toUpperCase() + sentimentLabel.slice(1).toLowerCase()
+                                                : null;
+                                            const label = rawLabel || (
                                                 (sentimentScore ?? 0) > 20 ? 'Positivo' :
                                                 (sentimentScore ?? 0) < -20 ? 'Negativo' : 'Neutro'
                                             );

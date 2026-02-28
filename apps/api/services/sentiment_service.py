@@ -158,38 +158,51 @@ class SentimentService:
     
     def update_on_status_change(self, lead_id: str, new_status: str) -> bool:
         """
-        Updates sentiment when status changes.
-        Called automatically by lead update endpoints.
-        
+        Updates sentiment when status changes — PRIMING ONLY.
+
+        Only writes sentiment when the lead has no AI-driven sentiment yet
+        (sentiment_label is NULL). Once the AI agent (Path 2 in agent_manager.py)
+        analyses the conversation, this rule-based method yields to the AI result.
+
         Implements error handling with retry logic (Requirements 3.4, 7.4, 9.5).
-        
+
         Args:
             lead_id: UUID of the lead
             new_status: New status value
-        
+
         Returns:
             True if updated successfully, False otherwise
         """
         max_retries = 1
         last_error = None
-        
+
         for attempt in range(max_retries + 1):
             try:
                 # Fetch current lead data
                 lead_res = self.supabase.table("leads").select("*").eq("id", lead_id).execute()
-                
+
                 if not lead_res.data:
                     logger.warning(f"Lead not found: {lead_id}")
                     return False
-                
+
                 lead = lead_res.data[0]
-                
+
+                # PRIMING GUARD: if the AI has already set sentiment, don't overwrite.
+                # The AI per-conversation analysis (agent_manager.py) is the primary
+                # source of truth. This rule-based method only primes new leads.
+                existing_label = lead.get("sentiment_label")
+                if existing_label:
+                    logger.debug(
+                        f"Lead {lead_id} already has AI sentiment '{existing_label}' — skipping rule-based update"
+                    )
+                    return True
+
                 # Update status in lead dict for calculation
                 lead['status'] = new_status
-                
+
                 # Calculate new sentiment
                 new_sentiment = self.calculate_sentiment(lead)
-                
+
                 # Derive sentiment_label from score
                 if new_sentiment > 20:
                     new_label = "Positivo"
@@ -197,7 +210,7 @@ class SentimentService:
                     new_label = "Negativo"
                 else:
                     new_label = "Neutro"
-                
+
                 # Update both score and label in database
                 update_res = self.supabase.table("leads").update({
                     "sentiment_score": new_sentiment,

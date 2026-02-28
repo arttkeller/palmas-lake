@@ -351,7 +351,7 @@ class AnalyticsService:
                         "lead_id": lead_db_id,
                         "name": lead_name,
                         "sentiment_score": 0,
-                        "sentiment_label": "neutro",
+                        "sentiment_label": "Neutro",
                         "analysis": "Sem conversas para analisar"
                     })
                     continue
@@ -366,7 +366,7 @@ class AnalyticsService:
                         "lead_id": lead_db_id,
                         "name": lead_name,
                         "sentiment_score": 0,
-                        "sentiment_label": "neutro",
+                        "sentiment_label": "Neutro",
                         "analysis": "Lead ainda não respondeu"
                     })
                     continue
@@ -379,7 +379,7 @@ class AnalyticsService:
                         "lead_id": lead_db_id,
                         "name": lead_name,
                         "sentiment_score": 0,
-                        "sentiment_label": "neutro",
+                        "sentiment_label": "Neutro",
                         "analysis": "Mensagens vazias"
                     })
                     continue
@@ -428,18 +428,15 @@ Responda APENAS o JSON, nada mais:"""
                         sentiment_data = json.loads(response_text)
                     
                     score = int(sentiment_data.get('score', 0))
-                    label = sentiment_data.get('label', 'neutro')
+                    raw_label = sentiment_data.get('label', 'neutro')
+                    # Normalizar label para Title case (padrão do sistema)
+                    label = raw_label.capitalize() if raw_label else "Neutro"
                     reason = sentiment_data.get('reason', '')
-                    
-                    # Atualizar lead no banco com o sentimento
-                    try:
-                        self.supabase.table("leads").update({
-                            "sentiment_score": score,
-                            "sentiment_label": label
-                        }).eq("id", lead_db_id).execute()
-                    except Exception as db_err:
-                        print(f"Error updating lead sentiment: {db_err}")
-                    
+
+                    # READ-ONLY: não escreve no banco.
+                    # A fonte de verdade para sentiment é o Path 2
+                    # (AI per-conversation em agent_manager.py).
+
                     results.append({
                         "lead_id": lead_db_id,
                         "name": lead_name,
@@ -454,7 +451,7 @@ Responda APENAS o JSON, nada mais:"""
                         "lead_id": lead_db_id,
                         "name": lead_name,
                         "sentiment_score": 0,
-                        "sentiment_label": "erro",
+                        "sentiment_label": "Erro",
                         "analysis": f"Erro na análise: {str(ai_err)}"
                     })
             
@@ -473,9 +470,9 @@ Responda APENAS o JSON, nada mais:"""
                     "summary": {
                         "total_analyzed": len(results),
                         "avg_score": round(df['sentiment_score'].mean(), 1),
-                        "positivos": len(df[df['sentiment_label'] == 'positivo']),
-                        "neutros": len(df[df['sentiment_label'] == 'neutro']),
-                        "negativos": len(df[df['sentiment_label'] == 'negativo']),
+                        "positivos": len(df[df['sentiment_label'] == 'Positivo']),
+                        "neutros": len(df[df['sentiment_label'] == 'Neutro']),
+                        "negativos": len(df[df['sentiment_label'] == 'Negativo']),
                         "by_label": label_stats
                     }
                 }

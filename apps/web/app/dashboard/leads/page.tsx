@@ -101,11 +101,13 @@ function StatusBadge({ status }: { status: string }) {
 // Ícone de Sentimento (Trend)
 function SentimentIcon({ sentiment, label, status }: { sentiment: number; label?: string | null; status?: string }) {
     // Determine effective label:
-    // 1. Use DB label if available
+    // 1. Use DB label if available (normalize casing for legacy data)
     // 2. For scheduled/completed visits, force Positivo (safety net)
     // 3. Fallback to numeric score
-    let effectiveLabel = label;
-    
+    let effectiveLabel = label
+        ? label.charAt(0).toUpperCase() + label.slice(1).toLowerCase()
+        : null;
+
     if (!effectiveLabel || effectiveLabel === 'Neutro') {
         const normalizedStatus = (status || '').toLowerCase().replace(/\s+/g, '_');
         if (['visita_agendada', 'visita_realizada', 'proposta_enviada', 'qualificado', 'transferido'].includes(normalizedStatus)) {
