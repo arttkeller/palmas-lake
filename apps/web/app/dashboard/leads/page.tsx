@@ -205,37 +205,39 @@ export default function LeadsPage() {
 
         try {
             // Tentar API Python primeiro (timeout 5s)
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            const res = await apiFetch(`/api/leads`, { signal: controller.signal });
-            clearTimeout(timeoutId);
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const res = await apiFetch(`/api/leads`, { signal: controller.signal });
+                clearTimeout(timeoutId);
 
-            if (res.ok) {
-                const data = await res.json();
-                setLeads(data.map(mapLeadData));
-                setLoading(false);
-                setIsInitialLoad(false);
-                return; // Sucesso API
+                if (res.ok) {
+                    const data = await res.json();
+                    setLeads(data.map(mapLeadData));
+                    return; // Sucesso API
+                }
+            } catch {
+                // API error or timeout, falling back to Supabase direct
             }
-        } catch (err) {
-            // API error or timeout, falling back to Supabase direct
+
+            // Fallback: Supabase Direto
+            const { data, error } = await supabase
+                .schema(SCHEMA)
+                .from('leads')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (!error && data) {
+                setLeads(data.map(mapLeadData));
+            } else if (error) {
+                console.error('Supabase fetch error:', error);
+            }
+        } catch (e) {
+            console.error('[fetchLeads] Unexpected error:', e);
+        } finally {
+            setLoading(false);
+            setIsInitialLoad(false);
         }
-
-        // Fallback: Supabase Direto (Executa se API falhar ou der erro de rede)
-        const { data, error } = await supabase
-            .schema(SCHEMA)
-            .from('leads')
-            .select('*')
-            .order('created_at', { ascending: false });
-
-        if (!error && data) {
-            setLeads(data.map(mapLeadData));
-        } else if (error) {
-            console.error('Supabase fetch error:', error);
-        }
-
-        setLoading(false);
-        setIsInitialLoad(false);
     }, [supabase, isInitialLoad]);
 
     // Detectar canal de origem

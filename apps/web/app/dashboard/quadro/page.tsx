@@ -221,34 +221,40 @@ export default function LeadsKanban() {
         setError('');
 
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            const res = await apiFetch(`/api/leads`, { signal: controller.signal });
-            clearTimeout(timeoutId);
-            if (res.ok) {
-                const apiData = await res.json();
-                setAllLeadsData(apiData);
-                setLoading(false);
-                isInitialLoadRef.current = false;
-                return;
+            // Try API first (timeout 5s)
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                const res = await apiFetch(`/api/leads`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (res.ok) {
+                    const apiData = await res.json();
+                    setAllLeadsData(apiData);
+                    return;
+                }
+            } catch {
+                // API error or timeout, falling back to Supabase
             }
-        } catch (err) {
-            // API error or timeout, falling back to Supabase
-        }
 
-        const { data, error: sbError } = await supabase
-            .schema(SCHEMA)
-            .from('leads')
-            .select('*')
-            .order('created_at', { ascending: false });
+            // Fallback: Supabase direct
+            const { data, error: sbError } = await supabase
+                .schema(SCHEMA)
+                .from('leads')
+                .select('*')
+                .order('created_at', { ascending: false });
 
-        if (sbError) {
-            setError('Falha ao carregar leads. Verifique sua conexão.');
-        } else {
-            setAllLeadsData(data || []);
+            if (sbError) {
+                setError('Falha ao carregar leads. Verifique sua conexão.');
+            } else {
+                setAllLeadsData(data || []);
+            }
+        } catch (e) {
+            console.error('[fetchLeads] Unexpected error:', e);
+            setError('Erro inesperado ao carregar leads.');
+        } finally {
+            setLoading(false);
+            isInitialLoadRef.current = false;
         }
-        setLoading(false);
-        isInitialLoadRef.current = false;
     }, [supabase]); // stable — supabase is memoized, no other changing deps
 
     // Fetch sellers map (UUID → name) for assigned_to display
