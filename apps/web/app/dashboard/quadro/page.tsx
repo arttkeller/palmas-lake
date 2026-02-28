@@ -221,7 +221,10 @@ export default function LeadsKanban() {
         setError('');
 
         try {
-            const res = await apiFetch(`/api/leads`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const res = await apiFetch(`/api/leads`, { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (res.ok) {
                 const apiData = await res.json();
                 setAllLeadsData(apiData);
@@ -230,7 +233,7 @@ export default function LeadsKanban() {
                 return;
             }
         } catch (err) {
-            // API error, falling back to Supabase
+            // API error or timeout, falling back to Supabase
         }
 
         const { data, error: sbError } = await supabase

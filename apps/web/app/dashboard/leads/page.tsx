@@ -204,8 +204,11 @@ export default function LeadsPage() {
         });
 
         try {
-            // Tentar API Python primeiro
-            const res = await apiFetch(`/api/leads`);
+            // Tentar API Python primeiro (timeout 5s)
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            const res = await apiFetch(`/api/leads`, { signal: controller.signal });
+            clearTimeout(timeoutId);
 
             if (res.ok) {
                 const data = await res.json();
@@ -215,7 +218,7 @@ export default function LeadsPage() {
                 return; // Sucesso API
             }
         } catch (err) {
-            // API fetch failed (network error), trying Supabase direct
+            // API error or timeout, falling back to Supabase direct
         }
 
         // Fallback: Supabase Direto (Executa se API falhar ou der erro de rede)
