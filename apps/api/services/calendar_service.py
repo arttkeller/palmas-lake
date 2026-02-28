@@ -29,7 +29,6 @@ class CalendarService:
                 SERVICE_ACCOUNT_FILE,
                 os.path.join(os.getcwd(), SERVICE_ACCOUNT_FILE),
                 os.path.join(os.path.dirname(__file__), '..', SERVICE_ACCOUNT_FILE),
-                os.path.join("C:\\Users\\arthu\\Downloads\\agente Palmas Lake\\apps\\api", SERVICE_ACCOUNT_FILE)
             ]
             
             found_path = None
@@ -122,7 +121,7 @@ class CalendarService:
                         event_start = datetime.datetime.fromisoformat(start)
                         # Mark the hour as busy
                         busy_slots.add((event_start.date(), event_start.hour))
-                    except:
+                    except Exception:
                         pass
             
             # Generate available slots

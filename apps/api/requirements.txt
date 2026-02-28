@@ -4,7 +4,6 @@ openai
 supabase
 python-multipart
 requests
-redis
 python-dotenv
 pandas
 openpyxl

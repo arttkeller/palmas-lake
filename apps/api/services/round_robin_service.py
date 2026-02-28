@@ -14,7 +14,7 @@ from typing import Optional
 
 from services.supabase_client import create_client
 
-FALLBACK_PHONE = os.environ.get("GERENTE_PHONE", "5527998724593")
+FALLBACK_PHONE = os.environ.get("GERENTE_PHONE", "")
 
 
 @dataclass

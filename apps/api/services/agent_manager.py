@@ -101,7 +101,8 @@ class AgentManager:
             try:
                 with open(self.prompt_path, "r", encoding="utf-8") as f:
                     base_prompt = f.read()
-            except:
+            except Exception as e:
+                print(f"[AgentManager] Error loading prompt: {e}")
                 base_prompt = "Você é a Maria, assistente virtual do Palmas Lake Towers."
 
             # Regras de formatação específicas por canal
@@ -219,7 +220,7 @@ Mensagem atual do Cliente:
                 try:
                     with open("agent_error.log", "a") as f:
                         f.write(f"\n--- Error at {datetime.now()} ---\n{error_msg}\n")
-                except:
+                except Exception:
                     pass
                 return "Desculpe, estou com dificuldades técnicas no momento. (Erro interno registrado)"
 
@@ -330,7 +331,7 @@ Mensagem atual do Cliente:
                 if conv_res.data:
                     # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    msgs_res = supabase.table("messages").select("*").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(200).execute()
+                    msgs_res = supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(50).execute()
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente

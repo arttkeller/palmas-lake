@@ -44,7 +44,7 @@ class SchemaError(SentimentServiceError):
 # Scores range from -100 (very negative) to 100 (very positive)
 STATUS_SENTIMENT_MAP = {
     'vendido': 100,           # Sold - maximum positive
-    'transferido': 80,        # Transferred to human - highly positive
+    'transferido': 80,        # Transferred to human - positive (lead qualificado avançou no funil)
     'qualificado': 80,        # Qualified (legacy) - highly positive
     'visita_agendada': 70,    # Visit scheduled - very positive
     'proposta_enviada': 60,   # Proposal sent - positive
@@ -55,7 +55,6 @@ STATUS_SENTIMENT_MAP = {
     'new': 0,                 # English variant - neutral
     'perdido': -60,           # Lost - very negative
     'arquivado': -40,         # Archived - negative
-    'transferido': 0,         # Transferred - neutral (status change, not sentiment)
 }
 
 

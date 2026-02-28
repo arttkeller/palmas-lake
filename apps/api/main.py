@@ -12,14 +12,12 @@ from sentry_sdk.integrations.openai import OpenAIIntegration
 
 sentry_sdk.init(
     dsn=os.environ.get("SENTRY_DSN"),
-    # Required for AI agent monitoring
-    traces_sample_rate=1.0,
-    # Add data like inputs and responses to/from LLMs and tools
-    send_default_pii=True,
+    traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+    send_default_pii=False,
     environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
     integrations=[
         OpenAIIntegration(
-            include_prompts=True,
+            include_prompts=False,
         ),
     ],
 )
@@ -27,6 +25,19 @@ sentry_sdk.init(
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users, sellers
+
+# Startup validation: fail fast if critical env vars are missing
+REQUIRED_ENV_VARS = [
+    "SUPABASE_URL",
+    "SUPABASE_KEY",
+    "OPENAI_API_KEY",
+    "META_ACCESS_TOKEN",
+    "UAZAPI_TOKEN",
+    "CORS_ORIGINS",
+]
+_missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
+if _missing:
+    raise RuntimeError(f"Missing required environment variables: {_missing}")
 
 
 @asynccontextmanager
@@ -48,15 +59,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Palmas Lake Agent API", lifespan=lifespan)
 
 # Configure CORS
-cors_origins_str = os.getenv("CORS_ORIGINS", "*")
-cors_origins = ["*"] if cors_origins_str == "*" else [o.strip() for o in cors_origins_str.split(",")]
+cors_origins_str = os.getenv("CORS_ORIGINS")
+if not cors_origins_str:
+    raise RuntimeError("CORS_ORIGINS environment variable must be set (comma-separated origins)")
+cors_origins = [o.strip() for o in cors_origins_str.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "x-user-id"],
 )
 
 app.include_router(leads.router, prefix="/api", tags=["leads"])
@@ -65,7 +78,7 @@ app.include_router(analytics.router, prefix="/api", tags=["analytics"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(events.router, tags=["events"])
 app.include_router(ai_specialist.router, tags=["AI Specialist"])
-if os.getenv("ENVIRONMENT") != "production":
+if os.getenv("ENVIRONMENT") == "development":
     app.include_router(debug.router, prefix="/api", tags=["debug"])
 app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
 app.include_router(users.router, prefix="/api", tags=["users"])

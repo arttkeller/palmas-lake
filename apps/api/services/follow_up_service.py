@@ -479,9 +479,3 @@ def cancel_follow_ups_for_lead(lead_id: str) -> int:
     """
     service = FollowUpService()
     return service.cancel_pending_follow_ups(lead_id)
-
-
-# Legacy — mantido para compatibilidade com scheduler existente
-def process_follow_ups() -> Dict[str, int]:
-    """Compatibilidade com o scheduler antigo. Agora delegado para execute_due_follow_ups."""
-    return execute_due_follow_ups()

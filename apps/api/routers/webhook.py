@@ -6,6 +6,7 @@ from services.buffer_service import add_to_buffer
 from services.analytics_service import AnalyticsService
 from services.analytics_cache_service import AnalyticsCacheService
 import asyncio
+import hmac
 import os
 import requests as http_requests
 from typing import Any, Dict, Optional, Tuple
@@ -25,7 +26,9 @@ analytics_cache_service.setup_background_processing()
 CLEAR_COMMAND = "#apagar"
 # Comando para resetar TODO o banco (só funciona do número admin)
 RESET_DB_COMMAND = "#resetdb"
-ADMIN_PHONE = "27998724593"
+ADMIN_PHONE = os.environ.get("ADMIN_PHONE", "")
+if not ADMIN_PHONE:
+    print("[WARN] ADMIN_PHONE not set — #resetdb command will be disabled")
 
 import re as _re
 
@@ -507,7 +510,7 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         
         try:
             _send_clear_response(lead_identifier, channel, f"❌ Erro ao limpar dados: {str(e)}")
-        except:
+        except Exception:
             pass
             
         return False
@@ -842,15 +845,17 @@ async def verify_webhook(request: Request):
     Meta (Facebook) Verification Challenge.
     Used when configuring the webhook URL in Meta Developer dashboard.
     """
-    verify_token = os.environ.get("META_VERIFY_TOKEN", "")
-    
+    verify_token = os.environ.get("META_VERIFY_TOKEN")
+    if not verify_token:
+        raise HTTPException(status_code=500, detail="META_VERIFY_TOKEN not configured")
+
     params = request.query_params
     mode = params.get("hub.mode")
     token = params.get("hub.verify_token")
     challenge = params.get("hub.challenge")
 
     if mode and token:
-        if mode == "subscribe" and token == verify_token:
+        if mode == "subscribe" and hmac.compare_digest(token, verify_token):
             print(f"[Meta Webhook] Verification successful")
             return int(challenge)
         else:

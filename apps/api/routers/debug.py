@@ -205,7 +205,7 @@ def debug_messages(conversation_id: str) -> Dict[str, Any]:
 
 
 @router.post("/debug/test-save-message")
-def test_save_message(phone: str = "5527998724593", content: str = "Mensagem de teste") -> Dict[str, Any]:
+def test_save_message(phone: str = "", content: str = "Mensagem de teste") -> Dict[str, Any]:
     """
     Test endpoint to verify message saving works correctly.
     """

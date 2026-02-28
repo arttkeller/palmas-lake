@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, UserPlus, LogIn, Phone } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { sanitizeNextUrl } from "@/lib/auth-utils";
 import { createClient } from "@/lib/supabase";
 import { UserIcon } from "@/components/ui/user";
 import MailFilledIcon from "@/components/ui/mail-filled-icon";
@@ -335,8 +336,8 @@ export default function AnimatedLoginPage() {
       if (signInError) {
         setError("Email ou senha incorretos. Tente novamente.");
       } else {
-        const nextUrl = searchParams.get("next");
-        router.push(nextUrl || "/dashboard/quadro");
+        const nextUrl = sanitizeNextUrl(searchParams.get("next"));
+        router.push(nextUrl);
       }
     }
 

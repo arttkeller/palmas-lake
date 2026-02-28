@@ -160,7 +160,7 @@ def compute_source_analysis(
 
 def compute_response_times(
     df_messages: pd.DataFrame,
-    session_gap_seconds: float = 30000,
+    session_gap_seconds: float = 1800,  # 30 minutos
 ) -> Dict[str, Any]:
     """
     Compute AI and lead response times from a messages DataFrame.

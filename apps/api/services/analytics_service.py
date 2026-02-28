@@ -71,8 +71,8 @@ class AnalyticsService:
                 if convs_res.data:
                     df_convs_em = pd.DataFrame(convs_res.data)
                     em_atendimento = compute_em_atendimento(df_leads, df_convs_em)
-            except:
-                # Fallback: considerar leads que não são 'novo' como em atendimento
+            except Exception as e:
+                print(f"[Analytics] Error computing em_atendimento: {e}")
                 em_atendimento = len(df_leads[~df_leads['status'].isin(['new', 'novo', 'novo_lead'])])
 
             # 3. Status Distribution (for Pie Chart)

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from services.supabase_client import create_client
 from services.sentiment_service import SentimentService
 import os
@@ -46,10 +46,10 @@ class Lead(LeadBase):
     instagram_id: Optional[str] = None
 
 @router.get("/leads")
-def get_leads():
-    """Returns all leads with all fields from the database."""
+def get_leads(limit: int = Query(default=100, le=500), offset: int = Query(default=0, ge=0)):
+    """Returns leads with pagination. Default: 100 per page."""
     supabase = get_db()
-    response = supabase.table("leads").select("*").execute()
+    response = supabase.table("leads").select("*").order("created_at", desc=True).limit(limit).offset(offset).execute()
     return response.data
 
 @router.post("/leads", response_model=Lead)
