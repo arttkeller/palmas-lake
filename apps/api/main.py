@@ -8,6 +8,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 
+import redis.asyncio as aioredis
+
 # Centralized logging configuration
 logging.basicConfig(
     level=logging.INFO,
@@ -59,9 +61,25 @@ async def lifespan(app: FastAPI):
     loop.set_default_executor(executor)
     print("[Startup] Thread pool configurado com 50 workers")
 
+    # Redis connection pool for buffer_service (shared state across workers)
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+    redis_client = aioredis.from_url(redis_url, decode_responses=False, max_connections=20)
+    app.state.redis = redis_client
+
+    from services import buffer_service
+    buffer_service.init_redis(redis_client)
+    timer_task = asyncio.create_task(buffer_service.run_timer_loop())
+    print(f"[Startup] Redis conectado: {redis_url}")
+
     print("[Startup] Follow-ups + lembretes de visita gerenciados pelo cron job do Supabase")
     print("[Startup] Endpoint: POST /api/webhook/follow-up-cron")
     yield
+    timer_task.cancel()
+    try:
+        await timer_task
+    except asyncio.CancelledError:
+        pass
+    await redis_client.aclose()
     executor.shutdown(wait=False)
     print("[Shutdown] API encerrada")
 

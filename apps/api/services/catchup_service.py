@@ -187,8 +187,8 @@ class CatchUpService:
 
         # Check if lead is currently in the in-memory buffer
         try:
-            from services.buffer_service import message_buffer
-            if buffer_lead_id in message_buffer:
+            from services.buffer_service import is_lead_buffered
+            if await is_lead_buffered(buffer_lead_id):
                 print(f"[CatchUp] Lead {buffer_lead_id} is currently in buffer, skipping")
                 return False
         except ImportError:

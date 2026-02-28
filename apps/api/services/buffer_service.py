@@ -1,147 +1,256 @@
 
 import asyncio
+import json
 import logging
-from typing import Dict, List
+import time
+import uuid
+from typing import Optional
+
 import sentry_sdk
+from redis.asyncio import Redis
+
 from services.agent_manager import AgentManager
 from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
 
 logger = logging.getLogger(__name__)
 
-# Simple in-memory buffer for MVP. Use Redis for production.
-message_buffer: Dict[str, List[tuple]] = {}
-buffer_locks: Dict[str, asyncio.Lock] = {}
-# Track which channel each lead_id uses (whatsapp or instagram)
-channel_map: Dict[str, str] = {}
-# Track recently processed message IDs to prevent duplicates (TTL managed manually)
-_processed_msg_ids: Dict[str, float] = {}  # msg_id -> timestamp
-_DEDUP_TTL = 120  # seconds to keep message IDs in memory
-# Leads marked for deletion — buffer processing will skip these
-_cancelled_leads: set = set()
-# Track WhatsApp pushname per lead
-pushname_map: Dict[str, str] = {}
-# Track last message arrival time per lead (for resettable timer)
-_last_msg_time: Dict[str, float] = {}
-# Buffer delay in seconds — resets with each new message
-BUFFER_DELAY = 35.0
+# ── Redis client (set via init_redis from lifespan) ────────────────────
+_redis: Optional[Redis] = None
 
+# ── Constants ──────────────────────────────────────────────────────────
+BUFFER_DELAY = 35.0          # seconds of silence before processing
+_DEDUP_TTL = 120             # seconds to keep message IDs for dedup
+_LOCK_TIMEOUT_MS = 30_000    # distributed lock auto-expiry
+_LOCK_RETRY_DELAY = 0.1      # seconds between lock retries
+_LOCK_MAX_RETRIES = 50       # max lock attempts (~5s)
+_POLL_INTERVAL = 2.0         # timer loop polling interval
+
+# ── Redis key patterns ────────────────────────────────────────────────
+_K_MSGS     = "buffer:msgs:{}"       # List — lead messages
+_K_CHANNEL  = "buffer:ch:{}"         # String — channel per lead
+_K_PUSHNAME = "buffer:pn:{}"         # String — pushname per lead
+_K_DEDUP    = "buffer:dedup:{}"      # String — message dedup (TTL=120s)
+_K_CANCEL   = "buffer:cancelled:{}"  # String — cancelled flag (TTL=120s)
+_K_LOCK     = "buffer:lock:{}"       # String — distributed lock (TTL=30s)
+_K_TIMER    = "buffer:ready_at"      # Sorted Set — fire times
+
+# ── Lua scripts ───────────────────────────────────────────────────────
+# Safe lock release: only delete if we own the lock
+_LUA_RELEASE_LOCK = """
+if redis.call("get", KEYS[1]) == ARGV[1] then
+    return redis.call("del", KEYS[1])
+end
+return 0
+"""
+
+# Atomic pop: get all messages + metadata, then delete keys
+_LUA_POP_BUFFER = """
+local msgs = redis.call("LRANGE", KEYS[1], 0, -1)
+redis.call("DEL", KEYS[1])
+local ch = redis.call("GET", KEYS[2])
+if not ch then ch = "" end
+redis.call("DEL", KEYS[2])
+local pn = redis.call("GET", KEYS[3])
+if not pn then pn = "" end
+redis.call("DEL", KEYS[3])
+return {msgs, ch, pn}
+"""
+
+# ── Service instances ─────────────────────────────────────────────────
 agent = AgentManager()
 uazapi = UazapiService()
 meta = MetaService()
 
-def _cleanup_processed_ids():
-    """Remove expired message IDs from the dedup cache."""
-    import time
-    now = time.time()
-    expired = [mid for mid, ts in _processed_msg_ids.items() if now - ts > _DEDUP_TTL]
-    for mid in expired:
-        del _processed_msg_ids[mid]
 
-def cancel_buffer(lead_id: str):
-    """Cancel any pending buffered messages for a lead (used before deletion)."""
-    removed = message_buffer.pop(lead_id, [])
-    channel_map.pop(lead_id, None)
-    pushname_map.pop(lead_id, None)
-    _last_msg_time.pop(lead_id, None)
-    if removed:
-        # Only mark as cancelled if there were pending messages in the buffer.
-        # This prevents FUTURE messages from being silently discarded after #apagar.
-        _cancelled_leads.add(lead_id)
-        logger.info(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
-    else:
-        logger.info(f"[Buffer] No pending messages to cancel for {lead_id}")
+# ═══════════════════════════════════════════════════════════════════════
+# Public API
+# ═══════════════════════════════════════════════════════════════════════
+
+def init_redis(client: Redis) -> None:
+    """Called from FastAPI lifespan to inject the async Redis client."""
+    global _redis
+    _redis = client
+    logger.info("[Buffer] Redis client initialized")
 
 
-async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp", pushname: str = ""):
-    """
-    Add a message to the buffer for a lead. Messages are batched and processed
-    after BUFFER_DELAY seconds of inactivity (timer resets on each new message).
-
-    Args:
-        lead_id: Identifier for the lead (phone for WhatsApp, ig:<igsid> for Instagram)
-        message_content: Text content of the message
-        message_id: Platform message ID (optional)
-        channel: "whatsapp" or "instagram"
-        pushname: WhatsApp display name (optional)
-    """
-    import time
-
-    # --- DEDUP CHECK: Skip if this message_id was already processed recently ---
-    if message_id:
-        _cleanup_processed_ids()
-        if message_id in _processed_msg_ids:
-            logger.info(f"[Buffer] DUPLICATE: message_id {message_id} already in buffer/processed, skipping")
+async def run_timer_loop() -> None:
+    """Background coroutine that polls the sorted set for due timers.
+    Started once per worker process from the FastAPI lifespan."""
+    logger.info("[Buffer] Timer loop started (polling every %.1fs)", _POLL_INTERVAL)
+    while True:
+        try:
+            now = time.time()
+            due = await _redis.zrangebyscore(_K_TIMER, "-inf", now)
+            for member in due:
+                lead_id = member.decode() if isinstance(member, bytes) else member
+                removed = await _redis.zrem(_K_TIMER, lead_id)
+                if removed:
+                    logger.info(f"[Buffer] Timer fired for {lead_id}, claiming for processing")
+                    asyncio.create_task(_safe_process_buffer(lead_id))
+        except asyncio.CancelledError:
+            logger.info("[Buffer] Timer loop cancelled, shutting down")
             return
-        _processed_msg_ids[message_id] = time.time()
-    # -------------------------------------------------------------------------
+        except Exception as e:
+            logger.error(f"[Buffer] Timer loop error (will retry): {e}")
+            sentry_sdk.capture_exception(e)
+        await asyncio.sleep(_POLL_INTERVAL)
 
-    if lead_id not in buffer_locks:
-        buffer_locks[lead_id] = asyncio.Lock()
 
-    # Store the channel and pushname for this lead
-    channel_map[lead_id] = channel
-    if pushname:
-        pushname_map[lead_id] = pushname
+async def add_to_buffer(
+    lead_id: str,
+    message_content: str,
+    message_id: str = None,
+    channel: str = "whatsapp",
+    pushname: str = "",
+) -> None:
+    """Add a message to the buffer for a lead. Messages are batched and processed
+    after BUFFER_DELAY seconds of inactivity (timer resets on each new message)."""
 
-    async with buffer_locks[lead_id]:
-        # Update last message time INSIDE the lock to prevent race condition
-        # (previous batch clearing _last_msg_time could erase the new value)
-        _last_msg_time[lead_id] = time.time()
+    # ── Dedup check ──
+    if message_id:
+        was_set = await _redis.set(
+            _K_DEDUP.format(message_id), "1", nx=True, ex=_DEDUP_TTL
+        )
+        if was_set is None:
+            logger.info(f"[Buffer] DUPLICATE: message_id {message_id} already processed, skipping")
+            return
 
-        if lead_id not in message_buffer:
-            message_buffer[lead_id] = []
-            # Start timer for this new batch
-            logger.info(f"[Buffer] New batch started for {lead_id}, timer set for {BUFFER_DELAY}s")
-            asyncio.create_task(process_buffer_after_delay(lead_id))
-        else:
-            logger.info(f"[Buffer] Appending to existing batch for {lead_id} (now {len(message_buffer[lead_id]) + 1} msgs), timer reset to {BUFFER_DELAY}s")
-
-        message_buffer[lead_id].append((message_content, message_id))
-
-async def process_buffer_after_delay(lead_id: str):
-    """Process buffered messages after BUFFER_DELAY of inactivity.
-    Wrapped in global try/except to prevent silent task death."""
+    # ── Acquire distributed lock ──
+    token = await _acquire_lock(lead_id)
     try:
-        await _process_buffer_inner(lead_id)
+        # Store channel and pushname
+        await _redis.set(_K_CHANNEL.format(lead_id), channel)
+        if pushname:
+            await _redis.set(_K_PUSHNAME.format(lead_id), pushname)
+
+        # Check if this is a new batch
+        list_len = await _redis.llen(_K_MSGS.format(lead_id))
+        is_new_batch = list_len == 0
+
+        # Append message to list
+        await _redis.rpush(
+            _K_MSGS.format(lead_id),
+            json.dumps([message_content, message_id]),
+        )
+
+        # Set / reset the debounce timer in the sorted set
+        fire_at = time.time() + BUFFER_DELAY
+        await _redis.zadd(_K_TIMER, {lead_id: fire_at})
+
+        if is_new_batch:
+            logger.info(f"[Buffer] New batch started for {lead_id}, timer set for {BUFFER_DELAY}s")
+        else:
+            logger.info(
+                f"[Buffer] Appending to existing batch for {lead_id} "
+                f"(now {list_len + 1} msgs), timer reset to {BUFFER_DELAY}s"
+            )
+    finally:
+        if token:
+            await _release_lock(lead_id, token)
+
+
+async def cancel_buffer(lead_id: str) -> None:
+    """Cancel any pending buffered messages for a lead (used before deletion)."""
+    try:
+        list_len = await _redis.llen(_K_MSGS.format(lead_id))
+        had_messages = list_len > 0
+
+        # Remove all buffer keys for this lead
+        await _redis.delete(
+            _K_MSGS.format(lead_id),
+            _K_CHANNEL.format(lead_id),
+            _K_PUSHNAME.format(lead_id),
+        )
+        # Remove from timer sorted set
+        await _redis.zrem(_K_TIMER, lead_id)
+
+        if had_messages:
+            # Mark as cancelled so any in-flight processing skips this lead
+            await _redis.set(_K_CANCEL.format(lead_id), "1", ex=_DEDUP_TTL)
+            logger.info(f"[Buffer] Cancelled {list_len} pending message(s) for {lead_id}")
+        else:
+            logger.info(f"[Buffer] No pending messages to cancel for {lead_id}")
+    except Exception as e:
+        logger.error(f"[Buffer] Error in cancel_buffer (non-fatal): {e}")
+
+
+async def is_lead_buffered(lead_id: str) -> bool:
+    """Check if a lead currently has messages in the buffer."""
+    try:
+        return await _redis.llen(_K_MSGS.format(lead_id)) > 0
+    except Exception:
+        return False
+
+
+async def get_active_lead_ids() -> list:
+    """Get all lead IDs that currently have pending buffer entries."""
+    try:
+        members = await _redis.zrange(_K_TIMER, 0, -1)
+        return [m.decode() if isinstance(m, bytes) else m for m in members]
+    except Exception:
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Internal: distributed lock
+# ═══════════════════════════════════════════════════════════════════════
+
+async def _acquire_lock(lead_id: str) -> Optional[str]:
+    """Acquire a Redis distributed lock. Returns token on success, None on failure."""
+    token = str(uuid.uuid4())
+    key = _K_LOCK.format(lead_id)
+    for _ in range(_LOCK_MAX_RETRIES):
+        acquired = await _redis.set(key, token, nx=True, px=_LOCK_TIMEOUT_MS)
+        if acquired:
+            return token
+        await asyncio.sleep(_LOCK_RETRY_DELAY)
+    logger.warning(f"[Buffer] Failed to acquire lock for {lead_id} after {_LOCK_MAX_RETRIES} retries")
+    return None
+
+
+async def _release_lock(lead_id: str, token: str) -> None:
+    """Release a Redis distributed lock (only if we own it)."""
+    key = _K_LOCK.format(lead_id)
+    await _redis.eval(_LUA_RELEASE_LOCK, 1, key, token)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Internal: buffer processing
+# ═══════════════════════════════════════════════════════════════════════
+
+async def _safe_process_buffer(lead_id: str):
+    """Top-level wrapper with error handling for buffer processing."""
+    try:
+        await _process_buffer(lead_id)
     except Exception as e:
         import traceback
         logger.error(f"[Buffer] CRITICAL: Unhandled error processing {lead_id}: {e}")
         traceback.print_exc()
         sentry_sdk.capture_exception(e)
         # Clean up state so new messages can still be buffered
-        message_buffer.pop(lead_id, None)
-        channel_map.pop(lead_id, None)
-        pushname_map.pop(lead_id, None)
-        _last_msg_time.pop(lead_id, None)
+        try:
+            await _redis.delete(
+                _K_MSGS.format(lead_id),
+                _K_CHANNEL.format(lead_id),
+                _K_PUSHNAME.format(lead_id),
+            )
+        except Exception:
+            pass
 
 
-async def _process_buffer_inner(lead_id: str):
-    import time
+async def _process_buffer(lead_id: str):
+    """Process buffered messages for a lead after the debounce timer fires."""
 
-    # Resettable timer: wait BUFFER_DELAY seconds after the LAST message
-    # Each new message updates _last_msg_time, and the loop re-checks
-    while True:
-        last_time = _last_msg_time.get(lead_id, 0)
-        if last_time == 0:
-            logger.info(f"[Buffer] Timer for {lead_id}: _last_msg_time missing, processing immediately")
-            break
-        elapsed = time.time() - last_time
-        remaining = BUFFER_DELAY - elapsed
-        if remaining <= 0:
-            break
-        await asyncio.sleep(remaining)
-
-    msg_count = len(message_buffer.get(lead_id, []))
-    logger.info(f"[Buffer] Timer fired for {lead_id}: {msg_count} message(s) ready to process")
-
-    # Skip processing if lead was deleted via #apagar during the delay
-    if lead_id in _cancelled_leads:
-        _cancelled_leads.discard(lead_id)
-        message_buffer.pop(lead_id, None)
-        channel_map.pop(lead_id, None)
-        pushname_map.pop(lead_id, None)
-        _last_msg_time.pop(lead_id, None)
+    # Skip if lead was cancelled via #apagar during the delay
+    cancelled = await _redis.get(_K_CANCEL.format(lead_id))
+    if cancelled:
+        await _redis.delete(_K_CANCEL.format(lead_id))
+        await _redis.delete(
+            _K_MSGS.format(lead_id),
+            _K_CHANNEL.format(lead_id),
+            _K_PUSHNAME.format(lead_id),
+        )
         logger.info(f"[Buffer] Skipping processing for deleted lead {lead_id}")
         return
 
@@ -158,39 +267,53 @@ async def _process_buffer_inner(lead_id: str):
 
         if _pause_check.data and _pause_check.data[0].get("ai_paused"):
             logger.info(f"[Buffer] AI is PAUSED for {lead_id}, skipping AI processing")
-            async with buffer_locks[lead_id]:
-                message_buffer.pop(lead_id, None)
-                channel_map.pop(lead_id, None)
-                pushname_map.pop(lead_id, None)
-                _last_msg_time.pop(lead_id, None)
+            await _redis.delete(
+                _K_MSGS.format(lead_id),
+                _K_CHANNEL.format(lead_id),
+                _K_PUSHNAME.format(lead_id),
+            )
             return
     except Exception as pause_err:
         logger.error(f"[Buffer] Error checking ai_paused (proceeding normally): {pause_err}")
 
-    # Pop messages under lock (brief) — release BEFORE agent processing
-    # so new incoming messages can be buffered immediately
-    async with buffer_locks[lead_id]:
-        messages_with_ids = message_buffer.pop(lead_id, [])
-        channel = channel_map.pop(lead_id, "whatsapp")
-        lead_pushname = pushname_map.pop(lead_id, "")
-        _last_msg_time.pop(lead_id, None)
+    # ── Atomic pop: get messages + metadata in one Lua call ──
+    token = await _acquire_lock(lead_id)
+    try:
+        result = await _redis.eval(
+            _LUA_POP_BUFFER,
+            3,
+            _K_MSGS.format(lead_id),
+            _K_CHANNEL.format(lead_id),
+            _K_PUSHNAME.format(lead_id),
+        )
+    finally:
+        if token:
+            await _release_lock(lead_id, token)
 
-    if not messages_with_ids:
+    # Parse Lua result
+    raw_msgs, raw_channel, raw_pushname = result
+    if not raw_msgs:
         return
 
-    logger.info(f"Processing buffered messages for {lead_id} (channel: {channel}): {messages_with_ids}")
+    messages_with_ids = []
+    for item in raw_msgs:
+        decoded = item.decode() if isinstance(item, bytes) else item
+        content, msg_id = json.loads(decoded)
+        messages_with_ids.append((content, msg_id))
 
-    # Process OUTSIDE the lock — new messages can be buffered in parallel
-    # Wrapped in Sentry transaction so OpenAI calls in background tasks are captured
+    channel = (raw_channel.decode() if isinstance(raw_channel, bytes) else raw_channel) or "whatsapp"
+    lead_pushname = (raw_pushname.decode() if isinstance(raw_pushname, bytes) else raw_pushname) or ""
+
+    logger.info(f"[Buffer] Processing {len(messages_with_ids)} message(s) for {lead_id} (channel: {channel})")
+
+    # ── Process outside the lock — identical to original logic ──
     with sentry_sdk.start_transaction(op="gen_ai.invoke_agent", name=f"agent.maria {lead_id}") as txn:
         txn.set_data("gen_ai.agent.name", "Maria")
         txn.set_data("lead_id", lead_id)
         txn.set_data("channel", channel)
         txn.set_data("message_count", len(messages_with_ids))
 
-        # Call Agent
         try:
-            # Pass (content, id) list
             response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
             logger.info(f"Agent Response for {lead_id}: {response}")
 
@@ -201,17 +324,14 @@ async def _process_buffer_inner(lead_id: str):
             elif response == "__TOOL_SENT__":
                 logger.info(f"[Buffer] Messages already sent via tool for {lead_id}, skipping re-send")
 
-            # Send messages only if agent returned content AND it wasn't already sent via tool
             skip_responses = ("IGNORED_DUPLICATE", "__TOOL_SENT__")
             if response and response not in skip_responses:
-                # Split messages by double newline to send "picotado"
                 parts = [p.strip() for p in response.split('\n\n') if p.strip()]
 
                 from services.message_service import MessageService
                 msg_service = MessageService()
 
                 for part in parts:
-                    # Send via the appropriate channel
                     try:
                         logger.info(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
                         send_result = _send_message(lead_id, part, channel)
@@ -222,7 +342,6 @@ async def _process_buffer_inner(lead_id: str):
                         traceback.print_exc()
                         send_result = None
 
-                    # Save each part to DB
                     try:
                         whatsapp_msg_id = None
                         if channel == "instagram" and isinstance(send_result, dict):
@@ -231,24 +350,19 @@ async def _process_buffer_inner(lead_id: str):
                     except Exception as db_err:
                         logger.error(f"DB Error saving AI response part: {db_err}")
 
-                    # Small delay between parts to feel natural
                     await asyncio.sleep(1.5)
 
-            # Apos IA responder, agendar follow-up Stage 1 (2h)
-            # Se o lead nao responder em 2h, o cron job do Supabase dispara a mensagem
-            # Runs for both regular and tool-sent responses (but not duplicates/empty)
+            # Schedule follow-up after AI response
             if response and response not in ("IGNORED_DUPLICATE", None, ""):
                 try:
                     from services.follow_up_service import schedule_follow_up_after_ai_response
                     from services.supabase_client import create_client
                     sb = create_client()
 
-                    # For Instagram leads, search by instagram_id
                     if lead_id.startswith("ig:"):
                         ig_id = lead_id[3:]
                         lead_res = sb.table("leads").select("id").eq("instagram_id", ig_id).execute()
                     else:
-                        # Strip WhatsApp JID suffix (@s.whatsapp.net) for DB lookup
                         phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
                         lead_res = sb.table("leads").select("id").eq("phone", phone).execute()
 
@@ -264,20 +378,11 @@ async def _process_buffer_inner(lead_id: str):
 
 
 def _send_message(lead_id: str, text: str, channel: str):
-    """
-    Send a message via the appropriate channel.
-    
-    Args:
-        lead_id: Lead identifier (phone or ig:<igsid>)
-        text: Message text
-        channel: "whatsapp" or "instagram"
-    """
+    """Send a message via the appropriate channel."""
     logger.info(f"[_send_message] channel={channel}, lead_id={lead_id}, meta_token={'SET' if meta.access_token else 'MISSING'}")
     if channel == "instagram":
-        # Extract IGSID from the ig: prefix
         recipient_id = lead_id[3:] if lead_id.startswith("ig:") else lead_id
         logger.info(f"[_send_message] Calling meta.send_instagram_message({recipient_id})")
-        # MetaService.send_instagram_message already removes markdown
         result = meta.send_instagram_message(recipient_id, text)
         logger.info(f"[_send_message] Instagram send result: {result}")
         return result

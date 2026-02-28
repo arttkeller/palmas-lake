@@ -449,7 +449,7 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         # Cancel any pending buffered messages to prevent race condition
         # where the AI agent re-creates the lead after deletion
         from services.buffer_service import cancel_buffer
-        cancel_buffer(lead_identifier)
+        await cancel_buffer(lead_identifier)
 
         from services.supabase_client import create_client
         supabase = create_client()
@@ -594,9 +594,10 @@ async def handle_reset_db_command(sender_jid: str) -> bool:
 
     try:
         # Cancel ALL pending buffered messages
-        from services.buffer_service import message_buffer, cancel_buffer
-        for lead_id in list(message_buffer.keys()):
-            cancel_buffer(lead_id)
+        from services.buffer_service import get_active_lead_ids, cancel_buffer
+        active_ids = await get_active_lead_ids()
+        for lead_id in active_ids:
+            await cancel_buffer(lead_id)
 
         from services.supabase_client import create_client
         supabase = create_client()
