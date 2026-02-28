@@ -237,21 +237,25 @@ Mensagem atual do Cliente:
             supabase_client = create_client()
             
             # Buscar o lead pelo phone ou instagram_id para obter o conversation_id
-            lead_res = _lookup_lead(supabase_client, lead_id, "id")
-            
+            lead_res = await asyncio.to_thread(_lookup_lead, supabase_client, lead_id, "id")
+
             if lead_res.data:
                 db_lead_id = lead_res.data[0]["id"]
-                conv_res = supabase_client.table("conversations").select("id").eq("lead_id", db_lead_id).execute()
+                conv_res = await asyncio.to_thread(
+                    supabase_client.table("conversations").select("id").eq("lead_id", db_lead_id).execute
+                )
 
                 if conv_res.data:
                     all_conv_ids = [c["id"] for c in conv_res.data]
                     # Buscar última mensagem de todas as conversas do lead
-                    last_msgs = supabase_client.table("messages") \
-                        .select("*") \
-                        .in_("conversation_id", all_conv_ids) \
-                        .order("created_at", direction="desc") \
-                        .limit(1) \
-                        .execute()
+                    last_msgs = await asyncio.to_thread(
+                        supabase_client.table("messages")
+                        .select("*")
+                        .in_("conversation_id", all_conv_ids)
+                        .order("created_at", direction="desc")
+                        .limit(1)
+                        .execute
+                    )
                     
                     if last_msgs.data:
                         last_msg = last_msgs.data[0]
@@ -289,8 +293,8 @@ Mensagem atual do Cliente:
         
         # 1. Recuperar contexto do Lead e Histórico
         try:
-            lead_res = _lookup_lead(supabase, lead_id, "*")
-            
+            lead_res = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "*")
+
             if lead_res.data:
                 lead_data = lead_res.data[0]
                 db_lead_id = lead_data["id"]
@@ -329,12 +333,16 @@ Mensagem atual do Cliente:
 </lead_context>
 """
                 
-                conv_res = supabase.table("conversations").select("id").eq("lead_id", db_lead_id).execute()
+                conv_res = await asyncio.to_thread(
+                    supabase.table("conversations").select("id").eq("lead_id", db_lead_id).execute
+                )
 
                 if conv_res.data:
                     # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    msgs_res = supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(50).execute()
+                    msgs_res = await asyncio.to_thread(
+                        supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(50).execute
+                    )
                     
                     if msgs_res.data:
                         # Reordenar cronologicamente
@@ -377,14 +385,16 @@ Mensagem atual do Cliente:
         # 5b. Fallback: detect name from AI response if atualizar_nome tool wasn't called
         try:
             # Re-check current name in DB (if tool was called, name is already updated)
-            _fb_lead = _lookup_lead(supabase, lead_id, "id, full_name")
+            _fb_lead = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "id, full_name")
             if _fb_lead.data:
                 _fb_name = _fb_lead.data[0].get("full_name", "")
                 if _fb_name.startswith("Lead ") or _fb_name == "Visitante":
                     _extracted = self._extract_name_from_response(response_text, current_message_content)
                     if _extracted:
                         logger.info(f"[Fallback] AI didn't call atualizar_nome. Extracting name: '{_extracted}'")
-                        supabase.table("leads").update({"full_name": _extracted}).eq("id", _fb_lead.data[0]["id"]).execute()
+                        await asyncio.to_thread(
+                            supabase.table("leads").update({"full_name": _extracted}).eq("id", _fb_lead.data[0]["id"]).execute
+                        )
                         logger.info(f"[Fallback] Name updated to '{_extracted}' for lead {_fb_lead.data[0]['id']}")
         except Exception as name_fallback_err:
             logger.error(f"[Fallback] Name extraction error (non-blocking): {name_fallback_err}")
@@ -423,7 +433,7 @@ Mensagem atual do Cliente:
         try:
             from services.supabase_client import create_client
             supabase_status = create_client()
-            lead_status_res = _lookup_lead(supabase_status, lead_id, "status")
+            lead_status_res = await asyncio.to_thread(_lookup_lead, supabase_status, lead_id, "status")
             if lead_status_res.data:
                 lead_status = lead_status_res.data[0].get("status")
                 logger.info(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
@@ -571,7 +581,7 @@ Mensagem atual do Cliente:
             supabase = create_client()
             
             # Buscar o lead pelo phone ou instagram_id para obter o ID do lead no DB e last_interaction
-            lead_res = _lookup_lead(supabase, lead_id, "id, last_interaction")
+            lead_res = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "id, last_interaction")
             if not lead_res.data:
                 logger.warning(f"[Sentiment] Lead {lead_id} not found in DB.")
                 return
@@ -705,7 +715,9 @@ Mensagem atual do Cliente:
 
             # Final safety check: re-read current status and NEVER downgrade from protected statuses
             try:
-                current_lead = supabase.table("leads").select("status").eq("id", db_lead_id).execute()
+                current_lead = await asyncio.to_thread(
+                    supabase.table("leads").select("status").eq("id", db_lead_id).execute
+                )
                 current_status = (current_lead.data[0].get("status", "") if current_lead.data else "").lower()
                 protected_final = ("visita_agendada", "visita_realizada", "proposta_enviada", "transferido", "sold")
                 if current_status in protected_final:
@@ -721,7 +733,9 @@ Mensagem atual do Cliente:
                 logger.error(f"[Sentiment] Final safety check error (non-blocking): {e}")
             
             logger.info(f"[Sentiment] Updating lead {db_lead_id} with payload: {json.dumps(update_payload, default=str)}")
-            result = supabase.table("leads").update(update_payload).eq("id", db_lead_id).execute()
+            result = await asyncio.to_thread(
+                supabase.table("leads").update(update_payload).eq("id", db_lead_id).execute
+            )
             logger.info(f"[Sentiment] Update result: {result.data}")
             
         except Exception as e:
