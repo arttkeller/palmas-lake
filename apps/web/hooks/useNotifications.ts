@@ -31,6 +31,7 @@ export function useNotifications() {
         if (!user?.id) return;
         try {
             const { data } = await supabase
+                .schema(SCHEMA)
                 .from('notifications')
                 .select('*')
                 .eq('seller_id', user.id)
@@ -51,6 +52,7 @@ export function useNotifications() {
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
             await supabase
+                .schema(SCHEMA)
                 .from('notifications')
                 .update({ status: 'read', read_at: new Date().toISOString() })
                 .eq('id', notificationId)
