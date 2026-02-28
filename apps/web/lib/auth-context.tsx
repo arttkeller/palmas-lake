@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api-fetch';
 import type { User } from '@supabase/supabase-js';
@@ -39,39 +39,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [crmUser, setCrmUser] = useState<CrmUser | null>(null);
     const [loading, setLoading] = useState(true);
-    const supabase = createClient();
+    const [supabase] = useState(() => createClient());
+    const initializedRef = useRef(false);
 
     const fetchCrmUser = useCallback(async (authUser: User) => {
+        const fallback: CrmUser = {
+            id: authUser.id,
+            email: authUser.email || '',
+            full_name: '',
+            role: 'user',
+            created_at: null,
+            updated_at: null,
+        };
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
             const res = await apiFetch(`/api/users/me`, {
+                signal: controller.signal,
                 headers: {
                     'x-user-id': authUser.id,
                 },
             });
+            clearTimeout(timeoutId);
             if (res.ok) {
                 const data = await res.json();
                 setCrmUser(data);
             } else {
-                // Fallback: user exists in auth but not yet in CRM
-                setCrmUser({
-                    id: authUser.id,
-                    email: authUser.email || '',
-                    full_name: '',
-                    role: 'user',
-                    created_at: null,
-                    updated_at: null,
-                });
+                setCrmUser(fallback);
             }
         } catch (err) {
             console.error('[AuthContext] Error fetching CRM user:', err);
-            setCrmUser({
-                id: authUser.id,
-                email: authUser.email || '',
-                full_name: '',
-                role: 'user',
-                created_at: null,
-                updated_at: null,
-            });
+            setCrmUser(fallback);
         }
     }, []);
 
@@ -82,30 +80,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [user, fetchCrmUser]);
 
     useEffect(() => {
-        // Get initial session
-        const init = async () => {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            setUser(authUser);
-            if (authUser) {
-                await fetchCrmUser(authUser);
-            }
-            setLoading(false);
-        };
-        init();
+        initializedRef.current = false;
 
-        // Listen for auth state changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
                 const authUser = session?.user ?? null;
                 setUser(authUser);
-                if (authUser) {
+                if (authUser && !initializedRef.current) {
+                    initializedRef.current = true;
                     await fetchCrmUser(authUser);
-                } else {
+                } else if (!authUser) {
                     setCrmUser(null);
                 }
                 setLoading(false);
             }
         );
+
+        const init = async () => {
+            try {
+                const { data: { user: authUser } } = await supabase.auth.getUser();
+                setUser(authUser);
+                if (authUser && !initializedRef.current) {
+                    initializedRef.current = true;
+                    await fetchCrmUser(authUser);
+                }
+            } catch (err) {
+                console.error('[AuthContext] init error:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        init();
 
         return () => subscription.unsubscribe();
     }, [supabase, fetchCrmUser]);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth-context';
 
@@ -21,7 +21,7 @@ export interface Notification {
 }
 
 export function useNotifications() {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const { user } = useAuth();
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [pendingCount, setPendingCount] = useState(0);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '@/lib/api-fetch';
 import {
     Table,
@@ -154,10 +154,10 @@ function InterestBadge({ interestType }: { interestType: string | null }) {
 }
 
 export default function LeadsPage() {
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isInitialLoad, setIsInitialLoad] = useState(true);
+    const isInitialLoadRef = useRef(true);
     const [searchTerm, setSearchTerm] = useState('');
     
     // State for LeadDetailModal - Requirements 2.1, 4.5
@@ -181,7 +181,7 @@ export default function LeadsPage() {
     // Função para buscar leads
     const fetchLeads = useCallback(async (showLoading = true) => {
         // Só mostra loading no carregamento inicial
-        if (showLoading && isInitialLoad) {
+        if (showLoading && isInitialLoadRef.current) {
             setLoading(true);
         }
 
@@ -236,9 +236,9 @@ export default function LeadsPage() {
             console.error('[fetchLeads] Unexpected error:', e);
         } finally {
             setLoading(false);
-            setIsInitialLoad(false);
+            isInitialLoadRef.current = false;
         }
-    }, [supabase, isInitialLoad]);
+    }, [supabase]);
 
     // Detectar canal de origem
     function detectChannel(item: any): 'whatsapp' | 'instagram' | 'site' {
