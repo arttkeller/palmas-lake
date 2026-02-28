@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
 import { createClient } from '@/lib/supabase';
-import { apiFetch } from '@/lib/api-fetch';
+import { API_BASE_URL } from '@/lib/api-config';
 import type { User } from '@supabase/supabase-js';
 
 interface CrmUser {
@@ -42,7 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [supabase] = useState(() => createClient());
     const initializedRef = useRef(false);
 
-    const fetchCrmUser = useCallback(async (authUser: User) => {
+    // IMPORTANT: Uses fetch() directly instead of apiFetch() to avoid deadlock.
+    // apiFetch calls getSession() which awaits initializePromise internally.
+    // When called from onAuthStateChange (during Supabase auth initialization),
+    // initializePromise hasn't resolved yet → circular await → infinite hang.
+    const fetchCrmUser = useCallback(async (authUser: User, accessToken?: string) => {
         const fallback: CrmUser = {
             id: authUser.id,
             email: authUser.email || '',
@@ -54,11 +58,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 5000);
-            const res = await apiFetch(`/api/users/me`, {
+            const headers: Record<string, string> = {
+                'x-user-id': authUser.id,
+            };
+            if (accessToken) {
+                headers['Authorization'] = `Bearer ${accessToken}`;
+            }
+            const res = await fetch(`${API_BASE_URL}/api/users/me`, {
                 signal: controller.signal,
-                headers: {
-                    'x-user-id': authUser.id,
-                },
+                headers,
             });
             clearTimeout(timeoutId);
             if (res.ok) {
@@ -75,9 +83,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const refreshUser = useCallback(async () => {
         if (user) {
-            await fetchCrmUser(user);
+            // refreshUser is called outside of auth init, so getSession() is safe here
+            const { data: { session } } = await supabase.auth.getSession();
+            await fetchCrmUser(user, session?.access_token);
         }
-    }, [user, fetchCrmUser]);
+    }, [user, fetchCrmUser, supabase]);
 
     useEffect(() => {
         initializedRef.current = false;
@@ -88,7 +98,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(authUser);
                 if (authUser && !initializedRef.current) {
                     initializedRef.current = true;
-                    await fetchCrmUser(authUser);
+                    // Pass token directly — avoids getSession() deadlock during init
+                    await fetchCrmUser(authUser, session?.access_token);
                 } else if (!authUser) {
                     setCrmUser(null);
                 }
@@ -102,7 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setUser(authUser);
                 if (authUser && !initializedRef.current) {
                     initializedRef.current = true;
-                    await fetchCrmUser(authUser);
+                    // After getUser(), initializePromise is resolved so getSession() is safe
+                    const { data: { session } } = await supabase.auth.getSession();
+                    await fetchCrmUser(authUser, session?.access_token);
                 }
             } catch (err) {
                 console.error('[AuthContext] init error:', err);
