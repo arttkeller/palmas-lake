@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge';
 import { createClient } from '@/lib/supabase';
 import { formatInterestType } from '@/lib/interest-type-format';
 import type { Message } from '@/types/chat';
+import { parseMessageContent } from '@/lib/parse-message-content';
+import { parseTags } from '@/lib/lead-utils';
 
 /**
  * Lead interface for the modal
@@ -53,58 +55,6 @@ export interface LeadModalProps {
 // ============================================
 
 /**
- * Extracts readable text from a message that may contain raw JSON
- * Handles AI messages that come as WhatsApp JSON
- * Requirements: 5.5
- */
-function parseMessageContent(content: string): string {
-  if (!content) return '';
-
-  // If it looks like JSON, try to parse
-  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-    try {
-      const parsed = JSON.parse(content);
-
-      // WhatsApp Evolution API: { message: { conversation: "..." } }
-      if (parsed.message?.conversation) {
-        return parsed.message.conversation;
-      }
-      // WhatsApp Evolution API: { message: { extendedTextMessage: { text: "..." } } }
-      if (parsed.message?.extendedTextMessage?.text) {
-        return parsed.message.extendedTextMessage.text;
-      }
-      // Direct conversation field: { conversation: "..." }
-      if (parsed.conversation) {
-        return parsed.conversation;
-      }
-      // Direct extendedTextMessage: { extendedTextMessage: { text: "..." } }
-      if (parsed.extendedTextMessage?.text) {
-        return parsed.extendedTextMessage.text;
-      }
-      // Typical WhatsApp message structure: { body: { text: "..." } }
-      if (parsed.body?.text) {
-        return parsed.body.text;
-      }
-      // Or directly: { text: "..." }
-      if (parsed.text) {
-        return parsed.text;
-      }
-      // Or: { selectedDisplayText: "..." }
-      if (parsed.selectedDisplayText) {
-        return parsed.selectedDisplayText;
-      }
-      // Fallback: return original content if no text found
-      return content;
-    } catch {
-      // Not valid JSON, return as is
-      return content;
-    }
-  }
-
-  return content;
-}
-
-/**
  * Formats a timestamp for display
  * Requirements: 2.4
  */
@@ -123,29 +73,8 @@ function formatTime(dateString: string): string {
   }
 }
 
-/**
- * Parses tags or adjectives from jsonb column
- * Handles both string (JSON-encoded) and array formats
- * Requirements: 10.1, 10.2
- */
-export function parseTags(value: string[] | string | null | undefined): string[] {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.filter((t) => typeof t === 'string' && t.trim() !== '');
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed === '' || trimmed === '[]') return [];
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) return parsed.filter((t: unknown) => typeof t === 'string' && (t as string).trim() !== '');
-      // Parsed successfully but not an array — treat as single tag
-      return [trimmed];
-    } catch {
-      // Not valid JSON — treat as single tag
-      return [trimmed];
-    }
-  }
-  return [];
-}
+// Re-export parseTags from shared lib for backward compatibility
+export { parseTags } from '@/lib/lead-utils';
 
 
 // ============================================

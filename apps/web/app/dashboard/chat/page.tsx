@@ -15,41 +15,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-
-/**
- * Extrai o texto legível de uma mensagem que pode conter JSON bruto
- * Trata mensagens da IA que vêm como JSON do WhatsApp
- */
-function parseMessageContent(content: string): string {
-    if (!content) return '';
-
-    // Se parece com JSON, tentar parsear
-    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-        try {
-            const parsed = JSON.parse(content);
-
-            // Estrutura típica de mensagem WhatsApp: { body: { text: "..." } }
-            if (parsed.body?.text) {
-                return parsed.body.text;
-            }
-            // Ou diretamente: { text: "..." }
-            if (parsed.text) {
-                return parsed.text;
-            }
-            // Ou: { selectedDisplayText: "..." }
-            if (parsed.selectedDisplayText) {
-                return parsed.selectedDisplayText;
-            }
-            // Fallback: retornar o content original se não encontrar texto
-            return content;
-        } catch {
-            // Não é JSON válido, retornar como está
-            return content;
-        }
-    }
-
-    return content;
-}
+import { parseMessageContent } from '@/lib/parse-message-content';
 
 export default function ChatPage() {
     const [supabase] = useState(() => createClient());

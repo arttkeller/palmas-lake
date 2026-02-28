@@ -2,16 +2,12 @@
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from services.analytics_service import AnalyticsService
-from services.analytics_cache_service import AnalyticsCacheService
+from services.analytics_cache_service import shared_cache_service as cache_service
 import io
 import asyncio
 
 router = APIRouter()
 service = AnalyticsService()
-cache_service = AnalyticsCacheService(analytics_service=service)
-
-# Set up background processing for the cache service
-cache_service.setup_background_processing()
 
 @router.get("/analytics/dashboard")
 def get_dashboard_metrics():

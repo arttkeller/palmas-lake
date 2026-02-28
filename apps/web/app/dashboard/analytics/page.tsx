@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Loader2, Download, RefreshCw, Wifi, WifiOff, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import AreaChartStats from '@/components/charts/AreaChartStats';
@@ -9,14 +10,16 @@ import ResponseTimeChart from '@/components/charts/ResponseTimeChart';
 import PredictabilityCard from '@/components/charts/PredictabilityCard';
 import ChannelDonut from '@/components/charts/ChannelDonut';
 import TemperatureDonut from '@/components/charts/TemperatureDonut';
-import AppointmentHeatmap from '@/components/charts/AppointmentHeatmap';
 import { API_BASE_URL } from '@/lib/api-config';
-import ObjectionBarChart from '@/components/charts/ObjectionBarChart';
-import SentimentTrendChart from '@/components/charts/SentimentTrendChart';
-import FAQChart from '@/components/charts/FAQChart';
 import TransferRateCard from '@/components/charts/TransferRateCard';
 import { useAnalyticsCache } from '@/hooks/useAnalyticsCache';
 import type { DashboardMetrics } from '@/types/analytics-cache';
+
+// Lazy-loaded heavy charts (below the fold)
+const AppointmentHeatmap = dynamic(() => import('@/components/charts/AppointmentHeatmap'), { ssr: false });
+const SentimentTrendChart = dynamic(() => import('@/components/charts/SentimentTrendChart'), { ssr: false });
+const ObjectionBarChart = dynamic(() => import('@/components/charts/ObjectionBarChart'), { ssr: false });
+const FAQChart = dynamic(() => import('@/components/charts/FAQChart'), { ssr: false });
 
 /**
  * Maps DashboardMetrics from cache to the format expected by chart components.

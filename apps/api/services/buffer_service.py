@@ -1,10 +1,13 @@
 
 import asyncio
+import logging
 from typing import Dict, List
 import sentry_sdk
 from services.agent_manager import AgentManager
 from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
+
+logger = logging.getLogger(__name__)
 
 # Simple in-memory buffer for MVP. Use Redis for production.
 message_buffer: Dict[str, List[tuple]] = {}
@@ -45,9 +48,9 @@ def cancel_buffer(lead_id: str):
         # Only mark as cancelled if there were pending messages in the buffer.
         # This prevents FUTURE messages from being silently discarded after #apagar.
         _cancelled_leads.add(lead_id)
-        print(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
+        logger.info(f"[Buffer] Cancelled {len(removed)} pending message(s) for {lead_id}")
     else:
-        print(f"[Buffer] No pending messages to cancel for {lead_id}")
+        logger.info(f"[Buffer] No pending messages to cancel for {lead_id}")
 
 
 async def add_to_buffer(lead_id: str, message_content: str, message_id: str = None, channel: str = "whatsapp", pushname: str = ""):
@@ -68,7 +71,7 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
     if message_id:
         _cleanup_processed_ids()
         if message_id in _processed_msg_ids:
-            print(f"[Buffer] DUPLICATE: message_id {message_id} already in buffer/processed, skipping")
+            logger.info(f"[Buffer] DUPLICATE: message_id {message_id} already in buffer/processed, skipping")
             return
         _processed_msg_ids[message_id] = time.time()
     # -------------------------------------------------------------------------
@@ -89,10 +92,10 @@ async def add_to_buffer(lead_id: str, message_content: str, message_id: str = No
         if lead_id not in message_buffer:
             message_buffer[lead_id] = []
             # Start timer for this new batch
-            print(f"[Buffer] New batch started for {lead_id}, timer set for {BUFFER_DELAY}s")
+            logger.info(f"[Buffer] New batch started for {lead_id}, timer set for {BUFFER_DELAY}s")
             asyncio.create_task(process_buffer_after_delay(lead_id))
         else:
-            print(f"[Buffer] Appending to existing batch for {lead_id} (now {len(message_buffer[lead_id]) + 1} msgs), timer reset to {BUFFER_DELAY}s")
+            logger.info(f"[Buffer] Appending to existing batch for {lead_id} (now {len(message_buffer[lead_id]) + 1} msgs), timer reset to {BUFFER_DELAY}s")
 
         message_buffer[lead_id].append((message_content, message_id))
 
@@ -103,7 +106,7 @@ async def process_buffer_after_delay(lead_id: str):
         await _process_buffer_inner(lead_id)
     except Exception as e:
         import traceback
-        print(f"[Buffer] CRITICAL: Unhandled error processing {lead_id}: {e}")
+        logger.error(f"[Buffer] CRITICAL: Unhandled error processing {lead_id}: {e}")
         traceback.print_exc()
         sentry_sdk.capture_exception(e)
         # Clean up state so new messages can still be buffered
@@ -121,7 +124,7 @@ async def _process_buffer_inner(lead_id: str):
     while True:
         last_time = _last_msg_time.get(lead_id, 0)
         if last_time == 0:
-            print(f"[Buffer] Timer for {lead_id}: _last_msg_time missing, processing immediately")
+            logger.info(f"[Buffer] Timer for {lead_id}: _last_msg_time missing, processing immediately")
             break
         elapsed = time.time() - last_time
         remaining = BUFFER_DELAY - elapsed
@@ -130,7 +133,7 @@ async def _process_buffer_inner(lead_id: str):
         await asyncio.sleep(remaining)
 
     msg_count = len(message_buffer.get(lead_id, []))
-    print(f"[Buffer] Timer fired for {lead_id}: {msg_count} message(s) ready to process")
+    logger.info(f"[Buffer] Timer fired for {lead_id}: {msg_count} message(s) ready to process")
 
     # Skip processing if lead was deleted via #apagar during the delay
     if lead_id in _cancelled_leads:
@@ -139,7 +142,7 @@ async def _process_buffer_inner(lead_id: str):
         channel_map.pop(lead_id, None)
         pushname_map.pop(lead_id, None)
         _last_msg_time.pop(lead_id, None)
-        print(f"[Buffer] Skipping processing for deleted lead {lead_id}")
+        logger.info(f"[Buffer] Skipping processing for deleted lead {lead_id}")
         return
 
     # Skip AI processing if ai_paused is True for this lead
@@ -154,7 +157,7 @@ async def _process_buffer_inner(lead_id: str):
             _pause_check = _sb.table("leads").select("ai_paused").eq("phone", _phone).execute()
 
         if _pause_check.data and _pause_check.data[0].get("ai_paused"):
-            print(f"[Buffer] AI is PAUSED for {lead_id}, skipping AI processing")
+            logger.info(f"[Buffer] AI is PAUSED for {lead_id}, skipping AI processing")
             async with buffer_locks[lead_id]:
                 message_buffer.pop(lead_id, None)
                 channel_map.pop(lead_id, None)
@@ -162,7 +165,7 @@ async def _process_buffer_inner(lead_id: str):
                 _last_msg_time.pop(lead_id, None)
             return
     except Exception as pause_err:
-        print(f"[Buffer] Error checking ai_paused (proceeding normally): {pause_err}")
+        logger.error(f"[Buffer] Error checking ai_paused (proceeding normally): {pause_err}")
 
     # Pop messages under lock (brief) — release BEFORE agent processing
     # so new incoming messages can be buffered immediately
@@ -175,7 +178,7 @@ async def _process_buffer_inner(lead_id: str):
     if not messages_with_ids:
         return
 
-    print(f"Processing buffered messages for {lead_id} (channel: {channel}): {messages_with_ids}")
+    logger.info(f"Processing buffered messages for {lead_id} (channel: {channel}): {messages_with_ids}")
 
     # Process OUTSIDE the lock — new messages can be buffered in parallel
     # Wrapped in Sentry transaction so OpenAI calls in background tasks are captured
@@ -189,14 +192,14 @@ async def _process_buffer_inner(lead_id: str):
         try:
             # Pass (content, id) list
             response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
-            print(f"Agent Response for {lead_id}: {response}")
+            logger.info(f"Agent Response for {lead_id}: {response}")
 
             if not response:
-                print(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
+                logger.warning(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
             elif response == "IGNORED_DUPLICATE":
-                print(f"[Buffer] Anti-duplicate triggered for {lead_id}, skipping send")
+                logger.info(f"[Buffer] Anti-duplicate triggered for {lead_id}, skipping send")
             elif response == "__TOOL_SENT__":
-                print(f"[Buffer] Messages already sent via tool for {lead_id}, skipping re-send")
+                logger.info(f"[Buffer] Messages already sent via tool for {lead_id}, skipping re-send")
 
             # Send messages only if agent returned content AND it wasn't already sent via tool
             skip_responses = ("IGNORED_DUPLICATE", "__TOOL_SENT__")
@@ -210,12 +213,12 @@ async def _process_buffer_inner(lead_id: str):
                 for part in parts:
                     # Send via the appropriate channel
                     try:
-                        print(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
+                        logger.info(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
                         send_result = _send_message(lead_id, part, channel)
-                        print(f"[Buffer] Message sent successfully via {channel}")
+                        logger.info(f"[Buffer] Message sent successfully via {channel}")
                     except Exception as send_err:
                         import traceback
-                        print(f"[Buffer] ERROR sending message via {channel}: {send_err}")
+                        logger.error(f"[Buffer] ERROR sending message via {channel}: {send_err}")
                         traceback.print_exc()
                         send_result = None
 
@@ -226,7 +229,7 @@ async def _process_buffer_inner(lead_id: str):
                             whatsapp_msg_id = send_result.get("message_id")
                         msg_service.save_message(lead_id, part, "ai", whatsapp_msg_id=whatsapp_msg_id)
                     except Exception as db_err:
-                        print(f"DB Error saving AI response part: {db_err}")
+                        logger.error(f"DB Error saving AI response part: {db_err}")
 
                     # Small delay between parts to feel natural
                     await asyncio.sleep(1.5)
@@ -253,11 +256,11 @@ async def _process_buffer_inner(lead_id: str):
                         real_lead_id = lead_res.data[0]["id"]
                         schedule_follow_up_after_ai_response(real_lead_id)
                 except Exception as fu_err:
-                    print(f"[FollowUp] Erro ao agendar follow-up (nao fatal): {fu_err}")
+                    logger.error(f"[FollowUp] Erro ao agendar follow-up (nao fatal): {fu_err}")
 
         except Exception as e:
             sentry_sdk.capture_exception(e)
-            print(f"Error acting on buffer: {e}")
+            logger.error(f"Error acting on buffer: {e}")
 
 
 def _send_message(lead_id: str, text: str, channel: str):
@@ -269,14 +272,14 @@ def _send_message(lead_id: str, text: str, channel: str):
         text: Message text
         channel: "whatsapp" or "instagram"
     """
-    print(f"[_send_message] channel={channel}, lead_id={lead_id}, meta_token={'SET' if meta.access_token else 'MISSING'}")
+    logger.info(f"[_send_message] channel={channel}, lead_id={lead_id}, meta_token={'SET' if meta.access_token else 'MISSING'}")
     if channel == "instagram":
         # Extract IGSID from the ig: prefix
         recipient_id = lead_id[3:] if lead_id.startswith("ig:") else lead_id
-        print(f"[_send_message] Calling meta.send_instagram_message({recipient_id})")
+        logger.info(f"[_send_message] Calling meta.send_instagram_message({recipient_id})")
         # MetaService.send_instagram_message already removes markdown
         result = meta.send_instagram_message(recipient_id, text)
-        print(f"[_send_message] Instagram send result: {result}")
+        logger.info(f"[_send_message] Instagram send result: {result}")
         return result
     else:
         uazapi.send_whatsapp_message(lead_id, text)

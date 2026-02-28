@@ -503,3 +503,12 @@ class AnalyticsCacheService:
             print(f"Error checking cache staleness: {e}")
             # If we can't determine, assume stale for safety
             return True
+
+
+# ── Singleton instance ──────────────────────────────────────────────
+# Import this instead of creating new AnalyticsCacheService() instances.
+from services.analytics_service import AnalyticsService as _AnalyticsService
+
+_shared_analytics_service = _AnalyticsService()
+shared_cache_service = AnalyticsCacheService(analytics_service=_shared_analytics_service)
+shared_cache_service.setup_background_processing()

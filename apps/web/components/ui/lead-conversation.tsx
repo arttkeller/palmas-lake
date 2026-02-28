@@ -4,6 +4,7 @@ import * as React from 'react';
 import { Send, Loader2, MessageSquare, Bot, BotOff, User, Instagram, MessageCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Message } from '@/types/chat';
+import { parseMessageContent } from '@/lib/parse-message-content';
 
 /**
  * Props for the LeadConversation component
@@ -25,56 +26,6 @@ export interface LeadConversationProps {
   className?: string;
 }
 
-/**
- * Extracts readable text from a message that may contain raw JSON
- * Handles AI messages that come as WhatsApp JSON
- */
-function parseMessageContent(content: string): string {
-  if (!content) return '';
-
-  // If it looks like JSON, try to parse
-  if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-    try {
-      const parsed = JSON.parse(content);
-
-      // WhatsApp Evolution API: { message: { conversation: "..." } }
-      if (parsed.message?.conversation) {
-        return parsed.message.conversation;
-      }
-      // WhatsApp Evolution API: { message: { extendedTextMessage: { text: "..." } } }
-      if (parsed.message?.extendedTextMessage?.text) {
-        return parsed.message.extendedTextMessage.text;
-      }
-      // Direct conversation field: { conversation: "..." }
-      if (parsed.conversation) {
-        return parsed.conversation;
-      }
-      // Direct extendedTextMessage: { extendedTextMessage: { text: "..." } }
-      if (parsed.extendedTextMessage?.text) {
-        return parsed.extendedTextMessage.text;
-      }
-      // Typical WhatsApp message structure: { body: { text: "..." } }
-      if (parsed.body?.text) {
-        return parsed.body.text;
-      }
-      // Or directly: { text: "..." }
-      if (parsed.text) {
-        return parsed.text;
-      }
-      // Or: { selectedDisplayText: "..." }
-      if (parsed.selectedDisplayText) {
-        return parsed.selectedDisplayText;
-      }
-      // Fallback: return original content if no text found
-      return content;
-    } catch {
-      // Not valid JSON, return as is
-      return content;
-    }
-  }
-
-  return content;
-}
 
 /**
  * Formats a timestamp for display

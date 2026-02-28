@@ -3,24 +3,40 @@ from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
 from services.audio_transcription_service import AudioTranscriptionService
 from services.buffer_service import add_to_buffer
-from services.analytics_service import AnalyticsService
-from services.analytics_cache_service import AnalyticsCacheService
+from services.analytics_cache_service import shared_cache_service as analytics_cache_service
 import asyncio
+import hashlib
 import hmac
+import logging
 import os
 import requests as http_requests
 from typing import Any, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 uazapi = UazapiService()
 meta_service = MetaService()
 audio_transcription_service = AudioTranscriptionService()
 
-# Analytics cache service for queueing recalculations — must include AnalyticsService
-# so that background processing can actually compute metrics
-_analytics_service = AnalyticsService()
-analytics_cache_service = AnalyticsCacheService(analytics_service=_analytics_service)
-analytics_cache_service.setup_background_processing()
+# Webhook signature verification
+META_APP_SECRET = os.environ.get("META_APP_SECRET", "")
+
+async def verify_meta_signature(request: Request) -> bytes:
+    """Validates X-Hub-Signature-256 from Meta webhooks. Returns raw body on success."""
+    if not META_APP_SECRET:
+        # If not configured, skip verification (allows gradual rollout)
+        return await request.body()
+    signature = request.headers.get("X-Hub-Signature-256", "")
+    if not signature.startswith("sha256="):
+        raise HTTPException(status_code=403, detail="Missing webhook signature")
+    body = await request.body()
+    expected = "sha256=" + hmac.new(
+        META_APP_SECRET.encode(), body, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(signature, expected):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+    return body
 
 # Comando especial para limpar dados de teste
 CLEAR_COMMAND = "#apagar"
@@ -28,7 +44,7 @@ CLEAR_COMMAND = "#apagar"
 RESET_DB_COMMAND = "#resetdb"
 ADMIN_PHONE = os.environ.get("ADMIN_PHONE", "")
 if not ADMIN_PHONE:
-    print("[WARN] ADMIN_PHONE not set — #resetdb command will be disabled")
+    logger.warning("[WARN] ADMIN_PHONE not set — #resetdb command will be disabled")
 
 import re as _re
 
@@ -86,29 +102,29 @@ def _is_spam_or_bot(text: str) -> bool:
     # 1. Keyword match (need at least 2 matches for short texts, 1 for long promo-like texts)
     keyword_hits = sum(1 for kw in _SPAM_KEYWORDS if kw in text_lower)
     if keyword_hits >= 2:
-        print(f"[SpamFilter] Keyword match ({keyword_hits} hits)")
+        logger.info(f"[SpamFilter] Keyword match ({keyword_hits} hits)")
         return True
 
     # 2. Regex pattern match
     pattern_hits = sum(1 for p in _SPAM_PATTERNS if p.search(text))
     if pattern_hits >= 2:
-        print(f"[SpamFilter] Pattern match ({pattern_hits} hits)")
+        logger.info(f"[SpamFilter] Pattern match ({pattern_hits} hits)")
         return True
 
     # 3. Combined: 1 keyword + 1 pattern = spam
     if keyword_hits >= 1 and pattern_hits >= 1:
-        print(f"[SpamFilter] Combined match (kw={keyword_hits}, pat={pattern_hits})")
+        logger.info(f"[SpamFilter] Combined match (kw={keyword_hits}, pat={pattern_hits})")
         return True
 
     # 4. Bot message patterns (1 match is enough)
     for p in _BOT_PATTERNS:
         if p.search(text):
-            print(f"[SpamFilter] Bot pattern match")
+            logger.info(f"[SpamFilter] Bot pattern match")
             return True
 
     # 5. Heuristic: very long message (>500 chars) with prices = promo
     if len(text) > 500 and any(p.search(text) for p in _SPAM_PATTERNS[:2]):
-        print(f"[SpamFilter] Long promo message ({len(text)} chars)")
+        logger.info(f"[SpamFilter] Long promo message ({len(text)} chars)")
         return True
 
     return False
@@ -300,7 +316,7 @@ def _decrypt_whatsapp_media(encrypted_bytes: bytes, media_key_b64: str, media_ty
         from cryptography.hazmat.primitives.hashes import SHA256
         from cryptography.hazmat.primitives.kdf.hkdf import HKDF
     except ImportError:
-        print("[AudioDecrypt] cryptography library not installed")
+        logger.error("[AudioDecrypt] cryptography library not installed")
         return None
 
     info_map = {
@@ -341,10 +357,10 @@ def _decrypt_whatsapp_media(encrypted_bytes: bytes, media_key_b64: str, media_ty
         else:
             decrypted = decrypted_padded
 
-        print(f"[AudioDecrypt] Decrypted {len(encrypted_bytes)} -> {len(decrypted)} bytes")
+        logger.info(f"[AudioDecrypt] Decrypted {len(encrypted_bytes)} -> {len(decrypted)} bytes")
         return decrypted
     except Exception as exc:
-        print(f"[AudioDecrypt] Decryption failed: {exc}")
+        logger.error(f"[AudioDecrypt] Decryption failed: {exc}")
         return None
 
 
@@ -370,11 +386,11 @@ def _try_download_decrypt_and_transcribe(audio_payload: Dict[str, Any]) -> Optio
 
     try:
         import requests
-        print(f"[AudioDecrypt] Downloading encrypted audio from WhatsApp CDN...")
+        logger.info(f"[AudioDecrypt] Downloading encrypted audio from WhatsApp CDN...")
         resp = requests.get(media_url, timeout=20)
         resp.raise_for_status()
         encrypted_bytes = resp.content
-        print(f"[AudioDecrypt] Downloaded {len(encrypted_bytes)} encrypted bytes")
+        logger.info(f"[AudioDecrypt] Downloaded {len(encrypted_bytes)} encrypted bytes")
 
         # Determine media type from mimetype or payload hints
         media_type = "audio"
@@ -390,7 +406,7 @@ def _try_download_decrypt_and_transcribe(audio_payload: Dict[str, Any]) -> Optio
             decrypted, filename=f"audio{ext}"
         )
     except Exception as exc:
-        print(f"[AudioDecrypt] Download+decrypt+transcribe failed: {exc}")
+        logger.error(f"[AudioDecrypt] Download+decrypt+transcribe failed: {exc}")
         return None
 
 
@@ -416,7 +432,7 @@ def _build_audio_text(audio_payload: Dict[str, Any]) -> str:
         if not transcribed_text and base64_audio:
             transcribed_text = audio_transcription_service.transcribe_from_base64(base64_audio, filename=filename)
     else:
-        print("[Webhook] GROQ_API_KEY ausente: áudio salvo sem transcrição.")
+        logger.warning("[Webhook] GROQ_API_KEY ausente: áudio salvo sem transcrição.")
 
     if transcribed_text:
         return f"🔊 {transcribed_text}"
@@ -442,28 +458,28 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
 
         if is_instagram:
             ig_id = lead_identifier[3:]
-            print(f"🗑️ [CLEAR] Iniciando limpeza para Instagram IGSID: {ig_id}")
+            logger.info(f"🗑️ [CLEAR] Iniciando limpeza para Instagram IGSID: {ig_id}")
             lead_res = supabase.table("leads").select("id").eq("instagram_id", ig_id).execute()
         else:
             raw_phone = lead_identifier.split('@')[0] if '@' in lead_identifier else lead_identifier
             # Normalize phone (adds 9th digit for DDDs >= 29) to match how leads are stored
             from services.uazapi_service import UazapiService
             phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
-            print(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone} (raw: {raw_phone})")
+            logger.info(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone} (raw: {raw_phone})")
             lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
             # Fallback: try raw phone for leads stored before normalization
             if not lead_res.data and phone != raw_phone:
                 lead_res = supabase.table("leads").select("id").eq("phone", raw_phone).execute()
         
         if not lead_res.data:
-            print(f"🗑️ [CLEAR] Lead não encontrado para {lead_identifier}")
+            logger.warning(f"🗑️ [CLEAR] Lead não encontrado para {lead_identifier}")
             _send_clear_response(lead_identifier, channel,
                 "✅ Nenhum dado encontrado para limpar. Você pode começar uma nova conversa!"
             )
             return True
             
         lead_id = lead_res.data[0]["id"]
-        print(f"🗑️ [CLEAR] Lead encontrado: {lead_id}")
+        logger.info(f"🗑️ [CLEAR] Lead encontrado: {lead_id}")
         
         # 2. Buscar e deletar conversas (mensagens serão deletadas em cascata)
         conv_res = supabase.table("conversations").select("id").eq("lead_id", lead_id).execute()
@@ -471,21 +487,21 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         if conv_res.data:
             for conv in conv_res.data:
                 supabase.table("messages").delete().eq("conversation_id", conv["id"]).execute()
-                print(f"🗑️ [CLEAR] Mensagens deletadas da conversa {conv['id']}")
-            
+                logger.info(f"🗑️ [CLEAR] Mensagens deletadas da conversa {conv['id']}")
+
             supabase.table("conversations").delete().eq("lead_id", lead_id).execute()
-            print(f"🗑️ [CLEAR] Conversas deletadas")
+            logger.info(f"🗑️ [CLEAR] Conversas deletadas")
         
         # 3. Deletar eventos/agendamentos do lead
         try:
             supabase.table("events").delete().eq("lead_id", lead_id).execute()
-            print(f"🗑️ [CLEAR] Eventos deletados")
+            logger.info(f"🗑️ [CLEAR] Eventos deletados")
         except Exception as e:
-            print(f"🗑️ [CLEAR] Erro ao deletar eventos (pode não existir): {e}")
+            logger.error(f"🗑️ [CLEAR] Erro ao deletar eventos (pode não existir): {e}")
         
         # 4. Deletar o lead
         supabase.table("leads").delete().eq("id", lead_id).execute()
-        print(f"🗑️ [CLEAR] Lead deletado")
+        logger.info(f"🗑️ [CLEAR] Lead deletado")
 
         # 5. Broadcast para atualizar frontend em tempo real
         _broadcast_lead_deleted(lead_id)
@@ -500,13 +516,13 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
             "Envie qualquer mensagem para começar uma nova conversa de teste!"
         )
         
-        print(f"🗑️ [CLEAR] Limpeza concluída para {lead_identifier}")
+        logger.info(f"🗑️ [CLEAR] Limpeza concluída para {lead_identifier}")
         return True
-        
+
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"🗑️ [CLEAR] Erro na limpeza: {e}")
+        logger.error(f"🗑️ [CLEAR] Erro na limpeza: {e}")
         
         try:
             _send_clear_response(lead_identifier, channel, f"❌ Erro ao limpar dados: {str(e)}")
@@ -539,11 +555,11 @@ def _broadcast_lead_deleted(lead_id: str):
         }
         resp = http_requests.post(url, json=payload, headers=headers, timeout=5)
         if resp.status_code in (200, 202):
-            print(f"🗑️ [CLEAR] Broadcast lead_deleted enviado para lead {lead_id}")
+            logger.info(f"🗑️ [CLEAR] Broadcast lead_deleted enviado para lead {lead_id}")
         else:
-            print(f"🗑️ [CLEAR] Broadcast falhou: HTTP {resp.status_code} - {resp.text[:200]}")
+            logger.warning(f"🗑️ [CLEAR] Broadcast falhou: HTTP {resp.status_code} - {resp.text[:200]}")
     except Exception as e:
-        print(f"🗑️ [CLEAR] Erro ao enviar broadcast (nao-bloqueante): {e}")
+        logger.error(f"🗑️ [CLEAR] Erro ao enviar broadcast (nao-bloqueante): {e}")
 
 
 def _send_clear_response(lead_identifier: str, channel: str, message: str):
@@ -568,13 +584,13 @@ async def handle_reset_db_command(sender_jid: str) -> bool:
     admin_variants = {ADMIN_PHONE, f"55{ADMIN_PHONE}"}
 
     if clean_phone not in admin_variants:
-        print(f"🚫 [RESETDB] Tentativa NEGADA de {raw_phone} (não é admin {ADMIN_PHONE})")
+        logger.warning(f"🚫 [RESETDB] Tentativa NEGADA de {raw_phone} (não é admin {ADMIN_PHONE})")
         _send_clear_response(sender_jid, "whatsapp",
             "❌ Comando negado.\n\nEsse comando só pode ser executado pelo administrador."
         )
         return False
 
-    print(f"🔴 [RESETDB] RESET TOTAL DO BANCO iniciado por {raw_phone}")
+    logger.info(f"🔴 [RESETDB] RESET TOTAL DO BANCO iniciado por {raw_phone}")
 
     try:
         # Cancel ALL pending buffered messages
@@ -591,72 +607,72 @@ async def handle_reset_db_command(sender_jid: str) -> bool:
         try:
             res = supabase.table("messages").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["messages"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] messages: {deleted['messages']} deletadas")
+            logger.info(f"🔴 [RESETDB] messages: {deleted['messages']} deletadas")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em messages: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em messages: {e}")
             deleted["messages"] = f"erro: {e}"
 
         # 2. conversations (FK → leads)
         try:
             res = supabase.table("conversations").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["conversations"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] conversations: {deleted['conversations']} deletadas")
+            logger.info(f"🔴 [RESETDB] conversations: {deleted['conversations']} deletadas")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em conversations: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em conversations: {e}")
             deleted["conversations"] = f"erro: {e}"
 
         # 3. notifications (FK → leads com CASCADE, mas deleta explícito)
         try:
             res = supabase.table("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["notifications"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] notifications: {deleted['notifications']} deletadas")
+            logger.info(f"🔴 [RESETDB] notifications: {deleted['notifications']} deletadas")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em notifications: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em notifications: {e}")
             deleted["notifications"] = f"erro: {e}"
 
         # 4. follow_up_queue (FK → leads)
         try:
             res = supabase.table("follow_up_queue").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["follow_up_queue"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] follow_up_queue: {deleted['follow_up_queue']} deletados")
+            logger.info(f"🔴 [RESETDB] follow_up_queue: {deleted['follow_up_queue']} deletados")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em follow_up_queue: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em follow_up_queue: {e}")
             deleted["follow_up_queue"] = f"erro: {e}"
 
         # 5. lead_assignments (FK → leads)
         try:
             res = supabase.table("lead_assignments").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["lead_assignments"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] lead_assignments: {deleted['lead_assignments']} deletados")
+            logger.info(f"🔴 [RESETDB] lead_assignments: {deleted['lead_assignments']} deletados")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em lead_assignments: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em lead_assignments: {e}")
             deleted["lead_assignments"] = f"erro: {e}"
 
         # 6. events (FK → leads)
         try:
             res = supabase.table("events").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["events"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] events: {deleted['events']} deletados")
+            logger.info(f"🔴 [RESETDB] events: {deleted['events']} deletados")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em events: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em events: {e}")
             deleted["events"] = f"erro: {e}"
 
         # 7. analytics_cache (sem FK)
         try:
             res = supabase.table("analytics_cache").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["analytics_cache"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] analytics_cache: {deleted['analytics_cache']} deletados")
+            logger.info(f"🔴 [RESETDB] analytics_cache: {deleted['analytics_cache']} deletados")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em analytics_cache: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em analytics_cache: {e}")
             deleted["analytics_cache"] = f"erro: {e}"
 
         # 8. leads (por último, pois é referenciada por quase tudo)
         try:
             res = supabase.table("leads").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
             deleted["leads"] = len(res.data) if res.data else 0
-            print(f"🔴 [RESETDB] leads: {deleted['leads']} deletados")
+            logger.info(f"🔴 [RESETDB] leads: {deleted['leads']} deletados")
         except Exception as e:
-            print(f"🔴 [RESETDB] Erro em leads: {e}")
+            logger.error(f"🔴 [RESETDB] Erro em leads: {e}")
             deleted["leads"] = f"erro: {e}"
 
         # Montar relatório
@@ -676,13 +692,13 @@ async def handle_reset_db_command(sender_jid: str) -> bool:
             f"O sistema está limpo para novos testes!"
         )
 
-        print(f"🔴 [RESETDB] Reset completo finalizado: {deleted}")
+        logger.info(f"🔴 [RESETDB] Reset completo finalizado: {deleted}")
         return True
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"🔴 [RESETDB] Erro geral: {e}")
+        logger.error(f"🔴 [RESETDB] Erro geral: {e}")
         _send_clear_response(sender_jid, "whatsapp", f"❌ Erro no reset: {str(e)}")
         return False
 
@@ -695,7 +711,7 @@ async def handle_uazapi_webhook(request: Request):
     """
     try:
         data = await request.json()
-        print("Received UazAPI Webhook:", data)
+        logger.info("Received UazAPI Webhook: %s", data)
         message_type = "text"
         
         # 1. Handle UazAPI format with event=messages.upsert
@@ -743,7 +759,7 @@ async def handle_uazapi_webhook(request: Request):
                     text = _build_audio_text(audio_payload or {})
         
         else:
-            print(f"Unknown event type: {event or data.get('EventType')}")
+            logger.warning(f"Unknown event type: {event or data.get('EventType')}")
             return {"status": "unknown_event"}
 
         # Attempt to parse JSON content (Button/List replies)
@@ -758,30 +774,30 @@ async def handle_uazapi_webhook(request: Request):
                     text = payload['title']
                 elif 'rows' in payload and len(payload['rows']) > 0:
                     text = payload['rows'][0].get('title', text)
-                print(f"Parsed JSON message content: {text}")
+                logger.info(f"Parsed JSON message content: {text}")
             except Exception as e:
-                print(f"Failed to parse JSON message content: {e}")
+                logger.error(f"Failed to parse JSON message content: {e}")
 
         if text is not None and not isinstance(text, str):
-            print(f"[Webhook] Ignoring non-string text payload (type={type(text)}).")
+            logger.warning(f"[Webhook] Ignoring non-string text payload (type={type(text)}).")
             text = None
 
         if remote_jid and text:
             # Verificar comando especial #resetdb (apenas admin)
             if text.strip().lower() == RESET_DB_COMMAND:
-                print(f"🔴 [RESETDB] Comando de reset recebido de {remote_jid}")
+                logger.info(f"🔴 [RESETDB] Comando de reset recebido de {remote_jid}")
                 await handle_reset_db_command(remote_jid)
                 return {"status": "reset_db"}
 
             # Verificar comando especial #apagar
             if text.strip().lower() == CLEAR_COMMAND:
-                print(f"🗑️ [CLEAR] Comando de limpeza recebido de {remote_jid}")
+                logger.info(f"🗑️ [CLEAR] Comando de limpeza recebido de {remote_jid}")
                 await handle_clear_command(remote_jid)
                 return {"status": "cleared"}
 
             # Filtrar spam, bots e propagandas — NÃO salvar no CRM nem responder
             if _is_spam_or_bot(text):
-                print(f"🚫 [SpamFilter] Mensagem de {remote_jid} rejeitada como spam/bot/propaganda")
+                logger.warning(f"🚫 [SpamFilter] Mensagem de {remote_jid} rejeitada como spam/bot/propaganda")
                 return {"status": "spam_filtered"}
 
             msg_id = None
@@ -790,7 +806,7 @@ async def handle_uazapi_webhook(request: Request):
             elif data.get("EventType") == "messages":
                 msg_id = message_info.get("id")
                 
-            print(f"Processing message from {remote_jid} (ID: {msg_id}, type: {message_type}): {text}")
+            logger.info(f"Processing message from {remote_jid} (ID: {msg_id}, type: {message_type}): {text}")
             
             # Fetch WhatsApp profile picture (non-blocking, graceful fallback)
             profile_pic_url = None
@@ -808,7 +824,7 @@ async def handle_uazapi_webhook(request: Request):
             try:
                 from services.message_service import MessageService
                 msg_service = MessageService()
-                print(f"[Webhook] Calling save_message for lead message...")
+                logger.info(f"[Webhook] Calling save_message for lead message...")
                 result = msg_service.save_message(
                     remote_jid,
                     text,
@@ -818,7 +834,7 @@ async def handle_uazapi_webhook(request: Request):
                     wa_pushname=pushname,
                     profile_picture_url=profile_pic_url,
                 )
-                print(f"[Webhook] save_message result: {result}")
+                logger.info(f"[Webhook] save_message result: {result}")
                 
                 # Queue analytics recalculation (non-blocking)
                 # Uses asyncio.create_task to ensure webhook response is not blocked
@@ -827,15 +843,15 @@ async def handle_uazapi_webhook(request: Request):
                 )
             except Exception as db_err:
                 import traceback
-                print(f"DB Error: {db_err}")
+                logger.error(f"DB Error: {db_err}")
                 traceback.print_exc()
 
             await add_to_buffer(remote_jid, text, msg_id, pushname=pushname)
-                
+
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"Error processing webhook: {e}")
+        logger.error(f"Error processing webhook: {e}")
     
     return {"status": "received"}
 
@@ -856,10 +872,10 @@ async def verify_webhook(request: Request):
 
     if mode and token:
         if mode == "subscribe" and hmac.compare_digest(token, verify_token):
-            print(f"[Meta Webhook] Verification successful")
+            logger.info(f"[Meta Webhook] Verification successful")
             return int(challenge)
         else:
-            print(f"[Meta Webhook] Verification failed: token mismatch")
+            logger.warning(f"[Meta Webhook] Verification failed: token mismatch")
             raise HTTPException(status_code=403, detail="Verification failed")
     return {"status": "ok"}
 
@@ -870,12 +886,15 @@ async def handle_webhook(request: Request):
     Parses the Instagram Messaging payload and processes through the same AI pipeline.
     """
     try:
-        data = await request.json()
-        print("[Meta Webhook] Received:", data)
+        # Verify Meta signature before processing
+        import json as _json
+        raw_body = await verify_meta_signature(request)
+        data = _json.loads(raw_body)
+        logger.info("[Meta Webhook] Received: %s", data)
 
         obj_type = data.get("object")
         if obj_type != "instagram":
-            print(f"[Meta Webhook] Ignoring non-instagram object: {obj_type}")
+            logger.info(f"[Meta Webhook] Ignoring non-instagram object: {obj_type}")
             return {"status": "ignored"}
 
         for entry in data.get("entry", []):
@@ -886,7 +905,7 @@ async def handle_webhook(request: Request):
             # Filter: only process messages from the expected Instagram page
             expected_page_id = os.environ.get("META_PAGE_ID")
             if expected_page_id and entry_id != expected_page_id:
-                print(f"[Meta Webhook] Ignoring message from unexpected page: {entry_id} (expected: {expected_page_id})")
+                logger.warning(f"[Meta Webhook] Ignoring message from unexpected page: {entry_id} (expected: {expected_page_id})")
                 continue
             
             for messaging_event in entry.get("messaging", []):
@@ -899,7 +918,7 @@ async def handle_webhook(request: Request):
                 # Skip non-message events (message_edit, read receipts, reactions, etc.)
                 if not message or "mid" not in message:
                     event_keys = list(messaging_event.keys())
-                    print(f"[Meta Webhook] Skipping non-message event (keys: {event_keys})")
+                    logger.info(f"[Meta Webhook] Skipping non-message event (keys: {event_keys})")
                     continue
 
                 # --- Extract text from non-text messages (images, audio, stickers, etc.) ---
@@ -920,7 +939,7 @@ async def handle_webhook(request: Request):
                         text = f"[{label} enviado pelo cliente]"
                         if att_url:
                             text += f" URL: {att_url}"
-                        print(f"[Meta Webhook] Non-text message converted: type={att_type}")
+                        logger.info(f"[Meta Webhook] Non-text message converted: type={att_type}")
                     elif message.get("sticker"):
                         text = "[Sticker enviado pelo cliente]"
                     elif message.get("reply_to"):
@@ -930,14 +949,14 @@ async def handle_webhook(request: Request):
                 # --- MECHANISM 1: Check if this is a message we sent (by MID) ---
                 if meta_service.is_own_message(msg_id):
                     meta_service.learn_own_igsid(sender_id)
-                    print(f"[Meta Webhook] Ignoring own message (matched sent MID: {msg_id})")
+                    logger.info(f"[Meta Webhook] Ignoring own message (matched sent MID: {msg_id})")
                     continue
                 # ----------------------------------------------------------------
 
                 # --- MECHANISM 2: Meta's is_echo flag ---
                 if message.get("is_echo"):
                     meta_service.learn_own_igsid(sender_id)
-                    print(f"[Meta Webhook] Ignoring echo message")
+                    logger.info(f"[Meta Webhook] Ignoring echo message")
                     continue
 
                 # --- MECHANISM 3: Sender ID matches our known IDs ---
@@ -951,11 +970,11 @@ async def handle_webhook(request: Request):
 
                 if sender_id in own_ids:
                     meta_service.learn_own_igsid(sender_id)
-                    print(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")
+                    logger.info(f"[Meta Webhook] Ignoring message from our own account ({sender_id})")
                     continue
 
                 if not sender_id or not text:
-                    print(f"[Meta Webhook] DROPPED: sender_id={sender_id}, text={text}, message_keys={list(message.keys())}")
+                    logger.warning(f"[Meta Webhook] DROPPED: sender_id={sender_id}, text={text}, message_keys={list(message.keys())}")
                     continue
 
                 # Learn our own IGSID from incoming messages.
@@ -965,14 +984,14 @@ async def handle_webhook(request: Request):
 
                 # Use ig: prefix to differentiate Instagram leads from WhatsApp
                 lead_identifier = f"ig:{sender_id}"
-                print(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
+                logger.info(f"[Meta Webhook] Processing Instagram DM from {lead_identifier}: {text}")
 
                 # Accept message request immediately (mark as seen/read)
                 # This must happen ASAP so the conversation is accepted before we reply
                 try:
                     meta_service.mark_instagram_seen(sender_id)
                 except Exception as seen_err:
-                    print(f"[Meta Webhook] mark_seen failed (non-blocking): {seen_err}")
+                    logger.error(f"[Meta Webhook] mark_seen failed (non-blocking): {seen_err}")
 
                 # --- IDEMPOTENCY CHECK: Ignore if msg_id already exists in DB ---
                 if msg_id:
@@ -996,30 +1015,30 @@ async def handle_webhook(request: Request):
                                     .execute()
                                 )
                                 if _existing_res.data:
-                                    print(f"[Meta Webhook] DUPLICATE: msg_id {msg_id} already in DB for this lead, skipping")
+                                    logger.info(f"[Meta Webhook] DUPLICATE: msg_id {msg_id} already in DB for this lead, skipping")
                                     continue
                     except Exception as dup_err:
                         # Never block a message due to dedup check failure
-                        print(f"[Meta Webhook] Idempotency check error (allowing message through): {dup_err}")
+                        logger.error(f"[Meta Webhook] Idempotency check error (allowing message through): {dup_err}")
                 # ---------------------------------------------------------------
 
                 # Verificar comando especial #apagar
                 if text.strip().lower() == CLEAR_COMMAND:
-                    print(f"🗑️ [CLEAR] Comando de limpeza recebido de {lead_identifier} (Instagram)")
+                    logger.info(f"🗑️ [CLEAR] Comando de limpeza recebido de {lead_identifier} (Instagram)")
                     await handle_clear_command(lead_identifier, channel="instagram")
                     continue
 
                 # Filtrar spam, bots e propagandas — NÃO salvar no CRM nem responder
                 if _is_spam_or_bot(text):
-                    print(f"🚫 [SpamFilter] Mensagem Instagram de {lead_identifier} rejeitada como spam/bot/propaganda")
+                    logger.warning(f"🚫 [SpamFilter] Mensagem Instagram de {lead_identifier} rejeitada como spam/bot/propaganda")
                     continue
 
                 # Fetch Instagram profile (name + username) for the sender
                 ig_profile = meta_service.get_instagram_profile(sender_id)
                 if ig_profile:
-                    print(f"[Meta Webhook] Instagram profile: {ig_profile}")
+                    logger.info(f"[Meta Webhook] Instagram profile: {ig_profile}")
                 else:
-                    print(f"[Meta Webhook] Could not fetch Instagram profile for {sender_id}")
+                    logger.warning(f"[Meta Webhook] Could not fetch Instagram profile for {sender_id}")
 
                 # Extract profile picture URL from Instagram profile
                 ig_profile_pic_url = ig_profile.get("profile_pic") if ig_profile else None
@@ -1034,14 +1053,14 @@ async def handle_webhook(request: Request):
                         ig_profile=ig_profile,
                         profile_picture_url=ig_profile_pic_url,
                     )
-                    print(f"[Meta Webhook] save_message result: {result}")
+                    logger.info(f"[Meta Webhook] save_message result: {result}")
 
                     asyncio.create_task(
                         analytics_cache_service.queue_recalculation('message_webhook')
                     )
                 except Exception as db_err:
                     import traceback
-                    print(f"[Meta Webhook] DB Error: {db_err}")
+                    logger.error(f"[Meta Webhook] DB Error: {db_err}")
                     traceback.print_exc()
 
                 # Send to buffer with instagram channel
@@ -1050,7 +1069,7 @@ async def handle_webhook(request: Request):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(f"[Meta Webhook] Error processing: {e}")
+        logger.error(f"[Meta Webhook] Error processing: {e}")
 
     # Always return 200 to acknowledge receipt (Meta requirement)
     return {"status": "received"}

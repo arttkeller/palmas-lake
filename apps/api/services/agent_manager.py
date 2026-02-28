@@ -1,12 +1,15 @@
 
 import os
 import json
+import logging
 import asyncio
 from typing import List, Dict, Any
 from datetime import datetime
 import pytz
 import re
 import time
+
+logger = logging.getLogger(__name__)
 
 # Agno imports
 from agno.agent import Agent
@@ -102,7 +105,7 @@ class AgentManager:
                 with open(self.prompt_path, "r", encoding="utf-8") as f:
                     base_prompt = f.read()
             except Exception as e:
-                print(f"[AgentManager] Error loading prompt: {e}")
+                logger.error(f"[AgentManager] Error loading prompt: {e}")
                 base_prompt = "Você é a Maria, assistente virtual do Palmas Lake Towers."
 
             # Regras de formatação específicas por canal
@@ -125,7 +128,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
 
             return system_prompt
         except Exception as e:
-            print(f"Error loading system prompt: {e}")
+            logger.error(f"Error loading system prompt: {e}")
             return "Erro crítico ao carregar personalidade da IA."
 
     async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp") -> str:
@@ -179,7 +182,7 @@ Mensagem atual do Cliente:
                     prompt_input = last_user_msg
 
                 # 5. Executar Agente (em thread separada para não bloquear o event loop)
-                print(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
+                logger.info(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
 
                 run_response = await asyncio.wait_for(
                     asyncio.to_thread(agent_maria.run, prompt_input),
@@ -193,13 +196,13 @@ Mensagem atual do Cliente:
                 self._last_messages_sent_via_tool = tool_sent
 
                 if tool_sent:
-                    print(f"[Maria] Messages already sent via enviar_mensagem tool for {lead_id}, buffer will skip re-send")
+                    logger.info(f"[Maria] Messages already sent via enviar_mensagem tool for {lead_id}, buffer will skip re-send")
                     # Return content (even if empty) — buffer_service uses __TOOL_SENT__ marker
                     return content or ""
 
                 if not content or not content.strip():
                     # Agent made tool calls but didn't generate text — re-run WITH FULL CONTEXT
-                    print(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running with full context...")
+                    logger.info(f"[Maria] Agent returned empty content for {lead_id} (likely tool call), re-running with full context...")
                     followup_prompt = f"""{prompt_input}
 
 [INSTRUÇÃO: Você acabou de executar uma ação/tool call com sucesso. Agora responda ao cliente de forma natural e breve, confirmando o que foi feito e continuando a conversa. NÃO se apresente novamente.]"""
@@ -209,14 +212,14 @@ Mensagem atual do Cliente:
                     )
                     content = followup_response.content
                     if not content or not content.strip():
-                        print(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
+                        logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
                         return "Oi! Como posso te ajudar? 😊"
                 return content
 
             except Exception as e:
                 import traceback
                 error_msg = f"Error generating AI response with Agno: {e}\n{traceback.format_exc()}"
-                print(error_msg)
+                logger.error(error_msg)
                 try:
                     with open("agent_error.log", "a") as f:
                         f.write(f"\n--- Error at {datetime.now()} ---\n{error_msg}\n")
@@ -261,17 +264,17 @@ Mensagem atual do Cliente:
                             diff = (now - created_at).total_seconds()
                             
                             if diff < 15: # Janela de 15s para evitar duplicatas (webhook retries)
-                                print(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
+                                logger.warning(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
                                 return "IGNORED_DUPLICATE"
         except Exception as e:
-            print(f"⚠️ [Anti-Duplicate Error] Falha ao verificar duplicidade: {e}")
+            logger.error(f"⚠️ [Anti-Duplicate Error] Falha ao verificar duplicidade: {e}")
         # -----------------------------------------------
 
         import time
         start_time = time.time()
         start_timestamp = datetime.now().strftime("%H:%M:%S")
         
-        print(f"--- AI Processing Start: {start_timestamp} for Lead: {lead_id} ---")
+        logger.info(f"--- AI Processing Start: {start_timestamp} for Lead: {lead_id} ---")
         
         from services.supabase_client import create_client
         supabase = create_client()
@@ -343,7 +346,7 @@ Mensagem atual do Cliente:
                             history.append({"role": role, "content": content})
                             
         except Exception as e:
-            print(f"Error fetching history: {e}")
+            logger.error(f"Error fetching history: {e}")
 
         # 2. Adicionar mensagem atual ao histórico para o prompt
         if current_message_content:
@@ -365,11 +368,11 @@ Mensagem atual do Cliente:
 
         # Guard: ensure we always have a response to send (unless tool already sent)
         if not messages_already_sent and (not response_text or not response_text.strip()):
-            print(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
+            logger.warning(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
             response_text = "Oi! Como posso te ajudar? 😊"
 
         end_time = time.time()
-        print(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
+        logger.info(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
 
         # 5b. Fallback: detect name from AI response if atualizar_nome tool wasn't called
         try:
@@ -380,11 +383,11 @@ Mensagem atual do Cliente:
                 if _fb_name.startswith("Lead ") or _fb_name == "Visitante":
                     _extracted = self._extract_name_from_response(response_text, current_message_content)
                     if _extracted:
-                        print(f"[Fallback] AI didn't call atualizar_nome. Extracting name: '{_extracted}'")
+                        logger.info(f"[Fallback] AI didn't call atualizar_nome. Extracting name: '{_extracted}'")
                         supabase.table("leads").update({"full_name": _extracted}).eq("id", _fb_lead.data[0]["id"]).execute()
-                        print(f"[Fallback] Name updated to '{_extracted}' for lead {_fb_lead.data[0]['id']}")
+                        logger.info(f"[Fallback] Name updated to '{_extracted}' for lead {_fb_lead.data[0]['id']}")
         except Exception as name_fallback_err:
-            print(f"[Fallback] Name extraction error (non-blocking): {name_fallback_err}")
+            logger.error(f"[Fallback] Name extraction error (non-blocking): {name_fallback_err}")
 
         # 6. Análise de Sentimento (fire-and-forget — NÃO bloqueia entrega da resposta)
         try:
@@ -392,11 +395,11 @@ Mensagem atual do Cliente:
              msgs_text = "\n".join(lead_msgs[-5:])
              asyncio.create_task(self._safe_analyze_sentiment(lead_id, msgs_text))
         except Exception as sentiment_err:
-             print(f"Sentiment analysis scheduling error: {sentiment_err}")
+             logger.error(f"Sentiment analysis scheduling error: {sentiment_err}")
 
         # If messages were already sent via enviar_mensagem tool, tell buffer_service to skip re-send
         if messages_already_sent:
-            print(f"[Maria] Returning __TOOL_SENT__ for {lead_id} — buffer will skip re-sending")
+            logger.info(f"[Maria] Returning __TOOL_SENT__ for {lead_id} — buffer will skip re-sending")
             return "__TOOL_SENT__"
 
         return response_text
@@ -407,13 +410,13 @@ Mensagem atual do Cliente:
             await self._analyze_and_update_sentiment(lead_id, msgs_text)
         except Exception as e:
             import traceback
-            print(f"[Sentiment] Background error for {lead_id}: {e}")
+            logger.error(f"[Sentiment] Background error for {lead_id}: {e}")
             traceback.print_exc()
 
     async def _analyze_and_update_sentiment(self, lead_id: str, messages_text: str):
         """Analisa sentimento usando Agent Agno com GPT-5-mini"""
         
-        print(f"[Sentiment] Starting analysis for {lead_id}")
+        logger.info(f"[Sentiment] Starting analysis for {lead_id}")
         
         # Fetch current lead status before running sentiment analysis (Requirements 8.1, 8.2)
         lead_status = None
@@ -423,9 +426,9 @@ Mensagem atual do Cliente:
             lead_status_res = _lookup_lead(supabase_status, lead_id, "status")
             if lead_status_res.data:
                 lead_status = lead_status_res.data[0].get("status")
-                print(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
+                logger.info(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
         except Exception as e:
-            print(f"[Sentiment] Error fetching lead status: {e}")
+            logger.error(f"[Sentiment] Error fetching lead status: {e}")
         
         # Build status context for the prompt
         status_context = ""
@@ -520,7 +523,7 @@ Mensagem atual do Cliente:
                 markdown=True
             )
             
-            print(f"[Sentiment] Running Agno Agent (GPT-5-mini)...")
+            logger.info(f"[Sentiment] Running Agno Agent (GPT-5-mini)...")
             response = await asyncio.wait_for(
                 asyncio.to_thread(agent_sentiment.run, prompt),
                 timeout=45
@@ -529,7 +532,7 @@ Mensagem atual do Cliente:
 
             # Guard against empty/None response from model
             if not content or not content.strip():
-                print(f"[Sentiment] GPT-5-mini returned empty response, skipping analysis for {lead_id}")
+                logger.warning(f"[Sentiment] GPT-5-mini returned empty response, skipping analysis for {lead_id}")
                 return
 
             # Limpeza de JSON
@@ -540,7 +543,7 @@ Mensagem atual do Cliente:
             if json_match:
                 content = json_match.group(0)
             else:
-                print(f"[Sentiment] No JSON object found in response: {content[:200]}")
+                logger.warning(f"[Sentiment] No JSON object found in response: {content[:200]}")
                 return
 
             sentiment_data = json.loads(content)
@@ -560,9 +563,9 @@ Mensagem atual do Cliente:
                     sentiment_data["sentiment_score"] = max(0.7, current_score if isinstance(current_score, (int, float)) else 0.7)
                 sentiment_data["sentiment_label"] = "Positivo"
                 sentiment_data["temperature"] = "quente"
-                print(f"[Sentiment] Override for scheduled lead {lead_id}: score={sentiment_data['sentiment_score']}, label=Positivo, temp=quente")
+                logger.info(f"[Sentiment] Override for scheduled lead {lead_id}: score={sentiment_data['sentiment_score']}, label=Positivo, temp=quente")
             
-            print(f"[Sentiment] Lead {lead_id}: score={sentiment_data.get('sentiment_score')}, label={sentiment_data.get('sentiment_label')}")
+            logger.info(f"[Sentiment] Lead {lead_id}: score={sentiment_data.get('sentiment_score')}, label={sentiment_data.get('sentiment_label')}")
             
             from services.supabase_client import create_client
             supabase = create_client()
@@ -570,7 +573,7 @@ Mensagem atual do Cliente:
             # Buscar o lead pelo phone ou instagram_id para obter o ID do lead no DB e last_interaction
             lead_res = _lookup_lead(supabase, lead_id, "id, last_interaction")
             if not lead_res.data:
-                print(f"[Sentiment] Lead {lead_id} not found in DB.")
+                logger.warning(f"[Sentiment] Lead {lead_id} not found in DB.")
                 return
 
             db_lead_id = lead_res.data[0]["id"]
@@ -583,7 +586,7 @@ Mensagem atual do Cliente:
                     from datetime import timezone
                     last_interaction = datetime.fromisoformat(last_interaction_str.replace("Z", "+00:00"))
                 except Exception as e:
-                    print(f"[Sentiment] Error parsing last_interaction: {e}")
+                    logger.error(f"[Sentiment] Error parsing last_interaction: {e}")
 
             update_payload = {
                 "sentiment_label": sentiment_data.get("sentiment_label")
@@ -624,11 +627,11 @@ Mensagem atual do Cliente:
                 # Block visita_agendada from sentiment — only the agenda() tool can set this
                 protected_statuses = ("visita_agendada", "visit_scheduled", "visita_realizada", "proposta_enviada")
                 if mapped_status and mapped_status in protected_statuses:
-                    print(f"[Sentiment] BLOCKED: status '{mapped_status}' can only be set by the agenda/proposal tool, not sentiment analysis")
+                    logger.warning(f"[Sentiment] BLOCKED: status '{mapped_status}' can only be set by the agenda/proposal tool, not sentiment analysis")
                 elif mapped_status:
                     update_payload["status"] = mapped_status
                 else:
-                    print(f"[Sentiment] Unknown status from AI: '{sentiment_data['status']}', skipping status update")
+                    logger.warning(f"[Sentiment] Unknown status from AI: '{sentiment_data['status']}', skipping status update")
             
             # Use TemperatureService for classification (Requirements 5.1, 5.2, 5.3, 5.4)
             temp_service = TemperatureService()
@@ -711,17 +714,17 @@ Mensagem atual do Cliente:
                         update_payload["sentiment_score"] = 70
                     # NEVER downgrade from protected status via sentiment analysis
                     if "status" in update_payload and update_payload["status"] != current_status:
-                        print(f"[Sentiment] BLOCKED downgrade: '{current_status}' → '{update_payload['status']}', keeping protected status")
+                        logger.warning(f"[Sentiment] BLOCKED downgrade: '{current_status}' → '{update_payload['status']}', keeping protected status")
                         del update_payload["status"]
-                    print(f"[Sentiment] Final override: status={current_status} → sentiment forced to Positivo, status protected")
+                    logger.info(f"[Sentiment] Final override: status={current_status} → sentiment forced to Positivo, status protected")
             except Exception as e:
-                print(f"[Sentiment] Final safety check error (non-blocking): {e}")
+                logger.error(f"[Sentiment] Final safety check error (non-blocking): {e}")
             
-            print(f"[Sentiment] Updating lead {db_lead_id} with payload: {json.dumps(update_payload, default=str)}")
+            logger.info(f"[Sentiment] Updating lead {db_lead_id} with payload: {json.dumps(update_payload, default=str)}")
             result = supabase.table("leads").update(update_payload).eq("id", db_lead_id).execute()
-            print(f"[Sentiment] Update result: {result.data}")
+            logger.info(f"[Sentiment] Update result: {result.data}")
             
         except Exception as e:
             import traceback
-            print(f"[Sentiment] Error: {e}")
+            logger.error(f"[Sentiment] Error: {e}")
             traceback.print_exc()

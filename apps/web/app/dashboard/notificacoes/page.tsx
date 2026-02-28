@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Bell, Clock, ArrowRight, UserPlus } from 'lucide-react';
 import { useNotifications, type Notification } from '@/hooks/useNotifications';
 import { GlassmorphismCard } from '@/components/ui/glassmorphism-card';

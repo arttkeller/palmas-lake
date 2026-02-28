@@ -1,8 +1,12 @@
 
 import os
+import logging
 import requests
 import json
+import sentry_sdk
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -138,8 +142,10 @@ class QueryBuilder:
             
             if res.status_code >= 400:
                 error_msg = f"Supabase Error {res.status_code}: {res.text}"
-                print(error_msg)
-                
+                logger.error(error_msg)
+                if res.status_code >= 500:
+                    sentry_sdk.capture_message(error_msg, level="error")
+
                 # Check for schema-related errors (Requirements 7.4)
                 if "schema" in res.text.lower() or "not found" in res.text.lower():
                     schema_error = (
@@ -149,8 +155,8 @@ class QueryBuilder:
                         f"Content-Profile={self.headers.get('Content-Profile')}. "
                         f"Error: {res.text}"
                     )
-                    print(schema_error)
-                
+                    logger.error(schema_error)
+
                 return Response(None)
             
             # DELETE pode retornar vazio
@@ -160,8 +166,9 @@ class QueryBuilder:
             return Response(res.json())
         except Exception as e:
              error_msg = f"Supabase Request Error: {e}"
-             print(error_msg)
-             
+             logger.error(error_msg)
+             sentry_sdk.capture_exception(e)
+
              # Log if this might be a schema-related error (Requirements 7.4)
              if "schema" in str(e).lower():
                  schema_error = (
@@ -171,7 +178,7 @@ class QueryBuilder:
                      f"Content-Profile={self.headers.get('Content-Profile')}. "
                      f"Error: {e}"
                  )
-                 print(schema_error)
+                 logger.error(schema_error)
              
              class Response:
                  def __init__(self, data):
@@ -197,7 +204,10 @@ class RPCBuilder:
                     self.data = data
 
             if res.status_code >= 400:
-                print(f"[RPC] Error {res.status_code}: {res.text}")
+                error_msg = f"[RPC] Error {res.status_code}: {res.text}"
+                logger.error(error_msg)
+                if res.status_code >= 500:
+                    sentry_sdk.capture_message(error_msg, level="error")
                 return Response(None)
 
             if res.status_code == 204 or not res.text:
@@ -205,7 +215,8 @@ class RPCBuilder:
 
             return Response(res.json())
         except Exception as e:
-            print(f"[RPC] Request error: {e}")
+            logger.error(f"[RPC] Request error: {e}")
+            sentry_sdk.capture_exception(e)
 
             class Response:
                 def __init__(self, data):

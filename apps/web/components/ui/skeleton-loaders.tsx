@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Skeleton Loaders Components
  * 
