@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { parseTags } from '../LeadModal';
+import { parseTags } from '@/lib/lead-utils';
 
 // Generator for non-empty strings that are not whitespace-only
 const nonEmptyTagArb: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 50 })

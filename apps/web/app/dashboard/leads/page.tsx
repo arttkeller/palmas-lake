@@ -18,11 +18,15 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/empty-state';
-import { LeadModal, type LeadModalLead } from '@/components/LeadModal';
+import { LeadDetailModal, LeadDetailModalSection } from '@/components/ui/lead-detail-modal';
+import { LeadConversation } from '@/components/ui/lead-conversation';
+import { useLeadConversation } from '@/hooks/useLeadConversation';
+import { parseTags } from '@/lib/lead-utils';
 import { normalizeStatus, getStatusConfig } from '@/lib/status-config';
 import { TemperatureBadge } from '@/components/ui/temperature-badge';
 import { normalizeTemperature } from '@/lib/temperature-config';
 import { formatInterestType } from '@/lib/interest-type-format';
+import type { Lead as LeadType } from '@/types/lead';
 
 // Interface para Lead
 interface Lead {
@@ -156,9 +160,15 @@ export default function LeadsPage() {
     const [isInitialLoad, setIsInitialLoad] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     
-    // State for LeadModal - Requirements 2.1, 4.5
-    const [selectedLead, setSelectedLead] = useState<LeadModalLead | null>(null);
+    // State for LeadDetailModal - Requirements 2.1, 4.5
+    const [selectedLead, setSelectedLead] = useState<LeadType | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Conversation data for the selected lead
+    const { messages, isLoading: isLoadingMessages, realtimeStatus } = useLeadConversation(
+        selectedLead?.id ?? null,
+        isModalOpen
+    );
 
     // Pagination state
     const [currentPage, setCurrentPage] = useState(1);
@@ -332,23 +342,20 @@ export default function LeadsPage() {
      * Requirements: 4.5 - Preserve scroll position and filters when modal closes
      */
     const handleLeadClick = useCallback((lead: Lead) => {
-        // Convert Lead to LeadModalLead format
-        const modalLead: LeadModalLead = {
+        // Convert local Lead to LeadType for the modal
+        const modalLead: LeadType = {
             id: lead.id,
             full_name: lead.name,
             phone: lead.phone || '',
-            email: lead.email,
-            status: lead.status,
-            sentiment_score: lead.sentiment,
-            sentiment_label: lead.sentiment_label,
-            notes: lead.notes,
-            source: lead.channel,
-            platform: lead.channel === 'instagram' ? 'instagram' : 'whatsapp',
+            email: lead.email || undefined,
+            status: lead.status as LeadType['status'],
+            notes: lead.notes || undefined,
+            source: lead.channel as LeadType['source'],
             created_at: lead.created_at,
-            interest_type: lead.interest_type,
-            tags: lead.tags,
-            adjectives: lead.adjectives,
-            profile_picture_url: lead.profile_picture_url,
+            interest_type: lead.interest_type as LeadType['interest_type'],
+            tags: Array.isArray(lead.tags) ? lead.tags : undefined,
+            temperature: lead.temperature as LeadType['temperature'],
+            profile_picture_url: lead.profile_picture_url || undefined,
         };
         setSelectedLead(modalLead);
         setIsModalOpen(true);
@@ -522,11 +529,74 @@ export default function LeadsPage() {
                 Sentimento analisado automaticamente por IA - Atualização em tempo real
             </p>
 
-            {/* Lead Modal - Requirements 2.1, 4.5 */}
-            <LeadModal
+            {/* Lead Detail Modal - Requirements 2.1, 4.5 */}
+            <LeadDetailModal
                 lead={selectedLead}
                 isOpen={isModalOpen}
                 onClose={handleModalClose}
+                infoContent={
+                    selectedLead ? (() => {
+                        const lead = leads.find(l => l.id === selectedLead.id);
+                        const tagsList = parseTags(lead?.tags);
+                        const adjList = parseTags(lead?.adjectives);
+                        return (
+                            <>
+                                <LeadDetailModalSection title="Tags e Classificacao">
+                                    {tagsList.length > 0 || adjList.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {tagsList.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {tagsList.map((tag, i) => (
+                                                        <Badge key={`tag-${i}`} variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs font-medium">
+                                                            {tag}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {adjList.length > 0 && (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {adjList.map((adj, i) => (
+                                                        <span key={`adj-${i}`} className="inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-xs font-medium">
+                                                            {adj}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+                                            <p className="text-sm">Nenhuma tag gerada pela IA ainda</p>
+                                        </div>
+                                    )}
+                                </LeadDetailModalSection>
+
+                                {lead && (
+                                    <LeadDetailModalSection title="Sentimento" className="mt-4">
+                                        <SentimentIcon
+                                            sentiment={lead.sentiment}
+                                            label={lead.sentiment_label}
+                                            status={lead.status}
+                                        />
+                                    </LeadDetailModalSection>
+                                )}
+
+                                {selectedLead.notes && (
+                                    <LeadDetailModalSection title="Notas" className="mt-4">
+                                        <p className="text-sm text-foreground/80 leading-relaxed bg-blue-50/50 border border-blue-100 rounded-lg p-3">
+                                            {selectedLead.notes}
+                                        </p>
+                                    </LeadDetailModalSection>
+                                )}
+                            </>
+                        );
+                    })() : null
+                }
+                chatContent={
+                    <LeadConversation
+                        messages={messages}
+                        isLoading={isLoadingMessages}
+                    />
+                }
             />
         </div>
     );

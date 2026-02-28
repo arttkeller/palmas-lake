@@ -20,7 +20,7 @@ import { LeadDetailModal, LeadDetailModalSection } from '@/components/ui/lead-de
 import { LeadTagsSection } from '@/components/ui/lead-tags-section';
 import { LeadConversation } from '@/components/ui/lead-conversation';
 import { NewLeadModal } from '@/components/ui/new-lead-modal';
-import { parseTags } from '@/components/LeadModal';
+import { parseTags } from '@/lib/lead-utils';
 import { useLeadFilters, calculateLeadCountsByTemperature } from '@/hooks/useLeadFilters';
 import { useLeadModal } from '@/hooks/useLeadModal';
 import type { LeadTemperature, NonNullLeadTemperature, LeadTag } from '@/lib/temperature-config';
