@@ -16,7 +16,6 @@ import asyncio
 
 from services.supabase_client import create_client
 from services.agent_manager import AgentManager, _lookup_lead
-from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
 from services.message_service import MessageService
 from services.follow_up_service import schedule_follow_up_after_ai_response
@@ -40,7 +39,6 @@ class CatchUpService:
     def __init__(self):
         self.supabase = create_client()
         self.agent = AgentManager()
-        self.uazapi = UazapiService()
         self.meta = MetaService()
 
     async def recover_unanswered_leads(self) -> Dict[str, int]:
@@ -221,8 +219,7 @@ class CatchUpService:
                     recipient_id = instagram_id
                     send_result = self.meta.send_instagram_message(recipient_id, part)
                 else:
-                    send_result = self.uazapi.send_whatsapp_message(buffer_lead_id, part)
-                    send_result = None
+                    send_result = self.meta.send_whatsapp_text(buffer_lead_id, part)
             except Exception as send_err:
                 print(f"[CatchUp] Error sending message via {channel}: {send_err}")
                 send_result = None

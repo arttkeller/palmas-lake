@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Request, HTTPException
-from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
 from services.audio_transcription_service import AudioTranscriptionService
 from services.buffer_service import add_to_buffer
@@ -15,7 +14,6 @@ from typing import Any, Dict, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-uazapi = UazapiService()
 meta_service = MetaService()
 audio_transcription_service = AudioTranscriptionService()
 
@@ -463,8 +461,7 @@ async def handle_clear_command(lead_identifier: str, channel: str = "whatsapp") 
         else:
             raw_phone = lead_identifier.split('@')[0] if '@' in lead_identifier else lead_identifier
             # Normalize phone (adds 9th digit for DDDs >= 29) to match how leads are stored
-            from services.uazapi_service import UazapiService
-            phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
+            phone = MetaService.normalize_whatsapp_number(raw_phone) or raw_phone
             logger.info(f"🗑️ [CLEAR] Iniciando limpeza para phone: {phone} (raw: {raw_phone})")
             lead_res = supabase.table("leads").select("id").eq("phone", phone).execute()
             # Fallback: try raw phone for leads stored before normalization
@@ -568,8 +565,7 @@ def _send_clear_response(lead_identifier: str, channel: str, message: str):
         recipient_id = lead_identifier[3:] if lead_identifier.startswith("ig:") else lead_identifier
         meta_service.send_instagram_message(recipient_id, message)
     else:
-        uazapi_svc = UazapiService()
-        uazapi_svc.send_whatsapp_message(lead_identifier, message)
+        meta_service.send_whatsapp_text(lead_identifier, message)
 
 async def handle_reset_db_command(sender_jid: str) -> bool:
     """
@@ -809,12 +805,9 @@ async def handle_uazapi_webhook(request: Request):
                 
             logger.info(f"Processing message from {remote_jid} (ID: {msg_id}, type: {message_type}): {text}")
             
-            # Fetch WhatsApp profile picture (non-blocking, graceful fallback)
+            # Profile picture: Cloud API does not provide this endpoint.
+            # Kept as None; the imagePreview fallback below may still work for UazAPI webhook.
             profile_pic_url = None
-            try:
-                profile_pic_url = uazapi.get_profile_picture_url(remote_jid)
-            except Exception:
-                pass
 
             # Fallback: use imagePreview from webhook payload if API call returned nothing
             if not profile_pic_url:
@@ -855,6 +848,284 @@ async def handle_uazapi_webhook(request: Request):
         logger.error(f"Error processing webhook: {e}")
     
     return {"status": "received"}
+
+@router.get("/webhook/whatsapp")
+async def verify_whatsapp_webhook(request: Request):
+    """
+    Meta WhatsApp Cloud API Verification Challenge.
+    Called by Meta when configuring the webhook URL in the Developer Dashboard.
+    """
+    verify_token = os.environ.get("META_VERIFY_TOKEN")
+    if not verify_token:
+        raise HTTPException(status_code=500, detail="META_VERIFY_TOKEN not configured")
+
+    params = request.query_params
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+
+    if mode and token:
+        if mode == "subscribe" and hmac.compare_digest(token, verify_token):
+            logger.info("[WhatsApp Webhook] Verification successful")
+            return int(challenge)
+        else:
+            logger.warning("[WhatsApp Webhook] Verification failed: token mismatch")
+            raise HTTPException(status_code=403, detail="Verification failed")
+    return {"status": "ok"}
+
+
+@router.post("/webhook/whatsapp")
+async def handle_whatsapp_cloud_webhook(request: Request):
+    """
+    Receive incoming messages from the official Meta WhatsApp Cloud API.
+    Handles the whatsapp_business_account webhook object format.
+    Always returns 200 to Meta to prevent retries.
+    """
+    import json as _json
+
+    try:
+        # Verify Meta signature before processing (reuses same secret as Instagram webhook)
+        raw_body = await verify_meta_signature(request)
+        data = _json.loads(raw_body)
+        logger.info("[WA Cloud Webhook] Received payload")
+
+        obj_type = data.get("object")
+        if obj_type != "whatsapp_business_account":
+            logger.info(f"[WA Cloud Webhook] Ignoring non-whatsapp_business_account object: {obj_type}")
+            return {"status": "ignored"}
+
+        for entry in data.get("entry", []):
+            for change in entry.get("changes", []):
+                if change.get("field") != "messages":
+                    logger.info(f"[WA Cloud Webhook] Ignoring non-messages field: {change.get('field')}")
+                    continue
+
+                value = change.get("value", {})
+
+                # Process status updates (delivered / read / sent) — just log them
+                for status in value.get("statuses", []):
+                    logger.info(
+                        f"[WA Cloud Webhook] Status update: msg={status.get('id')} "
+                        f"status={status.get('status')} recipient={status.get('recipient_id')}"
+                    )
+
+                # Build contact map: {wa_id -> profile_name}
+                contact_map: Dict[str, str] = {}
+                for contact in value.get("contacts", []):
+                    wa_id = contact.get("wa_id", "")
+                    name = contact.get("profile", {}).get("name", "")
+                    if wa_id:
+                        contact_map[wa_id] = name
+
+                # Process each incoming message
+                for msg in value.get("messages", []):
+                    try:
+                        await _process_whatsapp_cloud_message(msg, contact_map)
+                    except Exception as msg_err:
+                        import traceback
+                        logger.error(f"[WA Cloud Webhook] Error processing message {msg.get('id')}: {msg_err}")
+                        traceback.print_exc()
+                        # Continue with next message — never let one failure block others
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        logger.error(f"[WA Cloud Webhook] Error processing webhook: {e}")
+
+    # Always return 200 to acknowledge receipt (Meta requirement — prevents retries)
+    return {"status": "received"}
+
+
+async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict[str, str]) -> None:
+    """
+    Core handler for a single WhatsApp Cloud API message object.
+    Parses message type, saves to DB, and adds to the AI buffer.
+    """
+    msg_type = msg.get("type", "")
+    msg_id = msg.get("id", "")
+    phone_raw = msg.get("from", "")
+    wa_id = phone_raw  # Cloud API sends the wa_id as the "from" field
+
+    # Normalise phone number (adds 9th digit for BR DDDs >= 29, strips country code, etc.)
+    phone = MetaService.normalize_whatsapp_number(phone_raw) or phone_raw
+
+    pushname = contact_map.get(wa_id, "")
+
+    logger.info(f"[WA Cloud Webhook] Message from={phone} wa_id={wa_id} type={msg_type} id={msg_id}")
+
+    # ── 1. Skip reaction messages entirely ───────────────────────────────────
+    if msg_type == "reaction":
+        logger.info(f"[WA Cloud Webhook] Skipping reaction message from {phone}")
+        return
+
+    # ── 2. Mark as read (fire-and-forget — do not await result) ─────────────
+    if msg_id:
+        asyncio.create_task(asyncio.to_thread(meta_service.mark_whatsapp_read, msg_id))
+
+    # ── 3. Idempotency check: ignore already-processed message IDs ───────────
+    if msg_id:
+        try:
+            from services.message_service import MessageService
+            _msg_svc = MessageService()
+            _lead_res = _msg_svc.supabase.table("leads").select("id").eq("phone", phone).execute()
+            if _lead_res.data:
+                _conv_res = _msg_svc.supabase.table("conversations").select("id").eq("lead_id", _lead_res.data[0]["id"]).execute()
+                if _conv_res.data:
+                    _conv_ids = [c["id"] for c in _conv_res.data]
+                    _existing_res = (
+                        _msg_svc.supabase
+                        .table("messages")
+                        .select("id")
+                        .in_("conversation_id", _conv_ids)
+                        .eq("metadata->>whatsapp_msg_id", msg_id)
+                        .limit(1)
+                        .execute()
+                    )
+                    if _existing_res.data:
+                        logger.info(f"[WA Cloud Webhook] DUPLICATE: msg_id {msg_id} already in DB, skipping")
+                        return
+        except Exception as dup_err:
+            # Never block a message due to dedup check failure
+            logger.error(f"[WA Cloud Webhook] Idempotency check error (allowing message through): {dup_err}")
+
+    # ── 4. Parse message content based on type ───────────────────────────────
+    text: Optional[str] = None
+    message_type = "text"
+
+    if msg_type == "text":
+        text = msg.get("text", {}).get("body", "")
+        message_type = "text"
+
+    elif msg_type == "audio":
+        message_type = "audio"
+        audio_id = msg.get("audio", {}).get("id")
+        if audio_id and audio_transcription_service.is_enabled():
+            try:
+                audio_bytes = await asyncio.to_thread(meta_service.download_whatsapp_media, audio_id)
+                if audio_bytes:
+                    mime = msg.get("audio", {}).get("mime_type", "audio/ogg")
+                    if "ogg" in mime:
+                        ext = ".ogg"
+                    elif "m4a" in mime:
+                        ext = ".m4a"
+                    else:
+                        ext = ".mp3"
+                    transcription = await asyncio.to_thread(
+                        audio_transcription_service.transcribe_from_bytes,
+                        audio_bytes,
+                        f"audio{ext}",
+                    )
+                    if transcription:
+                        text = f"🔊 {transcription}"
+                    else:
+                        text = "[Áudio enviado pelo cliente]"
+                else:
+                    text = "[Áudio enviado pelo cliente]"
+            except Exception as audio_err:
+                logger.error(f"[WA Cloud Webhook] Audio transcription failed: {audio_err}")
+                text = "[Áudio enviado pelo cliente]"
+        else:
+            text = "[Áudio enviado pelo cliente]"
+
+    elif msg_type == "image":
+        caption = msg.get("image", {}).get("caption", "")
+        text = "[Imagem recebida]"
+        if caption:
+            text += f" {caption}"
+        message_type = "image"
+
+    elif msg_type == "document":
+        filename = msg.get("document", {}).get("filename", "arquivo")
+        caption = msg.get("document", {}).get("caption", "")
+        text = f"[Documento: {filename}]"
+        if caption:
+            text += f" {caption}"
+        message_type = "text"
+
+    elif msg_type == "video":
+        text = "[Vídeo recebido]"
+        message_type = "text"
+
+    elif msg_type == "sticker":
+        text = "[Sticker recebido]"
+        message_type = "text"
+
+    elif msg_type == "location":
+        lat = msg.get("location", {}).get("latitude")
+        lon = msg.get("location", {}).get("longitude")
+        text = f"[Localização: {lat}, {lon}]"
+        message_type = "text"
+
+    elif msg_type == "interactive":
+        interactive = msg.get("interactive", {})
+        interactive_type = interactive.get("type", "")
+        if interactive_type == "button_reply":
+            # Use the ID (not title) — AI tools set descriptive IDs
+            text = interactive.get("button_reply", {}).get("id", "")
+        elif interactive_type == "list_reply":
+            text = interactive.get("list_reply", {}).get("id", "")
+        else:
+            text = f"[Interação: {interactive_type}]"
+        message_type = "text"
+
+    elif msg_type == "button":
+        # Template button response (user tapped a quick-reply button)
+        text = msg.get("button", {}).get("text", "")
+        message_type = "text"
+
+    else:
+        # Unknown or unsupported type — log and store a placeholder
+        logger.warning(f"[WA Cloud Webhook] Unsupported message type: {msg_type}")
+        text = f"[{msg_type} recebido]"
+        message_type = "text"
+
+    # ── 5. Guard: must have a phone and some text content ────────────────────
+    if not phone or not text:
+        logger.warning(f"[WA Cloud Webhook] Dropping message: phone={phone!r} text={text!r}")
+        return
+
+    # ── 6. Special command: #resetdb (admin only) ────────────────────────────
+    if text.strip().lower() == RESET_DB_COMMAND:
+        logger.info(f"[WA Cloud Webhook] #resetdb command received from {phone}")
+        await handle_reset_db_command(phone)
+        return
+
+    # ── 7. Special command: #apagar ──────────────────────────────────────────
+    if text.strip().lower() == CLEAR_COMMAND:
+        logger.info(f"[WA Cloud Webhook] #apagar command received from {phone}")
+        await handle_clear_command(phone, channel="whatsapp")
+        return
+
+    # ── 8. Spam / bot filter ─────────────────────────────────────────────────
+    if _is_spam_or_bot(text):
+        logger.warning(f"[WA Cloud Webhook] Message from {phone} rejected as spam/bot/ad")
+        return
+
+    # ── 9. Save message to DB ────────────────────────────────────────────────
+    try:
+        from services.message_service import MessageService
+        msg_service = MessageService()
+        result = msg_service.save_message(
+            phone,
+            text,
+            "lead",
+            whatsapp_msg_id=msg_id,
+            message_type=message_type,
+            wa_pushname=pushname,
+        )
+        logger.info(f"[WA Cloud Webhook] save_message result: {result}")
+
+        asyncio.create_task(
+            analytics_cache_service.queue_recalculation("message_webhook")
+        )
+    except Exception as db_err:
+        import traceback
+        logger.error(f"[WA Cloud Webhook] DB Error: {db_err}")
+        traceback.print_exc()
+
+    # ── 10. Add to AI buffer ─────────────────────────────────────────────────
+    await add_to_buffer(phone, text, msg_id, pushname=pushname)
+
 
 @router.get("/webhook/meta")
 async def verify_webhook(request: Request):

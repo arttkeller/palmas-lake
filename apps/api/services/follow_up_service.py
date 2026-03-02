@@ -18,8 +18,10 @@ import pytz
 import uuid
 import traceback
 
+import os
+
 from services.supabase_client import create_client
-from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 
 # Timezone do Brasil
 BRAZIL_TZ = pytz.timezone('America/Sao_Paulo')
@@ -110,7 +112,7 @@ class FollowUpService:
 
     def __init__(self):
         self.supabase = create_client()
-        self.uazapi = UazapiService()
+        self.meta = MetaService()
 
     def is_business_hours(self, dt: Optional[datetime] = None) -> bool:
         """Checks if the given datetime is within business hours (9h-19h BRT)."""
@@ -301,11 +303,26 @@ class FollowUpService:
             from services.message_service import MessageService
 
             phone = lead.get("phone")
-            name = (lead.get("full_name") or "").split()[0] if lead.get("full_name") else ""
+            lead_name = lead.get("full_name") or ""
+            name = lead_name.split()[0] if lead_name else ""
             stage = follow_up.get("stage", 1)
 
             message = get_follow_up_message(stage, name)
-            result = self.uazapi.send_whatsapp_message(phone, message)
+            result = self.meta.send_whatsapp_text(phone, message)
+
+            # If outside 24h window (error 131047), try template for stages 2/3
+            if result and result.get("error") and result.get("error_code") == 131047:
+                template_name = None
+                if stage == 2:
+                    template_name = os.environ.get("WA_TEMPLATE_FOLLOWUP_24H")
+                elif stage == 3:
+                    template_name = os.environ.get("WA_TEMPLATE_FOLLOWUP_48H")
+                if template_name:
+                    components = [{"type": "body", "parameters": [{"type": "text", "text": lead_name or ""}]}]
+                    result = self.meta.send_whatsapp_template(phone, template_name, components=components)
+                else:
+                    print(f"[FollowUp] Outside 24h window for {phone}, no template configured for stage {stage}")
+                    return False
 
             if result:
                 # Salvar a mensagem no banco como mensagem da IA

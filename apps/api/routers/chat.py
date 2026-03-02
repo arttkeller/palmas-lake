@@ -87,11 +87,11 @@ def send_message_to_lead(req: SendMessageRequest):
             meta = MetaService()
             meta.send_instagram_message(lead_data["instagram_id"], req.content)
         else:
-            from services.uazapi_service import UazapiService
-            uazapi = UazapiService()
+            from services.meta_service import MetaService
+            meta = MetaService()
             phone = lead_data.get("phone", "")
             print(f"[SendMsg] Sending WhatsApp to phone={phone}")
-            result = uazapi.send_whatsapp_message(phone, req.content)
+            result = meta.send_whatsapp_text(phone, req.content)
             print(f"[SendMsg] WhatsApp send result: {result}")
 
         # 4. Salvar no banco

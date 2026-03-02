@@ -210,7 +210,7 @@ def reassign_lead(lead_id: str, body: ManualAssignment):
     # Enviar notificacao WhatsApp para o novo vendedor (se tiver numero)
     if seller.get("whatsapp_number"):
         try:
-            from services.uazapi_service import UazapiService
+            from services.meta_service import MetaService
 
             lead = lead_res.data[0]
             msg = (
@@ -218,8 +218,8 @@ def reassign_lead(lead_id: str, body: ManualAssignment):
                 f"*Nome:* {lead.get('full_name', 'N/A')}\n"
                 f"*Telefone:* {lead.get('phone', 'N/A')}\n"
             )
-            u_service = UazapiService()
-            u_service.send_whatsapp_message(seller["whatsapp_number"], msg)
+            m_service = MetaService()
+            m_service.send_whatsapp_text(seller["whatsapp_number"], msg)
         except Exception as e:
             print(f"[Sellers] Erro ao enviar notificacao de reatribuicao: {e}")
 

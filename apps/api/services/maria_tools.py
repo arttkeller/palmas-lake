@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 
 import pytz
 
-from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 from services.message_service import MessageService
 from services.calendar_service import CalendarService
 from services.supabase_client import create_client
@@ -69,7 +69,7 @@ class MariaTools(Toolkit):
         Normaliza telefone no padrão ddidddnumero.
         Retorna string vazia quando inválido para envio WhatsApp.
         """
-        return UazapiService.normalize_whatsapp_number(value or "")
+        return MetaService.normalize_whatsapp_number(value or "")
 
     def enviar_mensagem(self, texto: str, reply_id: Optional[str] = None):
         """
@@ -82,13 +82,13 @@ class MariaTools(Toolkit):
         """
         self._messages_sent_via_tool = True
         print(f"[Tool] Enviar Mensagem: {texto[:50]}...")
-        u_service = UazapiService()
+        m_service = MetaService()
         msg_service = MessageService()
-        
+
         parts = [p.strip() for p in texto.split('\n\n') if p.strip()]
         for i, part in enumerate(parts):
             # Enviar via WhatsApp
-            u_service.send_whatsapp_message(self.lead_id, part, reply_id=reply_id if i == 0 else None)
+            m_service.send_whatsapp_text(self.lead_id, part, reply_message_id=reply_id if i == 0 else None)
             
             # Salvar no banco
             try:
@@ -105,26 +105,26 @@ class MariaTools(Toolkit):
             message_id: O ID da mensagem à qual você deve reagir.
         """
         print(f"[Tool] Reagir Nome: {message_id}")
-        u_service = UazapiService()
+        m_service = MetaService()
         msg_service = MessageService()
-        
+
         # Verify message exists before sending WhatsApp reaction (Requirements 3.1)
         message_exists = self._verify_message_exists(msg_service, message_id)
-        
+
         if not message_exists:
             # Retry once after 500ms delay to handle race conditions (Requirements 3.2)
             print(f"[Tool] Message not found, retrying after 500ms delay...")
             time.sleep(0.5)
             message_exists = self._verify_message_exists(msg_service, message_id)
-            
+
             if not message_exists:
                 # Log error with full context if both attempts fail (Requirements 3.3)
                 print(f"[Tool] ERROR: Message with whatsapp_msg_id={message_id} not found after 2 attempts. "
                       f"Lead: {self.lead_id}, Phone: {self.phone}. "
                       f"Reaction will be sent to WhatsApp but may not be persisted correctly.")
-        
+
         # Enviar reação via WhatsApp (always send, even if message not found in DB)
-        u_service.send_reaction(self.lead_id, message_id, emoji="❤️")
+        m_service.send_whatsapp_reaction(self.lead_id, message_id, emoji="❤️")
         
         # Salvar reação no banco de dados
         try:
@@ -619,10 +619,10 @@ class MariaTools(Toolkit):
             text: Legenda descritiva.
         """
         print(f"[Tool] Enviar Imagem")
-        u_service = UazapiService()
+        m_service = MetaService()
         msg_service = MessageService()
-        
-        u_service.send_image(self.lead_id, file, caption=text)
+
+        m_service.send_whatsapp_image(self.lead_id, file, caption=text)
         
         try:
             content_str = f"{text} [Imagem: {file}]"
@@ -639,9 +639,9 @@ class MariaTools(Toolkit):
             items: Lista de itens (dicionários com image_url, text, buttons).
         """
         print(f"[Tool] Enviar Carrossel")
-        u_service = UazapiService()
+        m_service = MetaService()
         msg_service = MessageService()
-        
+
         carousel_items = []
         for item in items:
             itm = {
@@ -651,8 +651,8 @@ class MariaTools(Toolkit):
             if 'buttons' in item:
                 itm['buttons'] = item['buttons']
             carousel_items.append(itm)
-            
-        u_service.send_carousel(self.lead_id, titulo, carousel_items)
+
+        m_service.send_whatsapp_carousel(self.lead_id, titulo, carousel_items)
         
         try:
             content_str = f"{titulo} [Carrossel com {len(carousel_items)} itens]"
@@ -773,8 +773,8 @@ class MariaTools(Toolkit):
                 msg += f"\n\n*Abrir no CRM:*\n{crm_link}"
 
             # 4. Enviar via WhatsApp para o vendedor atribuido
-            u_service = UazapiService()
-            u_service.send_whatsapp_message(target_phone, msg)
+            m_service = MetaService()
+            m_service.send_whatsapp_text(target_phone, msg)
             print(f"[Tool] Resumo enviado para {seller_label} ({target_phone})")
 
             # 5. Criar notificação no CRM para o vendedor

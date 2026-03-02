@@ -44,7 +44,7 @@ REQUIRED_ENV_VARS = [
     "SUPABASE_JWT_SECRET",
     "OPENAI_API_KEY",
     "META_ACCESS_TOKEN",
-    "UAZAPI_TOKEN",
+    "META_PHONE_NUMBER_ID",
     "CORS_ORIGINS",
 ]
 _missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]

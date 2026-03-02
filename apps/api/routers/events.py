@@ -7,14 +7,14 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from services.supabase_client import create_client
-from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 
 router = APIRouter(prefix="/api/events", tags=["Events"])
 
 
 def normalize_whatsapp_phone(value: Optional[str]) -> str:
     """Normaliza número no padrão ddidddnumero."""
-    return UazapiService.normalize_whatsapp_number(value or "")
+    return MetaService.normalize_whatsapp_number(value or "")
 
 # Models
 class EventCreate(BaseModel):

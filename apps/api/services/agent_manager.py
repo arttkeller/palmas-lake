@@ -36,8 +36,8 @@ def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
         return supabase.table("leads").select(select_fields).eq("instagram_id", ig_id).execute()
     else:
         raw_phone = lead_id.split('@')[0] if '@' in lead_id else lead_id
-        from services.uazapi_service import UazapiService
-        phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
+        from services.meta_service import MetaService
+        phone = MetaService.normalize_whatsapp_number(raw_phone) or raw_phone
         res = supabase.table("leads").select(select_fields).eq("phone", phone).execute()
         # Fallback: try raw phone for leads stored before normalization
         if not res.data and phone != raw_phone:

@@ -13,7 +13,7 @@ import traceback
 import pytz
 
 from services.supabase_client import create_client
-from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 
 
 BRAZIL_TZ = pytz.timezone("America/Sao_Paulo")
@@ -24,7 +24,7 @@ class EventReminderService:
 
     def __init__(self):
         self.supabase = create_client()
-        self.uazapi = UazapiService()
+        self.meta = MetaService()
 
     @staticmethod
     def _now_utc() -> datetime:
@@ -114,7 +114,7 @@ class EventReminderService:
 
         phone_candidate = lead_phone or event_phone
         if phone_candidate:
-            normalized_phone = self.uazapi.normalize_whatsapp_number(phone_candidate)
+            normalized_phone = MetaService.normalize_whatsapp_number(phone_candidate)
             if not normalized_phone:
                 return None
             return {
@@ -187,7 +187,7 @@ class EventReminderService:
                 platform_recipient = destination["platform_recipient"]
                 remote_jid = destination["remote_jid"]
 
-                send_result = self.uazapi.send_whatsapp_message(platform_recipient, message)
+                send_result = self.meta.send_whatsapp_text(platform_recipient, message)
                 send_ok = send_result is not None
 
                 if not send_ok:

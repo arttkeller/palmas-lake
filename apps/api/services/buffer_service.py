@@ -10,7 +10,6 @@ import sentry_sdk
 from redis.asyncio import Redis
 
 from services.agent_manager import AgentManager
-from services.uazapi_service import UazapiService
 from services.meta_service import MetaService
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,6 @@ return {msgs, ch, pn}
 
 # ── Service instances ─────────────────────────────────────────────────
 agent = AgentManager()
-uazapi = UazapiService()
 meta = MetaService()
 
 
@@ -387,5 +385,6 @@ def _send_message(lead_id: str, text: str, channel: str):
         logger.info(f"[_send_message] Instagram send result: {result}")
         return result
     else:
-        uazapi.send_whatsapp_message(lead_id, text)
-        return None
+        result = meta.send_whatsapp_text(lead_id, text)
+        logger.info(f"[_send_message] WhatsApp send result: {result}")
+        return result

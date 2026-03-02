@@ -1,6 +1,6 @@
 
 from services.supabase_client import create_client
-from services.uazapi_service import UazapiService
+from services.meta_service import MetaService
 import os
 import re
 from datetime import datetime
@@ -115,7 +115,7 @@ class MessageService:
             else:
                 instagram_id = None
                 raw_phone = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
-                phone = UazapiService.normalize_whatsapp_number(raw_phone) or raw_phone
+                phone = MetaService.normalize_whatsapp_number(raw_phone) or raw_phone
                 platform = "whatsapp"
                 logger.debug(f"Processing message for phone: {phone} (raw: {raw_phone})")
             

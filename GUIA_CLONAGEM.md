@@ -293,18 +293,21 @@ SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6...  # Service Role Key (nao a anon key
 # OpenAI (motor da IA)
 OPENAI_API_KEY=sk-proj-...
 
-# WhatsApp (UazAPI)
-UAZAPI_URL=https://SUA-INSTANCIA.uazapi.com
-UAZAPI_TOKEN=seu-token-uazapi-aqui
+# WhatsApp + Instagram (Meta Cloud API oficial)
+META_ACCESS_TOKEN=EAAxxxxxxx  # System User Token (permanente)
+META_PHONE_NUMBER_ID=123456789  # ID do numero de telefone no Meta Business
+META_APP_SECRET=abc123  # App Secret para verificacao HMAC do webhook
+META_VERIFY_TOKEN=seu-token-de-verificacao  # Token para challenge do webhook
 
 # === OPCIONAIS ===
 
 # Instagram (Meta)
-META_ACCESS_TOKEN=EAAxxxxxxx  # System User Token
-META_PAGE_ID=123456789
-META_PHONE_NUMBER_ID=123456789
-META_INSTAGRAM_ID=123456789
-META_VERIFY_TOKEN=seu-token-de-verificacao
+META_PAGE_ID=123456789  # ID da pagina do Facebook (auto-detectado se omitido)
+META_INSTAGRAM_ID=123456789  # Instagram Business Account ID (auto-detectado se omitido)
+
+# Templates de follow-up (nomes dos templates aprovados no Meta Business)
+WA_TEMPLATE_FOLLOWUP_24H=followup_24h  # Template para follow-up de 24h (fora da janela)
+WA_TEMPLATE_FOLLOWUP_48H=followup_48h  # Template para follow-up de 48h (fora da janela)
 
 # Transcricao de audio (Groq)
 GROQ_API_KEY=gsk_...
@@ -340,9 +343,7 @@ NEXT_PUBLIC_AUTH_REGISTRATION_PROJECT=minha-empresa
 # Sentry (opcional)
 NEXT_PUBLIC_SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 
-# WhatsApp (para notificacoes do frontend — opcional)
-UAZAPI_URL=https://SUA-INSTANCIA.uazapi.com
-UAZAPI_TOKEN=seu-token-uazapi-aqui
+# WhatsApp/Meta (nao necessario no frontend — API eh backend-only)
 ```
 
 ---
@@ -729,26 +730,27 @@ hostname: 'SEU-PROJETO.supabase.co'
 
 ### 9.1 WhatsApp (UazAPI)
 
-1. **Criar instancia** no [UazAPI](https://uazapi.com)
-2. **Conectar WhatsApp** escaneando o QR code
-3. **Configurar webhook**:
-   - URL: `https://SUA-API.dominio.com/api/webhook/uazapi`
-   - Metodo: POST
-   - Eventos: `messages.upsert`
-4. **Anotar credenciais**:
-   - `UAZAPI_URL` = URL da sua instancia
-   - `UAZAPI_TOKEN` = Token da sua instancia
+1. **Criar app** no [Meta Developer Portal](https://developers.facebook.com)
+2. **Adicionar produto** "WhatsApp" ao app
+3. **Configurar numero de telefone** no Meta Business Manager
+4. **Configurar webhook WhatsApp**:
+   - URL de callback: `https://SUA-API.dominio.com/api/webhook/whatsapp`
+   - Token de verificacao: qualquer string (anotar como `META_VERIFY_TOKEN`)
+   - Campos: `messages`
+5. **Obter credenciais**:
+   - System User Token (permanente) → `META_ACCESS_TOKEN`
+   - Phone Number ID → `META_PHONE_NUMBER_ID`
+   - App Secret → `META_APP_SECRET`
 
 ### 9.2 Instagram DMs (Meta)
 
-1. **Criar app** no [Meta Developer Portal](https://developers.facebook.com)
+1. **No mesmo app** do Meta Developer Portal
 2. **Adicionar produto** "Messenger" ao app
-3. **Configurar webhook**:
+3. **Configurar webhook Instagram**:
    - URL de callback: `https://SUA-API.dominio.com/api/webhook/meta`
-   - Token de verificacao: qualquer string (anotar como `META_VERIFY_TOKEN`)
+   - Token de verificacao: mesmo `META_VERIFY_TOKEN`
    - Campos: `messages`, `messaging_postbacks`
-4. **Obter tokens**:
-   - System User Token → `META_ACCESS_TOKEN`
+4. **Obter IDs adicionais**:
    - Page ID → `META_PAGE_ID`
    - Instagram Business Account ID → `META_INSTAGRAM_ID`
 5. **Conectar pagina** do Facebook/Instagram ao app

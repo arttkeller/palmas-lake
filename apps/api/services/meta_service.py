@@ -5,7 +5,7 @@ import requests
 import time
 import json
 from pathlib import Path
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, List, Any
 
 # Persistence for learned IGSID (survives restarts)
 _STATE_DIR = Path(os.environ.get("META_STATE_DIR", os.path.dirname(os.path.abspath(__file__))))
@@ -238,25 +238,353 @@ class MetaService:
             print(f"[MetaService] Error fetching Instagram profile: {e}")
             return None
 
-    def send_whatsapp_message(self, to: str, text: str):
-        """Send a text message via Meta WhatsApp Business API."""
-        url = f"{self.base_url}/{self.phone_number_id}/messages"
-        headers = {
+    # ── WhatsApp Cloud API ─────────────────────────────────────────────
+
+    @staticmethod
+    def normalize_whatsapp_number(number: str, default_ddi: str = "55") -> str:
+        """
+        Normaliza número no formato ddidddnumero (somente dígitos).
+        Adiciona DDI 55 se ausente e nono dígito (9) para DDDs >= 29.
+        """
+        raw = (number or "").strip().lower()
+        if not raw or raw.startswith("ig:"):
+            return ""
+
+        if "@" in raw:
+            raw = raw.split("@")[0]
+
+        digits = "".join(ch for ch in raw if ch.isdigit())
+        if not digits:
+            return ""
+
+        if digits.startswith("00") and len(digits) > 2:
+            digits = digits[2:]
+
+        if len(digits) in (10, 11):
+            digits = f"{default_ddi}{digits}"
+        elif len(digits) not in (12, 13):
+            return ""
+
+        if len(digits) == 12 and digits[:2] == "55":
+            ddd = int(digits[2:4])
+            local = digits[4:]
+            if ddd >= 29 and local[0] in ("6", "7", "8", "9"):
+                digits = f"55{ddd}9{local}"
+
+        return digits
+
+    def _get_wa_headers(self) -> dict:
+        """Headers para chamadas à WhatsApp Cloud API."""
+        return {
             "Authorization": f"Bearer {self.access_token}",
             "Content-Type": "application/json",
         }
-        data = {
+
+    def _extract_wa_error_code(self, response: requests.Response) -> Optional[int]:
+        """Extrai o código de erro da resposta da Cloud API."""
+        try:
+            error_data = response.json().get("error", {})
+            return error_data.get("code")
+        except Exception:
+            return None
+
+    def send_whatsapp_text(self, to: str, text: str, reply_message_id: str = None) -> Optional[dict]:
+        """
+        Envia mensagem de texto via WhatsApp Cloud API.
+        Retorna dict da resposta ou None em caso de erro.
+        """
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            print(f"[MetaService] Invalid WA number: {to}")
+            return None
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload: Dict[str, Any] = {
             "messaging_product": "whatsapp",
-            "to": to,
+            "recipient_type": "individual",
+            "to": clean,
             "type": "text",
-            "text": {"body": text},
+            "text": {"preview_url": True, "body": text},
+        }
+        if reply_message_id:
+            payload["context"] = {"message_id": reply_message_id}
+
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=15)
+            if resp.status_code != 200:
+                error_code = self._extract_wa_error_code(resp)
+                print(f"[MetaService] WA text failed: HTTP {resp.status_code}, code={error_code}, body={resp.text[:200]}")
+                return {"error": True, "error_code": error_code, "status_code": resp.status_code}
+            result = resp.json()
+            msg_ids = result.get("messages", [])
+            if msg_ids:
+                self._sent_message_ids[msg_ids[0]["id"]] = time.time()
+            return result
+        except Exception as e:
+            print(f"[MetaService] Error sending WA text: {e}")
+            return None
+
+    # Backward compat alias
+    def send_whatsapp_message(self, to: str, text: str) -> Optional[dict]:
+        """Alias para send_whatsapp_text (compatibilidade)."""
+        return self.send_whatsapp_text(to, text)
+
+    def send_whatsapp_image(self, to: str, image_url: str, caption: str = "") -> Optional[dict]:
+        """Envia imagem via WhatsApp Cloud API usando URL pública."""
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            print(f"[MetaService] Invalid WA number for image: {to}")
+            return None
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload: Dict[str, Any] = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean,
+            "type": "image",
+            "image": {"link": image_url},
+        }
+        if caption:
+            payload["image"]["caption"] = caption
+
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=15)
+            if resp.status_code != 200:
+                print(f"[MetaService] WA image failed: {resp.status_code} - {resp.text[:200]}")
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"[MetaService] Error sending WA image: {e}")
+            return None
+
+    def send_whatsapp_reaction(self, to: str, message_id: str, emoji: str = "❤️") -> Optional[dict]:
+        """Envia reação (emoji) a uma mensagem via WhatsApp Cloud API."""
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            return None
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean,
+            "type": "reaction",
+            "reaction": {"message_id": message_id, "emoji": emoji},
         }
         try:
-            response = requests.post(url, headers=headers, json=data)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.RequestException as e:
-            print(f"Error sending Meta WhatsApp message: {e}")
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=10)
+            if resp.status_code != 200:
+                print(f"[MetaService] WA reaction failed: {resp.status_code} - {resp.text[:200]}")
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"[MetaService] Error sending WA reaction: {e}")
+            return None
+
+    def send_whatsapp_interactive_buttons(
+        self, to: str, body_text: str, buttons: List[Dict],
+        header_text: str = None, footer_text: str = None,
+    ) -> Optional[dict]:
+        """
+        Envia mensagem interativa com botões (max 3) via WhatsApp Cloud API.
+        buttons: [{"id": "btn_id", "title": "Texto do Botão"}, ...]
+        """
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            return None
+
+        wa_buttons = []
+        for i, b in enumerate(buttons[:3]):
+            wa_buttons.append({
+                "type": "reply",
+                "reply": {
+                    "id": str(b.get("id", f"btn_{i}"))[:256],
+                    "title": str(b.get("title", b.get("text", "Opção")))[:20],
+                },
+            })
+
+        interactive: Dict[str, Any] = {
+            "type": "button",
+            "body": {"text": body_text[:1024]},
+            "action": {"buttons": wa_buttons},
+        }
+        if header_text:
+            interactive["header"] = {"type": "text", "text": header_text[:60]}
+        if footer_text:
+            interactive["footer"] = {"text": footer_text[:60]}
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean,
+            "type": "interactive",
+            "interactive": interactive,
+        }
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=15)
+            if resp.status_code != 200:
+                print(f"[MetaService] WA buttons failed: {resp.status_code} - {resp.text[:200]}")
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"[MetaService] Error sending WA buttons: {e}")
+            return None
+
+    def send_whatsapp_interactive_list(
+        self, to: str, header: str, body: str,
+        button_label: str, sections: List[Dict],
+    ) -> Optional[dict]:
+        """
+        Envia mensagem interativa de lista (max 10 itens) via WhatsApp Cloud API.
+        sections: [{"title": "Seção", "rows": [{"id": "row_id", "title": "...", "description": "..."}]}]
+        """
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            return None
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean,
+            "type": "interactive",
+            "interactive": {
+                "type": "list",
+                "header": {"type": "text", "text": header[:60]},
+                "body": {"text": body[:1024]},
+                "action": {
+                    "button": button_label[:20],
+                    "sections": sections,
+                },
+            },
+        }
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=15)
+            if resp.status_code != 200:
+                print(f"[MetaService] WA list failed: {resp.status_code} - {resp.text[:200]}")
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"[MetaService] Error sending WA list: {e}")
+            return None
+
+    def send_whatsapp_carousel(self, to: str, title: str, items: List[Dict]) -> None:
+        """
+        Adapta o formato de carrossel UazAPI para Cloud API.
+        Envia: título → (imagem + caption) por card → botões interativos por card.
+        """
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            return
+
+        self.send_whatsapp_text(clean, title)
+        time.sleep(0.5)
+
+        for item in items[:3]:
+            image_url = item.get("image")
+            card_text = item.get("text", "")
+            buttons = item.get("buttons", [])
+
+            if image_url:
+                self.send_whatsapp_image(clean, image_url, caption=card_text)
+                time.sleep(0.5)
+
+            if not buttons:
+                buttons = [
+                    {"id": f"Quero agendar uma visita para ver {card_text}", "title": "Agendar Visita"},
+                    {"id": f"Me conte mais detalhes sobre {card_text}", "title": "Mais Info"},
+                ]
+            else:
+                buttons = [
+                    {"id": b.get("id", ""), "title": b.get("text", b.get("title", "Opção"))}
+                    for b in buttons[:3]
+                ]
+
+            body = card_text or title
+            self.send_whatsapp_interactive_buttons(clean, body, buttons)
+            time.sleep(0.5)
+
+    def send_whatsapp_template(
+        self, to: str, template_name: str,
+        language: str = "pt_BR",
+        components: List[Dict] = None,
+    ) -> Optional[dict]:
+        """
+        Envia Template Message via WhatsApp Cloud API.
+        Necessário para mensagens fora da janela de 24h.
+        """
+        clean = self.normalize_whatsapp_number(to)
+        if not clean:
+            return None
+
+        template_payload: Dict[str, Any] = {
+            "name": template_name,
+            "language": {"code": language},
+        }
+        if components:
+            template_payload["components"] = components
+
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean,
+            "type": "template",
+            "template": template_payload,
+        }
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=15)
+            if resp.status_code != 200:
+                error_code = self._extract_wa_error_code(resp)
+                print(f"[MetaService] WA template failed: HTTP {resp.status_code}, code={error_code}")
+                return None
+            return resp.json()
+        except Exception as e:
+            print(f"[MetaService] Error sending WA template: {e}")
+            return None
+
+    def mark_whatsapp_read(self, message_id: str) -> bool:
+        """Marca uma mensagem recebida como lida no WhatsApp."""
+        url = f"{self.base_url}/{self.phone_number_id}/messages"
+        payload = {
+            "messaging_product": "whatsapp",
+            "status": "read",
+            "message_id": message_id,
+        }
+        try:
+            resp = requests.post(url, headers=self._get_wa_headers(), json=payload, timeout=5)
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def download_whatsapp_media(self, media_id: str) -> Optional[bytes]:
+        """
+        Download de mídia da WhatsApp Cloud API.
+        Passo 1: GET /{media_id} para obter URL de download.
+        Passo 2: GET na URL com Bearer token para baixar os bytes.
+        """
+        try:
+            url_resp = requests.get(
+                f"{self.base_url}/{media_id}",
+                headers=self._get_wa_headers(),
+                timeout=10,
+            )
+            url_resp.raise_for_status()
+            media_url = url_resp.json().get("url")
+            if not media_url:
+                print(f"[MetaService] No URL in media response for {media_id}")
+                return None
+
+            dl_resp = requests.get(
+                media_url,
+                headers={"Authorization": f"Bearer {self.access_token}"},
+                timeout=30,
+            )
+            dl_resp.raise_for_status()
+            return dl_resp.content
+        except Exception as e:
+            print(f"[MetaService] Error downloading WA media {media_id}: {e}")
             return None
 
     def send_instagram_message(self, recipient_id: str, text: str) -> Optional[dict]:
