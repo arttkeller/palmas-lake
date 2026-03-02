@@ -1029,9 +1029,50 @@ async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict
 
     elif msg_type == "image":
         caption = msg.get("image", {}).get("caption", "")
-        text = "[Imagem recebida]"
+        image_id = msg.get("image", {}).get("id")
+        image_description = ""
+
+        # Tenta descrever a imagem via Groq Vision
+        if image_id:
+            try:
+                image_bytes = await asyncio.to_thread(meta_service.download_whatsapp_media, image_id)
+                if image_bytes:
+                    import base64
+                    from groq import Groq
+
+                    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+                    if groq_key:
+                        b64 = base64.b64encode(image_bytes).decode("utf-8")
+                        mime = msg.get("image", {}).get("mime_type", "image/jpeg")
+                        groq_client = Groq(api_key=groq_key)
+                        vision_resp = await asyncio.to_thread(
+                            lambda: groq_client.chat.completions.create(
+                                model="meta-llama/llama-4-scout-17b-16e-instruct",
+                                messages=[{
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": "Descreva esta imagem de forma objetiva em português, em no máximo 2 frases."},
+                                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                                    ],
+                                }],
+                                max_completion_tokens=256,
+                                temperature=0.3,
+                            )
+                        )
+                        image_description = vision_resp.choices[0].message.content.strip()
+                        logger.info(f"[WA Cloud Webhook] Image described: {image_description[:100]}...")
+            except Exception as img_err:
+                logger.error(f"[WA Cloud Webhook] Image description failed: {img_err}")
+
+        # Monta o texto final com descrição + caption
+        parts = []
+        if image_description:
+            parts.append(f"[Imagem: {image_description}]")
+        else:
+            parts.append("[Imagem recebida]")
         if caption:
-            text += f" {caption}"
+            parts.append(caption)
+        text = " ".join(parts)
         message_type = "image"
 
     elif msg_type == "document":
