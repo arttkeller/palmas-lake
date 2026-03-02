@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import Response
 from pydantic import BaseModel
 from services.message_service import MessageService
 from services.supabase_client import create_client
@@ -163,3 +164,31 @@ def get_ai_status(lead_id: str):
     if not lead_res.data:
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"ai_paused": lead_res.data[0].get("ai_paused", False)}
+
+
+@router.get("/chat/media/{media_id}")
+def proxy_whatsapp_media(media_id: str):
+    """
+    Proxy para servir mídia do WhatsApp Cloud API.
+    Busca a imagem na Meta sob demanda usando o Bearer token do backend.
+    Retorna os bytes da imagem diretamente para o frontend.
+    """
+    from services.meta_service import MetaService
+    meta = MetaService()
+
+    image_bytes = meta.download_whatsapp_media(media_id)
+    if not image_bytes:
+        raise HTTPException(status_code=404, detail="Media not found or expired")
+
+    # Detectar tipo MIME pelos magic bytes
+    content_type = "image/jpeg"
+    if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+        content_type = "image/png"
+    elif image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+        content_type = "image/webp"
+
+    return Response(
+        content=image_bytes,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )

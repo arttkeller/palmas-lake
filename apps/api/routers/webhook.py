@@ -991,6 +991,7 @@ async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict
     # ── 4. Parse message content based on type ───────────────────────────────
     text: Optional[str] = None
     message_type = "text"
+    wa_media_id: Optional[str] = None  # media_id for images (used by frontend proxy)
 
     if msg_type == "text":
         text = msg.get("text", {}).get("body", "")
@@ -1074,6 +1075,7 @@ async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict
             parts.append(caption)
         text = " ".join(parts)
         message_type = "image"
+        wa_media_id = image_id  # Save for metadata
 
     elif msg_type == "document":
         filename = msg.get("document", {}).get("filename", "arquivo")
@@ -1146,6 +1148,7 @@ async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict
     try:
         from services.message_service import MessageService
         msg_service = MessageService()
+        extra_meta = {"wa_media_id": wa_media_id} if wa_media_id else None
         result = msg_service.save_message(
             phone,
             text,
@@ -1153,6 +1156,7 @@ async def _process_whatsapp_cloud_message(msg: Dict[str, Any], contact_map: Dict
             whatsapp_msg_id=msg_id,
             message_type=message_type,
             wa_pushname=pushname,
+            extra_metadata=extra_meta,
         )
         logger.info(f"[WA Cloud Webhook] save_message result: {result}")
 

@@ -8,6 +8,7 @@ import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import clsx from 'clsx';
 import { createClient } from '@/lib/supabase';
 import { apiFetch } from '@/lib/api-fetch';
+import { API_BASE_URL } from '@/lib/api-config';
 import { useRealtimeSubscription } from '@/hooks/useRealtimeSubscription';
 import { GlassmorphismCard, getGlassmorphismClasses } from '@/components/ui/glassmorphism-card';
 import { Input } from '@/components/ui/input';
@@ -524,14 +525,20 @@ export default function ChatPage() {
                                             {/* Render Logic based on Type */}
                                             {msg.message_type === 'image' || (msg.message_type as string) === 'carousel' ? (
                                                 <div className="space-y-2">
-                                                    <p className="whitespace-pre-wrap break-words">{parseMessageContent(msg.content).split('[Imagem:')[0].split('[Carrossel')[0]}</p>
-                                                    {(msg.content.match(/\[Imagem: (.*?)\]/) || [])[1] && (
+                                                    {/* Imagem do lead via proxy (metadata.wa_media_id) */}
+                                                    {metadata?.wa_media_id && (
                                                         <img
-                                                            src={(msg.content.match(/\[Imagem: (.*?)\]/) || [])[1]}
+                                                            src={`${API_BASE_URL}/api/chat/media/${metadata.wa_media_id}`}
                                                             alt="Imagem enviada"
-                                                            className="rounded-lg max-h-48 w-full object-cover mt-2 border border-white/20"
+                                                            className="rounded-lg max-h-64 max-w-full object-contain mt-1 border border-white/20 cursor-pointer"
+                                                            loading="lazy"
+                                                            onClick={() => window.open(`${API_BASE_URL}/api/chat/media/${metadata.wa_media_id}`, '_blank')}
                                                         />
                                                     )}
+                                                    {/* Caption ou descrição da imagem */}
+                                                    <p className="whitespace-pre-wrap break-words">{parseMessageContent(
+                                                        msg.content.replace(/\[Imagem:.*?\]\s*/g, '').replace(/\[Imagem recebida\]\s*/g, '').trim() || msg.content
+                                                    )}</p>
                                                     {/* Fallback for carousel indication */}
                                                     {(msg.message_type as string) === 'carousel' && (
                                                         <div className="mt-2 p-3 bg-white/80 rounded-xl border border-white/30 shadow-sm backdrop-blur-sm">

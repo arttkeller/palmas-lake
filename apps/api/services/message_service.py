@@ -81,7 +81,7 @@ class MessageService:
             logger.error(f"Failed to initialize MessageService: {e}")
             raise MessageServiceError(f"Initialization failed: {e}")
 
-    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None, wa_pushname: str = None, profile_picture_url: str = None):
+    def save_message(self, remote_jid: str, content: str, sender_type: str, message_type: str = "text", whatsapp_msg_id: str = None, ig_profile: dict = None, wa_pushname: str = None, profile_picture_url: str = None, extra_metadata: dict = None):
         """
         Saves a message to the database.
         Ensures a lead and conversation exist for the remote_jid.
@@ -323,6 +323,8 @@ class MessageService:
             metadata = {}
             if whatsapp_msg_id:
                 metadata["whatsapp_msg_id"] = whatsapp_msg_id
+            if extra_metadata:
+                metadata.update(extra_metadata)
 
             # 4. Insert Message
             try:
