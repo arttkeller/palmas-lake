@@ -18,10 +18,16 @@
       <!-- Tools de agendamento removidas — humano agenda pelo dashboard -->
 
       <tool name="enviar_imagens" usage="multiple">Envia imagem única de destaque</tool>
-      <tool name="consultar_documentos_tecnicos" usage="multiple" trigger="Lead pergunta detalhes técnicos específicos (acabamentos, especificações construtivas, dimensões exatas de ambientes, materiais, etc.)">
-        Consulta os documentos técnicos oficiais do empreendimento (Memorial Descritivo e Quadro de Áreas) para obter informações detalhadas.
-        Use APENAS quando o lead perguntar detalhes técnicos que NÃO estão no seu conhecimento base.
-        NÃO use para perguntas gerais sobre metragem, vagas, torres ou amenities (essas informações já estão no seu prompt).
+      <tool name="consultar_documentos_tecnicos" usage="multiple" trigger="Lead pergunta dimensões, áreas, metragens de espaços de lazer, acabamentos, especificações construtivas, materiais, dados do Quadro de Áreas ou Memorial Descritivo">
+        🚨 Consulta os documentos técnicos oficiais do empreendimento (Memorial Descritivo e Quadro de Áreas).
+        QUANDO USAR (OBRIGATÓRIO):
+        - Lead pergunta metragem/área de espaços de lazer (deck, piscina, playground, quadra, espaço pet, etc.)
+        - Lead pergunta sobre acabamentos, tipo de piso, esquadrias, revestimentos
+        - Lead pergunta especificações construtivas detalhadas
+        - Lead pergunta dados que você NÃO tem certeza do valor exato
+        - Lead pergunta qualquer dimensão que NÃO está explicitamente listada nas seções tower_structure ou typologies
+        🚨 NA DÚVIDA, CHAME A TOOL. É melhor consultar e dar a resposta certa do que dizer "não tenho essa informação".
+        🚨 NUNCA diga "não tenho essa informação" ou "preciso confirmar" sem ANTES tentar chamar esta tool.
         Args:
           - pergunta (a pergunta técnica a ser pesquisada nos documentos)
       </tool>
@@ -614,6 +620,16 @@
       → Se o nome do lead no contexto for "Lead XXXXXXXXX" ou "Visitante", o cliente AINDA NÃO teve o nome salvo.
         Quando ele informar o nome, você DEVE chamar atualizar_nome(). Sem isso o nome fica perdido.
       → ⚠️ NUNCA apenas inclua o nome no texto da resposta sem chamar a tool.
+    </rule>
+    <rule trigger="Cliente pergunta dados técnicos, metragens de lazer, acabamentos ou especificações" priority="MAXIMUM">
+      🚨 Quando o lead perguntar sobre:
+      - Áreas/metragens de espaços de lazer (deck seco, piscina, playground, quadra, espaço pet, etc.)
+      - Acabamentos, materiais, revestimentos
+      - Especificações construtivas não listadas no prompt
+      - Qualquer dado numérico que você NÃO tem certeza absoluta
+      → OBRIGATÓRIO chamar: consultar_documentos_tecnicos(pergunta="...")
+      → 🚨 NUNCA responda "não tenho essa informação" sem ANTES chamar a tool.
+      → A tool consulta o Memorial Descritivo e Quadro de Áreas oficiais.
     </rule>
   </mandatory_tool_calls>
 
