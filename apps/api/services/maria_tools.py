@@ -53,6 +53,7 @@ class MariaTools(Toolkit):
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
         self.register(self.transferir_para_humano)
+        self.register(self.consultar_documentos_tecnicos)
 
     def _lead_query(self, query):
         """
@@ -838,3 +839,22 @@ class MariaTools(Toolkit):
             return f"Erro ao transferir: {e}"
 
         return "Lead transferido com sucesso. Resumo enviado para o vendedor."
+
+    def consultar_documentos_tecnicos(self, pergunta: str) -> str:
+        """Consulta os documentos técnicos do empreendimento (Memorial Descritivo e Quadro de Áreas).
+        Use quando o lead perguntar detalhes técnicos específicos como acabamentos,
+        especificações construtivas, dimensões exatas de ambientes, materiais, etc.
+
+        Args:
+            pergunta: A pergunta técnica a ser pesquisada nos documentos
+
+        Returns:
+            str: Resposta baseada nos documentos técnicos oficiais do empreendimento
+        """
+        try:
+            from services.gemini_file_search import GeminiFileSearchService
+            service = GeminiFileSearchService()
+            return service.query(pergunta)
+        except Exception as e:
+            print(f"[Tool] Erro ao consultar documentos: {e}")
+            return "Informação técnica não disponível no momento."

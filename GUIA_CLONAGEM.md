@@ -85,6 +85,7 @@ projeto/
 - **Transcricao de audio**: Audio do WhatsApp transcrito via Groq Whisper
 - **Analise de sentimento**: Classificacao automatica de humor do lead
 - **IA Especialista no dashboard**: Assistente que responde perguntas sobre os leads
+- **RAG de documentos tecnicos**: Consulta Memorial Descritivo e Quadro de Areas via Google Gemini File Search quando lead pergunta detalhes tecnicos
 
 ---
 
@@ -109,7 +110,8 @@ projeto/
 | [UazAPI](https://uazapi.com) | Gateway WhatsApp | Pago |
 | [Meta Developer](https://developers.facebook.com) | Instagram DMs | Gratuito |
 | [Google Cloud](https://console.cloud.google.com) | Google Calendar | Gratuito |
-| [Groq](https://groq.com) | Transcricao de audio (Whisper) | Gratuito ate X req/dia |
+| [Groq](https://groq.com) | Transcricao de audio (Whisper) + Visao (Llama 4 Scout) | Gratuito ate X req/dia |
+| [Google AI Studio](https://aistudio.google.com) | RAG de documentos tecnicos (Gemini File Search) | Gratuito (custo minimo por tokens) |
 | [Sentry](https://sentry.io) | Monitoramento de erros (opcional) | Gratuito ate 5K eventos |
 
 ---
@@ -313,6 +315,10 @@ WA_TEMPLATE_FOLLOWUP_48H=followup_48h  # Template para follow-up de 48h (fora da
 GROQ_API_KEY=gsk_...
 GROQ_AUDIO_MODEL=whisper-large-v3-turbo  # padrao
 
+# Google Gemini File Search (RAG de documentos tecnicos)
+GEMINI_API_KEY=AIza...  # Chave da API Google AI Studio (https://aistudio.google.com/apikey)
+GEMINI_FILE_SEARCH_STORE=fileSearchStores/xxx  # Nome do store (output do script setup_file_search.py)
+
 # Monitoramento (Sentry)
 SENTRY_DSN=https://xxx@xxx.ingest.sentry.io/xxx
 SENTRY_ENVIRONMENT=production
@@ -477,7 +483,7 @@ Se tiver carrossel de imagens:
 # Trocar pelas imagens e descricoes dos seus produtos
 ```
 
-### 7.7 Servico de follow-up inteligente — `apps/api/services/follow_up_suggestion.py`
+### 7.8 Servico de follow-up inteligente — `apps/api/services/follow_up_suggestion.py`
 
 Este servico gera sugestoes personalizadas de follow-up usando GPT-4o-mini. E usado quando um lead ja tem vendedor designado — em vez de enviar template automatico, cria notificacao com sugestao personalizada.
 
@@ -487,11 +493,40 @@ Este servico gera sugestoes personalizadas de follow-up usando GPT-4o-mini. E us
 # Trocar pela descricao do seu negocio
 ```
 
-### 7.8 Round-robin de vendedores — `apps/api/services/round_robin_service.py`
+### 7.9 Round-robin de vendedores — `apps/api/services/round_robin_service.py`
 
 O servico distribui leads qualificados entre vendedores com `role = 'user'` e `active = true`. Nao precisa de adaptacao — funciona automaticamente com qualquer numero de vendedores cadastrados na tabela `users`.
 
-### 7.4 Modelos de IA — `apps/api/services/agent_manager.py`
+### 7.4 RAG de documentos tecnicos (Google Gemini File Search)
+
+A IA pode consultar documentos tecnicos (Memorial Descritivo, Quadro de Areas) via Gemini File Search quando o lead faz perguntas tecnicas detalhadas.
+
+**Arquivos envolvidos:**
+- `apps/api/services/gemini_file_search.py` — Servico que consulta o Gemini File Search
+- `apps/api/scripts/setup_file_search.py` — Script one-time para criar o store e fazer upload dos documentos
+- `apps/api/services/maria_tools.py` — Tool `consultar_documentos_tecnicos` que a IA chama
+
+**Setup:**
+
+1. Gere uma API key no [Google AI Studio](https://aistudio.google.com/apikey)
+2. Coloque seus documentos tecnicos (DOCX/PDF) na raiz do projeto
+3. Atualize os caminhos e nomes dos documentos no script `setup_file_search.py`
+4. Execute o script:
+
+```bash
+cd apps/api
+export GEMINI_API_KEY=sua_chave_aqui
+python scripts/setup_file_search.py
+```
+
+5. O script imprimira o nome do store (ex: `fileSearchStores/xxx`). Adicione como `GEMINI_FILE_SEARCH_STORE` nas variaveis de ambiente.
+
+**Adaptar para outro produto:**
+- Substitua os documentos DOCX/PDF pelos do seu produto
+- O modelo usado e `gemini-3.1-flash-lite` (rapido e barato)
+- Se nao precisar de RAG, basta remover o `self.register(self.consultar_documentos_tecnicos)` em `maria_tools.py`
+
+### 7.5 Modelos de IA — `apps/api/services/agent_manager.py`
 
 ```python
 # Modelo principal do agente (~linha 550)
@@ -514,7 +549,7 @@ model=OpenAIChat(
 **Opcoes de modelo**: `gpt-4o`, `gpt-4o-mini`, `gpt-5.2`, `gpt-5-mini`, etc.
 Modelos mais baratos = menos custo por lead, mas respostas potencialmente piores.
 
-### 7.5 Templates de follow-up — `apps/api/services/follow_up_templates.py`
+### 7.6 Templates de follow-up — `apps/api/services/follow_up_templates.py`
 
 5 templates por estagio. Cada template recebe `{name_part}` (primeiro nome do lead).
 
@@ -526,7 +561,7 @@ Modelos mais baratos = menos custo por lead, mas respostas potencialmente piores
 "Oi{name_part}! Tudo bem? Vi que voce demonstrou interesse em nossos veiculos..."
 ```
 
-### 7.6 Mapeamento de interesse — `apps/api/services/maria_tools.py`
+### 7.7 Mapeamento de interesse — `apps/api/services/maria_tools.py`
 
 Dentro de `atualizar_interesse()`, ha normalizacao de tipos de produto:
 
@@ -882,6 +917,7 @@ Apos completar todas as adaptacoes, verifique cada item:
 - [ ] Prompt de follow-up inteligente adaptado (`follow_up_suggestion.py`)
 - [ ] Mapeamento de tipos de interesse atualizado
 - [ ] Modelo de IA escolhido (custo vs qualidade)
+- [ ] Gemini File Search configurado (se usar RAG): `GEMINI_API_KEY` + `GEMINI_FILE_SEARCH_STORE` + script executado
 
 ### Branding
 - [ ] Logo substituido (`public/logo.png` e `favicon.png`)
@@ -896,7 +932,8 @@ Apos completar todas as adaptacoes, verifique cada item:
 - [ ] WhatsApp (UazAPI) conectado e webhook configurado
 - [ ] Instagram (Meta) app criado e webhook configurado (se usar)
 - [ ] Google Calendar service account criado e `credentials.json` no lugar
-- [ ] Groq API key configurada (se quiser transcricao de audio)
+- [ ] Groq API key configurada (se quiser transcricao de audio e visao)
+- [ ] Google AI Studio API key configurada + File Search Store criado (se quiser RAG de documentos)
 - [ ] Sentry configurado (se quiser monitoramento)
 
 ### Testes de funcionamento

@@ -18,6 +18,13 @@
       <!-- Tools de agendamento removidas — humano agenda pelo dashboard -->
 
       <tool name="enviar_imagens" usage="multiple">Envia imagem única de destaque</tool>
+      <tool name="consultar_documentos_tecnicos" usage="multiple" trigger="Lead pergunta detalhes técnicos específicos (acabamentos, especificações construtivas, dimensões exatas de ambientes, materiais, etc.)">
+        Consulta os documentos técnicos oficiais do empreendimento (Memorial Descritivo e Quadro de Áreas) para obter informações detalhadas.
+        Use APENAS quando o lead perguntar detalhes técnicos que NÃO estão no seu conhecimento base.
+        NÃO use para perguntas gerais sobre metragem, vagas, torres ou amenities (essas informações já estão no seu prompt).
+        Args:
+          - pergunta (a pergunta técnica a ser pesquisada nos documentos)
+      </tool>
       <tool name="enviar_carrossel" usage="multiple">
         Envia catálogo visual de tipologias ou áreas de lazer
 
@@ -441,6 +448,75 @@
       </type>
     </typologies>
 
+    <parking_and_ev>
+      <title>Vagas de Garagem e Carros Elétricos</title>
+      <spaces>
+        <tower name="Torre Sky">4 vagas privativas por unidade</tower>
+        <tower name="Torre Garden">3 vagas privativas por unidade</tower>
+        <tower name="Torre Park">2 vagas privativas por unidade</tower>
+        <tower name="Flat/Loft">1 vaga privativa e exclusiva por unidade (diferencial único em Palmas, todos os outros lofts da cidade possuem vagas rotativas)</tower>
+      </spaces>
+      <ev_charging>Sim, o empreendimento contará com pontos de recarga para carros elétricos.</ev_charging>
+    </parking_and_ev>
+
+    <tower_structure>
+      <tower name="Torre Sky">
+        <floors>30 pavimentos</floors>
+        <units_per_floor>1 unidade exclusiva por andar (28 aptos tipo + 1 duplex cobertura nos 29º/30º andares)</units_per_floor>
+        <elevators>2 elevadores com acesso biométrico</elevators>
+        <unit_layout>4 suítes (master com closet 6,93m²), estar 45,44m², jantar 23,75m², cozinha 21,35m², área gourmet 38,47m², sacada 25,32m², área de serviço, dependência de empregada, lavabo, despensa</unit_layout>
+        <duplex>Cobertura duplex (29º/30º): piscina privativa 12,39m², espaço lazer privativo 79,39m², cozinha gourmet 18,26m², estar social 87,59m², 3 suítes</duplex>
+        <exclusive_amenities>Salão de festas próprio (2 salões: 91m² e 97m²), espaço fitness exclusivo 126m², sala de jogos 90m²</exclusive_amenities>
+        <access>Moradores da Sky têm acesso total a TODAS as áreas comuns das Torres Garden e Park, além dos espaços exclusivos da Sky</access>
+      </tower>
+      <tower name="Torre Garden">
+        <floors>30 pavimentos</floors>
+        <units_per_floor>2 unidades por andar (60 apartamentos tipo)</units_per_floor>
+        <elevators>4 elevadores com acesso biométrico</elevators>
+        <unit_layout>4 suítes (master com closet 9,08m²), sala de estar 21,02m², área gourmet 12,01m², varanda 6,36m², cozinha 13,86m², área de serviço, dependência de empregada, lavabo</unit_layout>
+        <own_amenities>Salão de festas 111m², academia 65m², brinquedoteca 16m²</own_amenities>
+      </tower>
+      <tower name="Torre Park">
+        <floors>30 pavimentos</floors>
+        <units_per_floor>3 unidades por andar (90 apartamentos tipo)</units_per_floor>
+        <elevators>3 elevadores com acesso biométrico</elevators>
+        <unit_layout>3 suítes (master com closet ~7m²), sala estar/jantar integrada ~31m², cozinha ~18m², sacada ~20m², área de serviço ~8m², lavabo</unit_layout>
+        <own_amenities>Salão de festas 130m², academia 88m², brinquedoteca 64m², lavanderia coletiva 27m², sala do síndico</own_amenities>
+      </tower>
+      <tower name="Torre Multifuncional (Office, Loft e Mall)">
+        <description>Torre de uso misto com shopping, mall, offices e flats/lofts integrados</description>
+        <composition>
+          Térreo: Shopping com pé-direito duplo (11 salas comerciais de 40 a 550m²)
+          1º andar: Estacionamento
+          2º andar: Mall (salas comerciais 12 a 32, de 46 a 92m²) + estacionamento
+          3º andar: Estacionamento
+          4º ao 20º: Offices (a partir de 52m²) + Flats/Lofts (a partir de 44,51m²)
+          4º andar inclui lazer compartilhado: salão de festas 165m², academia 131m², lavanderia 77m², sala de jogos 46m², área de piscina
+        </composition>
+        <elevators>8 elevadores</elevators>
+        <extras>Heliponto, rooftop, restaurante com vista para o lago</extras>
+        <loft_diferencial>Único loft de Palmas com vaga de garagem privativa e exclusiva (não rotativa)</loft_diferencial>
+      </tower>
+    </tower_structure>
+
+    <construction_quality>
+      <title>Padrão Construtivo de Alto Nível</title>
+      <items>
+        <item>Estrutura em concreto armado com fundação em estacas profundas</item>
+        <item>Fachadas com pele de vidro, porcelanato e pintura texturizada</item>
+        <item>Esquadrias em alumínio anodizado com vidro laminado de alta performance</item>
+        <item>Pisos em porcelanato de grande formato nas áreas sociais</item>
+        <item>Gesso acartonado rebaixado com iluminação LED dimerizável</item>
+        <item>Climatização VRF nas áreas comuns e infraestrutura para split nas unidades</item>
+        <item>Elevadores com acesso biométrico e controle inteligente de chamadas</item>
+        <item>Acessibilidade total conforme normas técnicas</item>
+        <item>Rede de gás canalizado</item>
+        <item>Automação de iluminação nas áreas comuns</item>
+        <item>Pontos de recarga para carros elétricos</item>
+      </items>
+      <alvara>Alvará de Construção nº 2025001226</alvara>
+    </construction_quality>
+
     <differentials>
       <item>Localização privilegiada na Orla 14</item>
       <item>Vista exclusiva para o lago</item>
@@ -450,15 +526,21 @@
       <item>Vista vitalícia do pôr do sol</item>
       <item>Segurança 24h</item>
       <item>Portaria inteligente</item>
+      <item>Pontos de recarga para carros elétricos</item>
+      <item>Moradores da Torre Sky têm acesso a todas as áreas comuns de todas as torres</item>
+      <item>Único loft de Palmas com vaga de garagem privativa e exclusiva</item>
+      <item>Cada torre possui salão de festas e academia próprios</item>
+      <item>Heliponto e rooftop na torre corporativa</item>
+      <item>Shopping integrado ao empreendimento (Palmas Lake Mall)</item>
     </differentials>
 
     <amenities>
-      <category name="Aquático">Piscina adulto, Piscina infantil, Beach Club com acesso à praia</category>
-      <category name="Esporte e Saúde">Academia completa, Quadra esportiva</category>
-      <category name="Social">Salão de festas, Churrasqueira gourmet, Espaço gourmet</category>
+      <category name="Aquático">Piscina adulto, Piscina infantil, Beach Club com marina, piscina, áreas de convivência, espaço gourmet completo e praia privativa à beira do lago</category>
+      <category name="Esporte e Saúde">Academia completa em cada torre (65m² a 131m²), Quadra esportiva</category>
+      <category name="Social">Salão de festas próprio em cada torre (91m² a 165m²), Churrasqueira gourmet, Espaço gourmet</category>
       <category name="Família">Playground, Brinquedoteca, Espaço pet</category>
-      <category name="Lazer">Salão de jogos, Marina exclusiva, Praia privativa</category>
-      <category name="Conveniência">Shopping integrado, Segurança 24h, Portaria inteligente</category>
+      <category name="Lazer">Salão de jogos, Marina exclusiva, Praia privativa, Rooftop, Heliponto</category>
+      <category name="Conveniência">Shopping integrado (Palmas Lake Mall), Lavanderia coletiva (Torre Park), Segurança 24h, Portaria inteligente</category>
     </amenities>
 
     <financial_policy>
