@@ -32,7 +32,7 @@ class GeminiFileSearchService:
 
         try:
             response = self.client.models.generate_content(
-                model="gemini-3.1-flash-lite",
+                model="gemini-3.1-flash-lite-preview",
                 contents=(
                     "Com base nos documentos técnicos do empreendimento Palmas Lake Towers, "
                     f"responda de forma objetiva e concisa em português: {question}"
