@@ -36,7 +36,11 @@ DOCS = [
     },
     {
         "path": os.path.join(PROJECT_ROOT, "quadro de áreas Palmas Lake.pdf"),
-        "display_name": "Quadro de Areas - Palmas Lake Towers",
+        "display_name": "Quadro de Areas - Palmas Lake Towers (PDF)",
+    },
+    {
+        "path": os.path.join(PROJECT_ROOT, "quadro_areas_palmas_lake.txt"),
+        "display_name": "Quadro de Areas - Palmas Lake Towers (Texto Estruturado)",
     },
 ]
 

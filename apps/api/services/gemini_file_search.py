@@ -34,8 +34,13 @@ class GeminiFileSearchService:
             response = self.client.models.generate_content(
                 model="gemini-3.1-flash-lite-preview",
                 contents=(
-                    "Com base nos documentos técnicos do empreendimento Palmas Lake Towers, "
-                    f"responda de forma objetiva e concisa em português: {question}"
+                    "Você é um assistente que consulta documentos técnicos do empreendimento Palmas Lake Towers. "
+                    "Responda APENAS com os dados encontrados nos documentos, de forma objetiva e direta. "
+                    "Inclua TODOS os valores numéricos relevantes (metragens em m², quantidades). "
+                    "Se a pergunta mencionar uma torre específica, retorne os dados daquela torre. "
+                    "Se não especificar torre, retorne dados de TODAS as torres. "
+                    "NÃO adicione explicações extras, apenas os dados. "
+                    f"Pergunta: {question}"
                 ),
                 config=types.GenerateContentConfig(
                     tools=[

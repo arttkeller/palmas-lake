@@ -1,0 +1,103 @@
+================================================================================
+RESUMO DO QUADRO DE AREAS - PALMAS LAKE
+================================================================================
+Fonte: "quadro de areas Palmas Lake.pdf"
+Torres: SKY | GARDEN | PARK | LOFT
+
+
+================================================================================
+SECAO 1 - QUADRO DE AREAS DE RECREACAO / PLAYGROUND
+================================================================================
+
+------------------------------------------------------------------------
+TORRE SKY (areas exclusivas)
+------------------------------------------------------------------------
+DECK SECO TORRE SKY                         63,92 m2
+PISCINA ADULTO TORRE SKY                    29,74 m2
+PISCINA INFANTIL TORRE SKY                   6,88 m2
+PLAYGROUND / LAZER TORRE SKY               348,43 m2
+ESPACO PETS 01 TORRE SKY                   431,34 m2
+
+SUBTOTAL LAZER SKY                         880,31 m2
+
+------------------------------------------------------------------------
+TORRES GARDEN E PARK (areas compartilhadas)
+------------------------------------------------------------------------
+DECK SECO PISCINA (Garden e Park)          420,85 m2
+DECK MOLHADO PISCINA (Garden e Park)       134,87 m2
+PISCINA ADULTO (Garden e Park)             138,70 m2
+PISCINA INFANTIL (Garden e Park)            50,65 m2
+ESPACO PETS 02 (Garden e Park)             406,63 m2
+ESPACO PETS 03 (Garden e Park)             208,73 m2
+ESPACO PETS 04 (Garden e Park)             222,94 m2
+QUADRA POLIESPORTIVA (Garden e Park)       162,00 m2
+QUADRA DE AREIA (Garden e Park)            162,00 m2
+QUADRA DE TENIS (Garden e Park)            162,00 m2
+PLAYGROUND - CAIXA DE AREIA (Garden/Park)  100,00 m2
+PLAYGROUND / LAZER (Garden e Park)       1.393,18 m2
+
+SUBTOTAL LAZER GARDEN E PARK             3.562,55 m2
+
+------------------------------------------------------------------------
+LOFT PALMAS LAKE (areas exclusivas)
+------------------------------------------------------------------------
+ESTAR PISCINA LOFT                         261,50 m2
+DECK SECO PISCINA LOFT                      91,60 m2
+PISCINA ADULTO / INFANTIL LOFT              51,97 m2
+
+SUBTOTAL LAZER LOFT                        405,07 m2
+
+------------------------------------------------------------------------
+TOTAL GERAL (SKY + GARDEN + PARK + LOFT)
+------------------------------------------------------------------------
+TOTAL GERAL                              4.847,93 m2
+
+
+================================================================================
+SECAO 2 - VAGAS DE GARAGEM
+================================================================================
+
+VAGAS SKY                  4 vagas por apartamento
+VAGAS COBERTURA            6 vagas (somente para cobertura)
+VAGAS GARDEN               3 vagas por apartamento
+VAGAS PARK                 2 vagas por apartamento
+LOFT                       1 vaga privativa e exclusiva por unidade
+
+
+================================================================================
+SECAO 3 - NOTAS E DIFERENCIAIS
+================================================================================
+
+ACESSO SKY AS AREAS COMUNS:
+  - Moradores do Sky possuem acesso total a todas as areas comuns das Torres
+    Garden e Park.
+  - Alem do lazer compartilhado, o Sky conta com espacos exclusivos (indicados
+    em roxo no material original), garantindo privacidade e um padrao superior
+    de conveniencia.
+
+DIFERENCIAL EXCLUSIVO - LOFT PALMAS LAKE:
+  - Ao contrario de todos os outros lofts da cidade que possuem vagas
+    rotativas, o Loft Palmas Lake e o unico que oferece vaga de garagem
+    privativa e exclusiva para o morador.
+
+
+================================================================================
+SECAO 4 - RESUMO CONSOLIDADO POR TORRE
+================================================================================
+
+Torre / Segmento        | Total Lazer (m2) | Vagas por Apto
+------------------------|------------------|----------------
+SKY                     |       880,31     | 4 vagas
+SKY - Cobertura         |         --       | 6 vagas
+GARDEN                  |     3.562,55*    | 3 vagas
+PARK                    |     3.562,55*    | 2 vagas
+LOFT                    |       405,07     | 1 vaga privativa
+
+* Garden e Park compartilham as mesmas areas de lazer (total conjunto: 3.562,55 m2)
+
+TOTAL GERAL LAZER       |     4.847,93 m2  |
+
+
+================================================================================
+FIM DO DOCUMENTO
+================================================================================

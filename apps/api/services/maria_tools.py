@@ -854,7 +854,9 @@ class MariaTools(Toolkit):
         try:
             from services.gemini_file_search import GeminiFileSearchService
             service = GeminiFileSearchService()
-            return service.query(pergunta)
+            result = service.query(pergunta)
+            print(f"[Tool] consultar_documentos_tecnicos('{pergunta}') => {result[:200]}")
+            return result
         except Exception as e:
             print(f"[Tool] Erro ao consultar documentos: {e}")
             return "Informação técnica não disponível no momento."
