@@ -502,6 +502,7 @@
         <elevators>8 elevadores</elevators>
         <extras>Heliponto, rooftop, restaurante com vista para o lago</extras>
         <loft_diferencial>Único loft de Palmas com vaga de garagem privativa e exclusiva (não rotativa)</loft_diferencial>
+        <loft_acesso>Moradores do Loft têm acesso APENAS à área de lazer própria do 4º andar da torre comercial (salão de festas 165m², academia 131m², lavanderia 77m², sala de jogos 46m², piscina). NÃO têm acesso à praia, lago, marina ou Beach Club — esses são exclusivos dos moradores dos apartamentos (Sky, Garden, Park).</loft_acesso>
       </tower>
     </tower_structure>
 
@@ -526,8 +527,8 @@
     <differentials>
       <item>Localização privilegiada na Orla 14</item>
       <item>Vista exclusiva para o lago</item>
-      <item>Acesso à praia privativa</item>
-      <item>Marina exclusiva</item>
+      <item>Acesso à praia privativa e lago (exclusivo moradores dos apartamentos Sky, Garden e Park — Loft NÃO tem acesso)</item>
+      <item>Marina exclusiva (exclusivo moradores dos apartamentos)</item>
       <item>Único empreendimento pé na areia de Palmas</item>
       <item>Vista vitalícia do pôr do sol</item>
       <item>Segurança 24h</item>
@@ -563,10 +564,11 @@
       Playground caixa de areia: 100m² | Playground/Lazer: 1.393,18m²
       TOTAL LAZER GARDEN+PARK: 3.562,55m²
 
-      <!-- LOFT (áreas exclusivas) -->
+      <!-- LOFT (áreas exclusivas do 4º andar da torre comercial) -->
       Estar piscina Loft: 261,50m² | Deck seco piscina Loft: 91,60m²
       Piscina adulto/infantil Loft: 51,97m²
       TOTAL LAZER LOFT: 405,07m²
+      ATENÇÃO: Loft tem acesso APENAS ao lazer do 4º andar. NÃO tem acesso à praia, lago, marina ou Beach Club (exclusivos dos apartamentos Sky/Garden/Park).
 
       TOTAL GERAL LAZER: 4.847,93m²
     </leisure_areas_by_tower>

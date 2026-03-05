@@ -80,6 +80,13 @@ DIFERENCIAL EXCLUSIVO - LOFT PALMAS LAKE:
     rotativas, o Loft Palmas Lake e o unico que oferece vaga de garagem
     privativa e exclusiva para o morador.
 
+RESTRICAO DE ACESSO - LOFT:
+  - Moradores do Loft tem acesso APENAS a area de lazer propria do 4o andar
+    da torre comercial (salao de festas, academia, lavanderia, sala de jogos, piscina).
+  - Loft NAO tem acesso a praia, lago, marina ou Beach Club.
+  - Praia, lago, marina e Beach Club sao exclusivos dos moradores dos
+    apartamentos (Torres Sky, Garden e Park).
+
 
 ================================================================================
 SECAO 4 - RESUMO CONSOLIDADO POR TORRE
