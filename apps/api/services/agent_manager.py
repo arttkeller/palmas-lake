@@ -144,7 +144,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                 # 3. Configurar Agente Agno (Maria)
                 agent_maria = Agent(
                     model=OpenAIChat(
-                        id="gpt-5.2",
+                        id="gpt-5.4",
                         reasoning_effort=self.reasoning_effort_main,
                         max_completion_tokens=2048,
                         timeout=60
@@ -182,7 +182,7 @@ Mensagem atual do Cliente:
                     prompt_input = last_user_msg
 
                 # 5. Executar Agente (em thread separada para não bloquear o event loop)
-                logger.info(f"[Maria] Running Agno Agent with GPT-5.2 for {lead_id}...")
+                logger.info(f"[Maria] Running Agno Agent with GPT-5.4 for {lead_id}...")
 
                 run_response = await asyncio.wait_for(
                     asyncio.to_thread(agent_maria.run, prompt_input),
