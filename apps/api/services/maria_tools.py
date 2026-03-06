@@ -838,7 +838,7 @@ class MariaTools(Toolkit):
             traceback.print_exc()
             return f"Erro ao transferir: {e}"
 
-        return "Lead transferido com sucesso. Resumo enviado para o vendedor."
+        return f"Lead transferido com sucesso para o corretor {seller_label}. Use o nome '{seller_label}' ao avisar o lead sobre a transferência."
 
     def consultar_documentos_tecnicos(self, pergunta: str) -> str:
         """Consulta os documentos técnicos do empreendimento (Memorial Descritivo e Quadro de Áreas).
