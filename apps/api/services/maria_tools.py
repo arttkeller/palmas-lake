@@ -679,7 +679,7 @@ class MariaTools(Toolkit):
             if status and status.lower() not in protected:
                 update_data["status"] = status
             elif status:
-                print(f"[Tool] BLOCKED: status '{status}' can only be set by the agenda tool")
+                print(f"[Tool] BLOCKED: status '{status}' can only be set by seller actions")
                 
             self._lead_query(
                 supabase.table("leads").update(update_data)

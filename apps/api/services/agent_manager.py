@@ -634,10 +634,10 @@ Mensagem atual do Cliente:
                 }
                 raw_status = sentiment_data["status"].strip().lower()
                 mapped_status = status_mapping.get(raw_status)
-                # Block visita_agendada from sentiment — only the agenda() tool can set this
+                # Block protected statuses from sentiment — only tools or seller actions can set these
                 protected_statuses = ("qualificado", "transferido", "visita_agendada", "visit_scheduled", "visita_realizada", "proposta_enviada")
                 if mapped_status and mapped_status in protected_statuses:
-                    logger.warning(f"[Sentiment] BLOCKED: status '{mapped_status}' can only be set by the agenda/proposal tool, not sentiment analysis")
+                    logger.warning(f"[Sentiment] BLOCKED: status '{mapped_status}' can only be set by tools or seller actions, not sentiment analysis")
                 elif mapped_status:
                     update_payload["status"] = mapped_status
                 else:
