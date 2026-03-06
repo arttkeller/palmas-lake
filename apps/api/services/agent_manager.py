@@ -18,6 +18,64 @@ from agno.models.openai import OpenAIChat
 from services.maria_tools import MariaTools
 from services.temperature_service import TemperatureService, classify_lead_temperature
 
+# Instruções estáticas do sentiment analysis — constante de módulo para prompt caching.
+# Vai como system message (instructions) do agente, mantendo prefixo idêntico entre requests.
+_SENTIMENT_INSTRUCTIONS = """Analise a conversa entre um Lead e a IA Maria (assistente imobiliária).
+
+## REGRAS DE CLASSIFICAÇÃO DE TEMPERATURA (OBRIGATÓRIO)
+
+### QUENTE (temperature: "quente") - Lead com alta probabilidade de conversão:
+- Quer agendar visita ou já agendou
+- Pergunta sobre preço, condições de pagamento, financiamento
+- Demonstra urgência ("preciso logo", "quando posso ver?")
+- Faz perguntas específicas sobre unidades disponíveis
+- Menciona que está pronto para comprar/investir
+- Exemplos: "Quero agendar uma visita", "Qual o valor?", "Tem disponibilidade essa semana?"
+
+### MORNO (temperature: "morno") - Lead engajado mas sem sinais fortes:
+- Responde às mensagens normalmente
+- Faz perguntas gerais sobre o empreendimento
+- Demonstra interesse mas sem urgência
+- Pede mais informações
+- Exemplos: "Interessante", "Me conta mais", "Quantos quartos tem?"
+
+### FRIO (temperature: "frio") - Lead com baixo engajamento:
+- Respostas curtas sem interesse ("ok", "entendi", "depois vejo")
+- Demonstra desinteresse explícito
+- Não responde há mais de 24 horas
+- Pede para não ser contatado
+- Exemplos: "Não tenho interesse", "Agora não", "Depois eu vejo"
+
+## CAMPOS A RETORNAR:
+
+1. 'sentiment_score': Float de -1.0 a 1.0
+   - > 0.6: Interesse alto (quente)
+   - 0.2 a 0.6: Interesse moderado (morno)
+   - < 0.2: Baixo interesse (frio)
+
+2. 'sentiment_label': "Positivo", "Neutro" ou "Negativo"
+
+3. 'temperature': OBRIGATÓRIO - "quente", "morno" ou "frio" (seguir regras acima)
+
+4. 'adjectives': Lista de 3 adjetivos curtos descrevendo o lead
+   Exemplos: ["Interessado", "Decidido", "Urgente"], ["Curioso", "Cauteloso"], ["Desinteressado"]
+
+5. 'status': Status kanban - ESCOLHA UM:
+   ["Novo Lead", "Em Atendimento", "Visita Agendada", "Proposta", "Quente", "Frio", "Finalizado"]
+
+6. 'tags': Lista de tags técnicas baseadas nas preferências mencionadas
+   Exemplos: ["apartamento", "investidor", "andar_alto", "familia_grande", "vista_mar", "2_quartos"]
+
+7. 'interest_type': Tipo de imóvel que o lead demonstrou interesse. ESCOLHA UM:
+   ["apartamento", "sala_comercial", "office", "flat"]
+   Se o lead não mencionou tipo específico, retorne null.
+
+8. 'conversation_summary': Resumo de 1-2 frases da conversa do lead com a IA.
+   Deve capturar o ponto principal: o que o lead quer, o que foi discutido, e o status atual.
+   Exemplo: "Lead interessado em apartamento 2 quartos para investimento. Visita agendada para sexta."
+"""
+
+
 def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
     """
     Look up a lead by phone or instagram_id based on the lead_id format.
@@ -97,10 +155,16 @@ class AgentManager:
 
         return ""
 
+    # Class-level cache: system prompt por canal (estável, sem timestamp)
+    # Evita reler ~46KB do disco a cada request e mantém prefixo idêntico para prompt caching
+    _prompt_cache: dict = {}
+
     def _load_system_prompt(self, channel: str = "whatsapp") -> str:
-        """Lê o prompt do arquivo MD e injeta variáveis dinâmicas"""
+        """Lê o prompt do arquivo MD com cache em memória (sem timestamp para prompt caching)"""
+        if channel in AgentManager._prompt_cache:
+            return AgentManager._prompt_cache[channel]
+
         try:
-            # Carregar System Prompt e injetar regra de formatação WhatsApp
             try:
                 with open(self.prompt_path, "r", encoding="utf-8") as f:
                     base_prompt = f.read()
@@ -124,8 +188,11 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
 - Evite listas com hífens se possível, prefira texto fluido ou emojis.
 - 🚨 PROIBIDO usar travessão (—) ou meia-risca (–). Use vírgula, ponto ou quebre em frases separadas."""
 
-            system_prompt = f"{base_prompt}\n\nDATA ATUAL (Horário de Brasília): {datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')}{formatting_rules}"
+            # Timestamp removido do system prompt (vai no user message) para habilitar prompt caching
+            system_prompt = f"{base_prompt}{formatting_rules}"
 
+            AgentManager._prompt_cache[channel] = system_prompt
+            logger.info(f"[AgentManager] System prompt cached for channel '{channel}' ({len(system_prompt)} chars)")
             return system_prompt
         except Exception as e:
             logger.error(f"Error loading system prompt: {e}")
@@ -141,13 +208,17 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                 # 2. Carregar Prompt com regras específicas do canal
                 system_prompt = self._load_system_prompt(channel=channel)
 
-                # 3. Configurar Agente Agno (Maria)
+                # 3. Configurar Agente Agno (Maria) com prompt caching
                 agent_maria = Agent(
                     model=OpenAIChat(
                         id="gpt-5.4",
                         reasoning_effort=self.reasoning_effort_main,
                         max_completion_tokens=2048,
-                        timeout=60
+                        timeout=60,
+                        extra_body={
+                            "prompt_cache_retention": "24h",
+                            "prompt_cache_key": f"maria-{channel}",
+                        }
                     ),
                     description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
                     instructions=system_prompt,
@@ -170,8 +241,12 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                         role_display = "Cliente" if msg['role'] == 'user' else "Maria"
                         chat_context += f"{role_display}: {msg['content']}\n"
 
+                # Timestamp no user message (não no system prompt) para manter prefixo estável e habilitar cache
+                timestamp = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
+
                 if chat_context:
-                    prompt_input = f"""
+                    prompt_input = f"""DATA ATUAL (Horário de Brasília): {timestamp}
+
 Histórico da conversa:
 {chat_context}
 
@@ -179,7 +254,7 @@ Mensagem atual do Cliente:
 {last_user_msg}
 """
                 else:
-                    prompt_input = last_user_msg
+                    prompt_input = f"DATA ATUAL (Horário de Brasília): {timestamp}\n\n{last_user_msg}"
 
                 # 5. Executar Agente (em thread separada para não bloquear o event loop)
                 logger.info(f"[Maria] Running Agno Agent with GPT-5.4 for {lead_id}...")
@@ -443,93 +518,44 @@ Mensagem atual do Cliente:
         # Build status context for the prompt
         status_context = ""
         if lead_status:
-            status_context = f"\n            STATUS ATUAL DO LEAD: {lead_status}\n"
-        
+            status_context = f"\nSTATUS ATUAL DO LEAD: {lead_status}\n"
+
         # Build scheduled lead rule
         scheduled_lead_rule = ""
         if lead_status and lead_status.lower() in ("visita_agendada", "visita agendada"):
             scheduled_lead_rule = """
-            ## REGRA CRÍTICA PARA LEADS COM VISITA AGENDADA
-            Este lead JÁ TEM uma visita agendada. Isso é um sinal FORTEMENTE POSITIVO.
-            - sentiment_label DEVE ser "Positivo"
-            - sentiment_score DEVE ser maior que 0.6
-            - temperature DEVE ser "quente"
-            Não importa o tom das mensagens recentes — o fato de ter agendado visita indica interesse real.
-            """
-        
-        prompt = f"""
-            Analise a conversa abaixo entre um Lead e a IA Maria (assistente imobiliária).
-            {scheduled_lead_rule}
-            ## REGRAS DE CLASSIFICAÇÃO DE TEMPERATURA (OBRIGATÓRIO)
-            
-            ### QUENTE (temperature: "quente") - Lead com alta probabilidade de conversão:
-            - Quer agendar visita ou já agendou
-            - Pergunta sobre preço, condições de pagamento, financiamento
-            - Demonstra urgência ("preciso logo", "quando posso ver?")
-            - Faz perguntas específicas sobre unidades disponíveis
-            - Menciona que está pronto para comprar/investir
-            - Exemplos: "Quero agendar uma visita", "Qual o valor?", "Tem disponibilidade essa semana?"
-            
-            ### MORNO (temperature: "morno") - Lead engajado mas sem sinais fortes:
-            - Responde às mensagens normalmente
-            - Faz perguntas gerais sobre o empreendimento
-            - Demonstra interesse mas sem urgência
-            - Pede mais informações
-            - Exemplos: "Interessante", "Me conta mais", "Quantos quartos tem?"
-            
-            ### FRIO (temperature: "frio") - Lead com baixo engajamento:
-            - Respostas curtas sem interesse ("ok", "entendi", "depois vejo")
-            - Demonstra desinteresse explícito
-            - Não responde há mais de 24 horas
-            - Pede para não ser contatado
-            - Exemplos: "Não tenho interesse", "Agora não", "Depois eu vejo"
-            
-            ## CAMPOS A RETORNAR:
-            
-            1. 'sentiment_score': Float de -1.0 a 1.0
-               - > 0.6: Interesse alto (quente)
-               - 0.2 a 0.6: Interesse moderado (morno)
-               - < 0.2: Baixo interesse (frio)
-               
-            2. 'sentiment_label': "Positivo", "Neutro" ou "Negativo"
-            
-            3. 'temperature': OBRIGATÓRIO - "quente", "morno" ou "frio" (seguir regras acima)
-            
-            4. 'adjectives': Lista de 3 adjetivos curtos descrevendo o lead
-               Exemplos: ["Interessado", "Decidido", "Urgente"], ["Curioso", "Cauteloso"], ["Desinteressado"]
-            
-            5. 'status': Status kanban - ESCOLHA UM:
-               ["Novo Lead", "Em Atendimento", "Visita Agendada", "Proposta", "Quente", "Frio", "Finalizado"]
-               
-            6. 'tags': Lista de tags técnicas baseadas nas preferências mencionadas
-               Exemplos: ["apartamento", "investidor", "andar_alto", "familia_grande", "vista_mar", "2_quartos"]
+## REGRA CRÍTICA PARA LEADS COM VISITA AGENDADA
+Este lead JÁ TEM uma visita agendada. Isso é um sinal FORTEMENTE POSITIVO.
+- sentiment_label DEVE ser "Positivo"
+- sentiment_score DEVE ser maior que 0.6
+- temperature DEVE ser "quente"
+Não importa o tom das mensagens recentes — o fato de ter agendado visita indica interesse real.
+"""
 
-            7. 'interest_type': Tipo de imóvel que o lead demonstrou interesse. ESCOLHA UM:
-               ["apartamento", "sala_comercial", "office", "flat"]
-               Se o lead não mencionou tipo específico, retorne null.
+        # User message contém APENAS dados variáveis (instruções estáticas ficam no system message)
+        prompt = f"""{scheduled_lead_rule}
+CONTEXTO DO LEAD: {lead_id}
+{status_context}
+CONVERSA RECENTE:
+{messages_text}
 
-            8. 'conversation_summary': Resumo de 1-2 frases da conversa do lead com a IA.
-               Deve capturar o ponto principal: o que o lead quer, o que foi discutido, e o status atual.
-               Exemplo: "Lead interessado em apartamento 2 quartos para investimento. Visita agendada para sexta."
-
-            CONTEXTO DO LEAD: {lead_id}
-            {status_context}
-            CONVERSA RECENTE:
-            {messages_text}
-            
-            Responda APENAS o JSON válido, sem texto adicional.
-            """
+Responda APENAS o JSON válido, sem texto adicional."""
 
         try:
-             # Agente de Análise
+            # Agente de Análise com instruções estáticas cacheáveis no system message
             agent_sentiment = Agent(
                 model=OpenAIChat(
                     id="gpt-5-mini",
                     reasoning_effort=self.reasoning_effort_analysis,
                     max_completion_tokens=1000,
-                    timeout=30
+                    timeout=30,
+                    extra_body={
+                        "prompt_cache_retention": "24h",
+                        "prompt_cache_key": "sentiment-analysis",
+                    }
                 ),
                 description="Você é um analisador de dados imobiliários.",
+                instructions=_SENTIMENT_INSTRUCTIONS,
                 markdown=True
             )
             
