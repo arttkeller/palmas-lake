@@ -324,6 +324,12 @@ async def _process_buffer(lead_id: str):
 
             skip_responses = ("IGNORED_DUPLICATE", "__TOOL_SENT__")
             if response and response not in skip_responses:
+                # Output guardrail camada 2: bloquear erros internos antes de enviar ao lead
+                from services.agent_manager import _is_error_response
+                if _is_error_response(response):
+                    logger.warning(f"[Buffer Guardrail] Blocked error response for {lead_id}: {response[:200]}")
+                    return
+
                 parts = [p.strip() for p in response.split('\n\n') if p.strip()]
 
                 from services.message_service import MessageService

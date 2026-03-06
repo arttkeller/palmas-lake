@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 # Agno imports
 from agno.agent import Agent
-from agno.models.openai import OpenAIChat
+from agno.models.openai import OpenAIChat, OpenAIResponses
 
 from services.maria_tools import MariaTools
 from services.temperature_service import TemperatureService, classify_lead_temperature
@@ -101,6 +101,23 @@ def _lookup_lead(supabase, lead_id: str, select_fields: str = "id"):
         if not res.data and phone != raw_phone:
             res = supabase.table("leads").select(select_fields).eq("phone", raw_phone).execute()
         return res
+
+
+# ── Output Guardrail: detecta respostas que são erros internos ──────────
+_ERROR_PATTERNS = [
+    re.compile(r"Error .+ with Agno", re.IGNORECASE),
+    re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE),
+    re.compile(r"openai\.(?:APIError|BadRequestError|RateLimitError)", re.IGNORECASE),
+    re.compile(r"(?:Erro interno|dificuldades técnicas).*registrado", re.IGNORECASE),
+    re.compile(r"HTTPStatusError|status_code[=:]\s*[45]\d{2}", re.IGNORECASE),
+    re.compile(r"Function tools with reasoning_effort are not supported", re.IGNORECASE),
+]
+
+def _is_error_response(text: str) -> bool:
+    """Output guardrail: retorna True se o texto parece ser uma mensagem de erro interna."""
+    if not text or len(text) < 10:
+        return False
+    return any(p.search(text) for p in _ERROR_PATTERNS)
 
 
 _agent_semaphore = asyncio.Semaphore(10)
@@ -210,10 +227,11 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
 
                 # 3. Configurar Agente Agno (Maria) com prompt caching
                 agent_maria = Agent(
-                    model=OpenAIChat(
+                    model=OpenAIResponses(
                         id="gpt-5.4",
                         reasoning_effort=self.reasoning_effort_main,
-                        max_completion_tokens=2048,
+                        max_output_tokens=2048,
+                        store=False,
                         timeout=60,
                         extra_body={
                             "prompt_cache_retention": "24h",
@@ -289,18 +307,21 @@ Mensagem atual do Cliente:
                     if not content or not content.strip():
                         logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
                         return "Oi! Como posso te ajudar? 😊"
+
+                # Output guardrail: bloquear respostas que parecem erros internos
+                if content and _is_error_response(content):
+                    logger.warning(f"[Guardrail] Blocked error response for {lead_id}: {content[:200]}")
+                    return None
+
                 return content
 
             except Exception as e:
                 import traceback
+                import sentry_sdk
                 error_msg = f"Error generating AI response with Agno: {e}\n{traceback.format_exc()}"
                 logger.error(error_msg)
-                try:
-                    with open("agent_error.log", "a") as f:
-                        f.write(f"\n--- Error at {datetime.now()} ---\n{error_msg}\n")
-                except Exception:
-                    pass
-                return "Desculpe, estou com dificuldades técnicas no momento. (Erro interno registrado)"
+                sentry_sdk.capture_exception(e)
+                return None
 
     async def process_message_buffer(self, lead_id: str, messages: List[tuple], pushname: str = "") -> str:
         """Processa um buffer de mensagens acumuladas"""
