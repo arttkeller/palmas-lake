@@ -764,7 +764,6 @@ class MariaTools(Toolkit):
             msg = (
                 f"*Transferência de Lead*\n\n"
                 f"*Nome:* {lead_name}\n"
-                f"*Telefone:* {lead_phone}\n"
                 f"*Canal:* {lead_source}\n"
                 f"*Interesse:* {interest_val}\n"
                 f"*Objetivo:* {objective_val}\n"
