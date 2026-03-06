@@ -613,7 +613,7 @@ Mensagem atual do Cliente:
                 # Map AI-friendly status names to database constraint values
                 status_mapping = {
                     "novo lead": "novo_lead",
-                    "em atendimento": "qualificado",
+                    "em atendimento": "novo_lead",
                     "visita agendada": "visita_agendada",
                     "proposta": "proposta_enviada",
                     "quente": "qualificado",
@@ -635,7 +635,7 @@ Mensagem atual do Cliente:
                 raw_status = sentiment_data["status"].strip().lower()
                 mapped_status = status_mapping.get(raw_status)
                 # Block visita_agendada from sentiment — only the agenda() tool can set this
-                protected_statuses = ("visita_agendada", "visit_scheduled", "visita_realizada", "proposta_enviada")
+                protected_statuses = ("qualificado", "transferido", "visita_agendada", "visit_scheduled", "visita_realizada", "proposta_enviada")
                 if mapped_status and mapped_status in protected_statuses:
                     logger.warning(f"[Sentiment] BLOCKED: status '{mapped_status}' can only be set by the agenda/proposal tool, not sentiment analysis")
                 elif mapped_status:
