@@ -559,7 +559,7 @@ export default function ChatPage() {
                                             )}
 
                                             <span className={clsx("block text-right text-[10px] mt-1 opacity-70")}>
-                                                {msg.created_at ? new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour12: false }) : '--:--:--'}
+                                                {msg.created_at ? `${new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${new Date(msg.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : '--/--/---- - --:--'}
                                             </span>
                                         </div>
                                         

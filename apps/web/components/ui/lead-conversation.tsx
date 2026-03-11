@@ -32,12 +32,19 @@ export interface LeadConversationProps {
  */
 function formatTime(dateString: string): string {
   try {
-    return new Date(dateString).toLocaleTimeString('pt-BR', {
+    const date = new Date(dateString);
+    const day = date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+    const time = date.toLocaleTimeString('pt-BR', {
       hour: '2-digit',
       minute: '2-digit',
     });
+    return `${day} - ${time}`;
   } catch {
-    return '--:--';
+    return '--/--/---- - --:--';
   }
 }
 
