@@ -21,6 +21,27 @@ from services.observability import metrics
 from services.routing_service import MessageRouter
 from services.semantic_cache import semantic_cache
 
+# ── Rolling Summary: Redis key + summarization constants ──────────────
+_K_SUMMARY = "conv:summary:{}"          # Redis key per lead_id (TTL 24h)
+_SUMMARY_TTL = 86_400                   # 24 hours
+_SUMMARY_MSG_THRESHOLD = 15             # generate summary when history > 15 messages
+_SUMMARY_REFRESH_INTERVAL = 10          # re-generate every +10 messages
+_RECENT_WINDOW = 15                     # keep last 15 messages verbatim in prompt
+
+_SUMMARY_PROMPT = """Resuma a conversa abaixo entre um Cliente e a assistente Maria (imobiliária do Palmas Lake Towers).
+
+REGRAS:
+- Máximo 150 palavras
+- Capture: nome do cliente (se mencionado), tipo de interesse (apartamento/sala/flat), etapa da qualificação, perguntas já respondidas, próximos passos
+- NÃO inclua saudações ou formalidades
+- Escreva em terceira pessoa ("O cliente demonstrou interesse em...")
+- Se houver transferência para vendedor, mencione
+
+CONVERSA:
+{conversation}
+
+RESUMO:"""
+
 # Instruções estáticas do sentiment analysis — constante de módulo para prompt caching.
 # Vai como system message (instructions) do agente, mantendo prefixo idêntico entre requests.
 _SENTIMENT_INSTRUCTIONS = """Analise a conversa entre um Lead e a IA Maria (assistente imobiliária).
@@ -278,7 +299,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                     markdown=True
                 )
 
-                # 4. Construir Prompt com Histórico
+                # 4. Construir Prompt com Histórico (Rolling Summary + Mensagens Recentes)
                 last_user_msg = "Olá"
                 chat_context = ""
 
@@ -293,12 +314,32 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                         role_display = "Cliente" if msg['role'] == 'user' else "Maria"
                         chat_context += f"{role_display}: {msg['content']}\n"
 
+                # Fetch rolling summary from Redis (if available)
+                summary_text = ""
+                if lead_id and metrics._redis:
+                    try:
+                        raw = await metrics._redis.get(_K_SUMMARY.format(lead_id))
+                        if raw:
+                            summary_text = raw.decode("utf-8") if isinstance(raw, bytes) else raw
+                            logger.info(f"[Summary] Cache HIT for {lead_id} ({len(summary_text)} chars)")
+                    except Exception as e:
+                        logger.warning(f"[Summary] Redis read error (non-blocking): {e}")
+
                 # Timestamp no FINAL do user message para maximizar prefix caching
-                # (o histórico estável fica no início → cache hit no OpenAI)
                 timestamp = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
 
                 if chat_context:
-                    prompt_input = f"""Histórico da conversa:
+                    if summary_text:
+                        prompt_input = f"""[RESUMO DA CONVERSA ANTERIOR]
+{summary_text}
+
+[MENSAGENS RECENTES]
+{chat_context}
+Mensagem atual do Cliente [{timestamp}]:
+{last_user_msg}
+"""
+                    else:
+                        prompt_input = f"""Histórico da conversa:
 {chat_context}
 
 Mensagem atual do Cliente [{timestamp}]:
@@ -476,9 +517,9 @@ Mensagem atual do Cliente [{timestamp}]:
 
                 if conv_res.data:
                     all_conv_ids = [c["id"] for c in conv_res.data]
-                    # ── SINGLE messages query (serves both anti-dup AND history) ──
+                    # ── SINGLE messages query — only last 15 (rolling summary covers older ones) ──
                     msgs_res = await asyncio.to_thread(
-                        supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(50).execute
+                        supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(_RECENT_WINDOW).execute
                     )
 
                     if msgs_res.data:
@@ -532,6 +573,21 @@ Mensagem atual do Cliente [{timestamp}]:
         end_time = time.time()
         logger.info(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
 
+        # 5a. Rolling Summary: trigger generation if conversation is long enough
+        # Uses history_length (excludes system msg and current msg) to decide
+        actual_history_len = max(0, len(history) - 2)  # subtract system + current user msg
+        if lead_id and actual_history_len >= _SUMMARY_MSG_THRESHOLD:
+            # Check if we should generate/refresh (every _SUMMARY_REFRESH_INTERVAL messages)
+            should_summarize = (actual_history_len == _SUMMARY_MSG_THRESHOLD or
+                                actual_history_len % _SUMMARY_REFRESH_INTERVAL == 0)
+            if should_summarize:
+                # Build conversation text from history (skip system message)
+                conv_for_summary = "\n".join(
+                    f"{'Cliente' if m['role'] == 'user' else 'Maria'}: {m['content']}"
+                    for m in history if m['role'] in ('user', 'assistant')
+                )
+                asyncio.create_task(self._safe_generate_summary(lead_id, conv_for_summary))
+
         # 5b. Fallback: detect name from AI response if atualizar_nome tool wasn't called
         # Uses pre-loaded lead_data — no re-query needed
         try:
@@ -562,6 +618,55 @@ Mensagem atual do Cliente [{timestamp}]:
             return "__TOOL_SENT__"
 
         return response_text
+
+    async def _safe_generate_summary(self, lead_id: str, conversation_text: str):
+        """Fire-and-forget wrapper: generate rolling summary and store in Redis."""
+        try:
+            await self._generate_rolling_summary(lead_id, conversation_text)
+        except Exception as e:
+            logger.error(f"[Summary] Background error for {lead_id}: {e}")
+
+    async def _generate_rolling_summary(self, lead_id: str, conversation_text: str):
+        """Generate a rolling summary of the conversation using gpt-5-mini and store in Redis."""
+        if not metrics._redis:
+            logger.warning("[Summary] Redis not available, skipping summary generation")
+            return
+
+        logger.info(f"[Summary] Generating rolling summary for {lead_id}...")
+        prompt = _SUMMARY_PROMPT.format(conversation=conversation_text[-3000:])  # cap input
+
+        try:
+            agent_summary = Agent(
+                model=OpenAIChat(
+                    id="gpt-5-mini",
+                    reasoning_effort="low",
+                    max_completion_tokens=300,
+                    timeout=30,
+                ),
+                description="Você resume conversas de forma concisa.",
+                markdown=False,
+            )
+
+            response = await asyncio.wait_for(
+                asyncio.to_thread(agent_summary.run, prompt),
+                timeout=30,
+            )
+            summary = response.content
+
+            if summary and summary.strip():
+                await metrics._redis.set(
+                    _K_SUMMARY.format(lead_id),
+                    summary.strip(),
+                    ex=_SUMMARY_TTL,
+                )
+                logger.info(f"[Summary] Stored summary for {lead_id} ({len(summary)} chars, TTL={_SUMMARY_TTL}s)")
+            else:
+                logger.warning(f"[Summary] gpt-5-mini returned empty summary for {lead_id}")
+
+        except asyncio.TimeoutError:
+            logger.warning(f"[Summary] Timeout generating summary for {lead_id}")
+        except Exception as e:
+            logger.error(f"[Summary] Error generating summary for {lead_id}: {e}")
 
     async def _safe_analyze_sentiment(self, lead_id: str, msgs_text: str, lead_data: dict = None):
         """Wrapper seguro para análise de sentimento em background."""
