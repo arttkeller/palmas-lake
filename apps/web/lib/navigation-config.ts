@@ -5,6 +5,7 @@ import { CalendarDaysIcon } from '@/components/icons/calendar-days';
 import { ChartColumnIcon } from '@/components/icons/chart-column';
 import { SettingsIcon } from '@/components/icons/settings';
 import { BellIcon } from '@/components/icons/bell';
+import { ActivityIcon } from '@/components/icons/activity';
 
 /**
  * Navigation item interface for the bottom navigation bar
@@ -17,6 +18,7 @@ export interface NavItem {
   gradient: string;
   iconColor: string;
   activeIconColor: string;
+  adminOnly?: boolean;
 }
 
 /**
@@ -77,6 +79,16 @@ export const navigationItems: NavItem[] = [
     gradient: 'radial-gradient(circle, rgba(234,179,8,0.15) 0%, rgba(202,138,4,0.06) 50%, rgba(161,98,7,0) 100%)',
     iconColor: 'group-hover:text-yellow-500:text-yellow-400',
     activeIconColor: 'text-yellow-500'
+  },
+  {
+    name: 'monitor',
+    href: '/dashboard/monitor',
+    icon: ActivityIcon,
+    label: 'Monitor',
+    gradient: 'radial-gradient(circle, rgba(168,85,247,0.15) 0%, rgba(139,92,246,0.06) 50%, rgba(109,40,217,0) 100%)',
+    iconColor: 'group-hover:text-violet-500:text-violet-400',
+    activeIconColor: 'text-violet-500',
+    adminOnly: true,
   },
   {
     name: 'settings',
