@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { TemperatureBadge } from '@/components/ui/temperature-badge';
 import { WhatsAppWindowBadge } from '@/components/ui/whatsapp-window-badge';
 import { LottieIcon } from '@/components/ui/lottie-icon';
-import { DollarSign, MapPin, Calendar, Home, Flame, Instagram } from 'lucide-react';
+import { DollarSign, MapPin, Calendar, Home, Flame, Instagram, Building2, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LeadTemperature } from '@/lib/temperature-config';
 
@@ -107,6 +107,22 @@ export const KanbanCard = React.memo(function KanbanCard({
                         )}
                     </div>
                 </div>
+
+                {/* Classification Badge (Corretor / Imobiliária) */}
+                {(lead.classificationType === 'corretor' || lead.classificationType === 'imobiliaria') && (
+                    <div className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold",
+                        lead.classificationType === 'imobiliaria'
+                            ? "bg-gradient-to-r from-indigo-100 to-purple-100 text-indigo-800 border border-indigo-300/50"
+                            : "bg-gradient-to-r from-orange-100 to-amber-100 text-orange-800 border border-orange-300/50"
+                    )}>
+                        {lead.classificationType === 'imobiliaria' ? (
+                            <><Building2 className="w-3.5 h-3.5" /> Imobiliária</>
+                        ) : (
+                            <><Briefcase className="w-3.5 h-3.5" /> Corretor de Imóveis</>
+                        )}
+                    </div>
+                )}
 
                 {/* Details */}
                 <div className="space-y-2">

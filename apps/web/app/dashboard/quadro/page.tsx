@@ -115,7 +115,7 @@ function inferLeadClassification(
         ? normalizeLeadSignal(item.classification_type)
         : '';
 
-    if (rawClassification === 'cliente_final' || rawClassification === 'corretor' || rawClassification === 'investidor') {
+    if (rawClassification === 'cliente_final' || rawClassification === 'corretor' || rawClassification === 'investidor' || rawClassification === 'imobiliaria') {
         return rawClassification as KanbanLead['classificationType'];
     }
 
@@ -372,6 +372,7 @@ export default function LeadsKanban() {
             // Source (instagram/whatsapp) is already shown as an icon in the card footer,
             // so we skip adding it as a tag to avoid duplication.
             if (classificationType === 'corretor') tags.push('🏠 Corretor');
+            if (classificationType === 'imobiliaria') tags.push('🏢 Imobiliária');
             if (classificationType === 'investidor') tags.push('💰 Investidor');
             if (item.is_hot) tags.push('🔥 HOT');
             

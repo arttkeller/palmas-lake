@@ -3,7 +3,7 @@ import type { LeadTemperature, LeadTag } from '@/lib/temperature-config';
 
 export type LeadStatus = 'new' | 'contacted' | 'visit_scheduled' | 'sold' | 'lost' | 'novo_lead' | 'qualificado' | 'visita_agendada' | 'visita_realizada' | 'proposta_enviada' | 'transferido';
 export type LeadSource = 'instagram' | 'facebook' | 'site' | 'indicacao' | 'whatsapp';
-export type LeadClassification = 'cliente_final' | 'corretor' | 'investidor';
+export type LeadClassification = 'cliente_final' | 'corretor' | 'investidor' | 'imobiliaria';
 export type InterestType = 'apartamento' | 'sala_comercial' | 'office' | 'flat' | 'loft';
 export type Objective = 'morar' | 'investir' | 'morar_investir';
 export type PreferredTower = 'sky' | 'garden' | 'park' | 'torre_d';

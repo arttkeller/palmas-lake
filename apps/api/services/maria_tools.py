@@ -916,6 +916,7 @@ class MariaTools(Toolkit):
                 "tags": new_tags,
                 "ai_paused": True,
                 "status": "transferido",
+                "classification_type": tipo,
             }
             if nome and not lead_info.get("full_name"):
                 update_data["full_name"] = nome
