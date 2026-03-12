@@ -38,6 +38,7 @@ from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users, sellers
 from routers import metrics as metrics_router
+from routers import executions as executions_router
 from auth import verify_jwt
 from services.observability import init_metrics, metrics
 
@@ -120,6 +121,7 @@ app.include_router(webhook.router, prefix="/api", tags=["webhook"])
 app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
 app.include_router(ai_specialist.router, tags=["AI Specialist"])
 app.include_router(metrics_router.router, tags=["metrics"])
+app.include_router(executions_router.router, tags=["executions"])
 
 if os.getenv("ENVIRONMENT") == "development":
     app.include_router(debug.router, prefix="/api", tags=["debug"])

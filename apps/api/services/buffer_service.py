@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 
 from services.agent_manager import AgentManager
 from services.meta_service import MetaService
+from services.observability import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -302,7 +303,18 @@ async def _process_buffer(lead_id: str):
     channel = (raw_channel.decode() if isinstance(raw_channel, bytes) else raw_channel) or "whatsapp"
     lead_pushname = (raw_pushname.decode() if isinstance(raw_pushname, bytes) else raw_pushname) or ""
 
-    logger.info(f"[Buffer] Processing {len(messages_with_ids)} message(s) for {lead_id} (channel: {channel})")
+    msg_count = len(messages_with_ids)
+    logger.info(f"[Buffer] Processing {msg_count} message(s) for {lead_id} (channel: {channel})")
+
+    # Record buffer fire metric + log IN event
+    asyncio.create_task(metrics.record_buffer_fired(lead_id, msg_count))
+    asyncio.create_task(metrics.record_message_sent(channel, lead_id))
+    combined_text = " | ".join(content for content, _ in messages_with_ids)
+    asyncio.create_task(metrics.log_execution(
+        type="IN", path="maria/received", method="WEBHOOK",
+        lead_id=lead_id, channel=channel,
+        payload={"messages": [{"content": c, "msg_id": m} for c, m in messages_with_ids[:5]]},
+    ))
 
     # ── Process outside the lock — identical to original logic ──
     with sentry_sdk.start_transaction(op="gen_ai.invoke_agent", name=f"agent.maria {lead_id}") as txn:
@@ -316,14 +328,27 @@ async def _process_buffer(lead_id: str):
             logger.info(f"Agent Response for {lead_id}: {response}")
 
             # Enrich Sentry trace with AI metadata from agent
-            meta = getattr(agent, '_last_run_metadata', {})
-            if meta:
-                txn.set_data("gen_ai.model", meta.get("model", "unknown"))
-                txn.set_data("gen_ai.tokens_in", meta.get("tokens_in", 0))
-                txn.set_data("gen_ai.tokens_out", meta.get("tokens_out", 0))
-                txn.set_data("gen_ai.cached_tokens", meta.get("cached_tokens", 0))
-                txn.set_data("gen_ai.duration_ms", meta.get("duration_ms", 0))
-                txn.set_data("routing.decision", meta.get("routing", "unknown"))
+            ai_meta = getattr(agent, '_last_run_metadata', {})
+            if ai_meta:
+                txn.set_data("gen_ai.model", ai_meta.get("model", "unknown"))
+                txn.set_data("gen_ai.tokens_in", ai_meta.get("tokens_in", 0))
+                txn.set_data("gen_ai.tokens_out", ai_meta.get("tokens_out", 0))
+                txn.set_data("gen_ai.cached_tokens", ai_meta.get("cached_tokens", 0))
+                txn.set_data("gen_ai.duration_ms", ai_meta.get("duration_ms", 0))
+                txn.set_data("routing.decision", ai_meta.get("routing", "unknown"))
+
+            # Log PROCESS execution event
+            asyncio.create_task(metrics.log_execution(
+                type="PROCESS", path="maria/response", method="AI",
+                lead_id=lead_id, channel=channel,
+                duration_ms=ai_meta.get("duration_ms", 0),
+                model=ai_meta.get("model", ""),
+                tokens_in=ai_meta.get("tokens_in", 0),
+                tokens_out=ai_meta.get("tokens_out", 0),
+                routing_decision=ai_meta.get("routing", ""),
+                status_code=200 if response else 500,
+                payload={"response": (response or "")[:500]},
+            ))
 
             if not response:
                 logger.warning(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
@@ -348,13 +373,26 @@ async def _process_buffer(lead_id: str):
                 for part in parts:
                     try:
                         logger.info(f"[Buffer] Sending message via {channel} to {lead_id}: {part[:50]}...")
+                        _send_start = time.perf_counter()
                         send_result = _send_message(lead_id, part, channel)
+                        _send_ms = (time.perf_counter() - _send_start) * 1000
                         logger.info(f"[Buffer] Message sent successfully via {channel}")
+                        asyncio.create_task(metrics.log_execution(
+                            type="OUT", path="maria/sent", method="SEND",
+                            lead_id=lead_id, channel=channel,
+                            duration_ms=_send_ms, status_code=200,
+                            payload={"text": part[:300]},
+                        ))
                     except Exception as send_err:
                         import traceback
                         logger.error(f"[Buffer] ERROR sending message via {channel}: {send_err}")
                         traceback.print_exc()
                         send_result = None
+                        asyncio.create_task(metrics.log_execution(
+                            type="ERROR", path="maria/sent", method="SEND",
+                            lead_id=lead_id, channel=channel, status_code=500,
+                            payload={"error": str(send_err)[:300]},
+                        ))
 
                     try:
                         whatsapp_msg_id = None

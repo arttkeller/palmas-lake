@@ -27,6 +27,7 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -304,6 +305,57 @@ class MetricsCollector:
         """Record a cache hit or miss."""
         key = "metrics:cache:hits" if hit else "metrics:cache:misses"
         await self._incr(key)
+
+    # ------------------------------------------------------------------
+    # Execution log (Supabase)
+    # ------------------------------------------------------------------
+
+    async def log_execution(
+        self,
+        type: str,
+        path: str,
+        *,
+        method: str = "",
+        status_code: int = 200,
+        duration_ms: float = 0,
+        lead_id: str = "",
+        channel: str = "",
+        model: str = "",
+        tokens_in: int = 0,
+        tokens_out: int = 0,
+        routing_decision: str = "",
+        payload: dict | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """
+        Insert one execution log row into Supabase (fire-and-forget).
+
+        Call via ``asyncio.create_task(metrics.log_execution(...))``.
+        Never blocks the hot path; silently no-ops on any error.
+        """
+        try:
+            from services.supabase_client import create_client
+            sb = create_client()
+            row = {
+                "type": type,
+                "method": method or None,
+                "path": path,
+                "status_code": status_code,
+                "duration_ms": round(duration_ms, 2),
+                "lead_id": lead_id or None,
+                "channel": channel or None,
+                "model": model or None,
+                "tokens_in": tokens_in,
+                "tokens_out": tokens_out,
+                "routing_decision": routing_decision or None,
+                "payload": payload,
+                "metadata": metadata,
+            }
+            await asyncio.to_thread(
+                lambda: sb.table("execution_logs").insert(row).execute()
+            )
+        except Exception:
+            pass  # never block or crash the main flow
 
     # ------------------------------------------------------------------
     # Read / aggregation

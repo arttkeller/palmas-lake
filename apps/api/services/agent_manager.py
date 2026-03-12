@@ -483,6 +483,12 @@ Mensagem atual do Cliente [{timestamp}]:
                 qualification_state = lead_data.get("qualification_state", {})
                 current_step = qualification_state.get("step", "name") if qualification_state else "name"
 
+                # Use pushname from webhook as fallback if DB name is generic
+                if pushname and (full_name.startswith("Lead ") or full_name == "Desconhecido"):
+                    full_name = pushname.strip()
+                    if current_step == "name":
+                        current_step = "interest"
+
                 # Build source-specific context
                 source_info = ""
                 if source == "instagram":
@@ -495,7 +501,7 @@ Mensagem atual do Cliente [{timestamp}]:
                         source_info = """
     <channel>Instagram DM</channel>
     <channel_rule>Este lead veio pelo Instagram. O nome dele ja foi obtido automaticamente do perfil do Instagram. NAO pergunte o nome novamente. Comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
-                elif current_step != "name" and not full_name.startswith("Lead "):
+                elif not full_name.startswith("Lead ") and full_name != "Desconhecido":
                     source_info = f"""
     <channel>WhatsApp</channel>
     <channel_rule>O nome deste lead ({full_name}) foi obtido automaticamente do perfil do WhatsApp. NAO pergunte o nome novamente. Cumprimente pelo nome, se apresente como Maria consultora do Palmas Lake Towers, e comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""

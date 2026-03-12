@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
 import {
   Activity, RefreshCw, Zap, Clock, AlertTriangle,
-  DollarSign, Cpu, Database, Wifi, WifiOff, CircleDot,
-  TrendingUp, BarChart3, Route, HardDrive,
+  DollarSign, Cpu, Database, CircleDot,
+  TrendingUp, BarChart3, Route, HardDrive, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,24 @@ interface MetricsSummary {
     misses: number;
     hit_rate: number;
   };
+}
+
+interface ExecutionLog {
+  id: string;
+  timestamp: string;
+  type: string;
+  method: string | null;
+  path: string;
+  status_code: number;
+  duration_ms: number;
+  lead_id: string | null;
+  channel: string | null;
+  model: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  routing_decision: string | null;
+  payload: Record<string, any> | null;
+  metadata: Record<string, any> | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -170,17 +188,6 @@ export default function MonitorPage() {
       ]
     : [];
 
-  const channelChartData = data
-    ? Object.entries(data.business.messages_sent).map(([name, count]) => ({ name, value: count }))
-    : [];
-
-  const endpointData = data
-    ? Object.entries(data.http.by_endpoint)
-        .map(([path, info]) => ({ path: path.replace('/api/', ''), ...info }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10)
-    : [];
-
   // ── Render ────────────────────────────────────────────────────────
 
   return (
@@ -251,7 +258,7 @@ export default function MonitorPage() {
       {tab === 'overview' && <OverviewTab data={data} reqPerHour={reqPerHour} />}
       {tab === 'tokens' && <TokensTab data={data} modelChartData={modelChartData} />}
       {tab === 'routing' && <RoutingTab data={data} routingChartData={routingChartData} cacheChartData={cacheChartData} />}
-      {tab === 'executions' && <ExecutionsTab data={data} endpointData={endpointData} channelChartData={channelChartData} />}
+      {tab === 'executions' && <ExecutionsTab data={data} />}
     </div>
   );
 }
@@ -559,78 +566,217 @@ function RoutingTab({
 
 // ── Executions Tab ──────────────────────────────────────────────────
 
-function ExecutionsTab({
-  data,
-  endpointData,
-  channelChartData,
-}: {
-  data: MetricsSummary | null;
-  endpointData: any[];
-  channelChartData: any[];
-}) {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <GlassmorphismCard className="p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Mensagens por Canal</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={channelChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={90}
-                  dataKey="value"
-                  label={({ name, value }) => `${name}: ${value}`}
-                >
-                  {channelChartData.map((_, i) => (
-                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </GlassmorphismCard>
+const TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  IN:      { bg: 'bg-blue-100',   text: 'text-blue-700',   label: 'IN' },
+  OUT:     { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'OUT' },
+  PROCESS: { bg: 'bg-violet-100', text: 'text-violet-700', label: 'PROCESS' },
+  TOOL:    { bg: 'bg-amber-100',  text: 'text-amber-700',  label: 'TOOL' },
+  ERROR:   { bg: 'bg-red-100',    text: 'text-red-700',    label: 'ERROR' },
+};
 
-        <GlassmorphismCard className="p-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-4">Top 10 Endpoints</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={endpointData} layout="vertical" margin={{ left: 80 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis type="number" fontSize={12} />
-                <YAxis type="category" dataKey="path" fontSize={10} width={75} />
-                <Tooltip />
-                <Bar dataKey="count" name="Requests" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </GlassmorphismCard>
+function ExecutionsTab({ data }: { data: MetricsSummary | null }) {
+  const [logs, setLogs] = useState<ExecutionLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const fetchLogs = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ limit: '50' });
+      if (typeFilter) params.set('type', typeFilter);
+      const res = await apiFetch(`/api/executions?${params}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      setLogs(json.data || []);
+    } catch {
+      // silently fail
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [typeFilter]);
+
+  useEffect(() => {
+    setLogsLoading(true);
+    fetchLogs();
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    refreshRef.current = setInterval(fetchLogs, 15_000);
+    return () => { if (refreshRef.current) clearInterval(refreshRef.current); };
+  }, [fetchLogs]);
+
+  const typeButtons = ['IN', 'OUT', 'PROCESS', 'TOOL', 'ERROR'] as const;
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          onClick={() => setTypeFilter(null)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+            !typeFilter ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          Todos
+        </button>
+        {typeButtons.map(t => {
+          const style = TYPE_STYLES[t];
+          return (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                typeFilter === t ? `${style.bg} ${style.text}` : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {style.label}
+            </button>
+          );
+        })}
+        <span className="ml-auto text-xs text-gray-400">
+          {logs.length} execuções · auto-refresh 15s
+        </span>
       </div>
 
-      {/* Endpoint latency table */}
-      <GlassmorphismCard className="p-5">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4">Latência por Endpoint</h3>
+      {/* Execution log table */}
+      <GlassmorphismCard className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-100">
-                <th className="pb-2 font-medium">Endpoint</th>
-                <th className="pb-2 font-medium text-right">Requests</th>
-                <th className="pb-2 font-medium text-right">Latência média</th>
+              <tr className="text-left text-gray-500 border-b border-gray-100 bg-gray-50/50">
+                <th className="px-4 py-2.5 font-medium w-8"></th>
+                <th className="px-4 py-2.5 font-medium">Horário</th>
+                <th className="px-4 py-2.5 font-medium">Tipo</th>
+                <th className="px-4 py-2.5 font-medium">Path</th>
+                <th className="px-4 py-2.5 font-medium text-right">Status</th>
+                <th className="px-4 py-2.5 font-medium text-right">Duração</th>
+                <th className="px-4 py-2.5 font-medium">Lead</th>
               </tr>
             </thead>
             <tbody>
-              {endpointData.map(ep => (
-                <tr key={ep.path} className="border-b border-gray-50">
-                  <td className="py-2 font-mono text-xs">/api/{ep.path}</td>
-                  <td className="py-2 text-right">{formatNumber(ep.count)}</td>
-                  <td className="py-2 text-right">{formatMs(ep.avg_latency_ms)}</td>
+              {logsLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                    <RefreshCw className="w-5 h-5 animate-spin inline mr-2" />
+                    Carregando execuções...
+                  </td>
                 </tr>
-              ))}
+              ) : logs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                    Nenhuma execução encontrada
+                  </td>
+                </tr>
+              ) : (
+                logs.map(log => {
+                  const isExpanded = expandedId === log.id;
+                  const style = TYPE_STYLES[log.type] || TYPE_STYLES.ERROR;
+                  const ts = new Date(log.timestamp);
+                  const durationMs = log.duration_ms ?? 0;
+
+                  return (
+                    <Fragment key={log.id}>
+                      <tr
+                        onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                        className={`border-b border-gray-50 cursor-pointer transition-colors ${
+                          isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50/50'
+                        }`}
+                      >
+                        <td className="px-4 py-2.5 text-gray-400">
+                          {isExpanded
+                            ? <ChevronDown className="w-4 h-4" />
+                            : <ChevronRight className="w-4 h-4" />}
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-gray-600 whitespace-nowrap">
+                          {ts.toLocaleTimeString('pt-BR')}
+                          <span className="text-gray-400 ml-1">{ts.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</span>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${style.bg} ${style.text}`}>
+                            {style.label}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs">{log.path}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className={`text-xs font-medium ${
+                            log.status_code >= 400 ? 'text-red-600' : 'text-emerald-600'
+                          }`}>
+                            {log.status_code}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className={`text-xs font-medium ${
+                            durationMs > 10000 ? 'text-red-600' : durationMs > 5000 ? 'text-amber-600' : 'text-gray-600'
+                          }`}>
+                            {formatMs(durationMs)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-xs text-gray-500 max-w-[120px] truncate">
+                          {log.lead_id ? log.lead_id.slice(0, 8) + '...' : '—'}
+                        </td>
+                      </tr>
+
+                      {/* Expanded detail row */}
+                      {isExpanded && (
+                        <tr className="bg-gray-50/80">
+                          <td colSpan={7} className="px-6 py-4">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                              <div>
+                                <div className="text-xs text-gray-400 mb-0.5">Lead ID</div>
+                                <div className="text-xs font-mono">{log.lead_id || '—'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-gray-400 mb-0.5">Canal</div>
+                                <div className="text-xs">{log.channel || '—'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-gray-400 mb-0.5">Modelo</div>
+                                <div className="text-xs font-mono">{log.model || '—'}</div>
+                              </div>
+                              <div>
+                                <div className="text-xs text-gray-400 mb-0.5">Roteamento</div>
+                                <div className="text-xs">{log.routing_decision || '—'}</div>
+                              </div>
+                            </div>
+
+                            {(log.tokens_in > 0 || log.tokens_out > 0) && (
+                              <div className="flex gap-4 mb-4">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-gray-400">Tokens In:</span>
+                                  <span className="text-xs font-medium">{formatNumber(log.tokens_in)}</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-gray-400">Tokens Out:</span>
+                                  <span className="text-xs font-medium">{formatNumber(log.tokens_out)}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {log.payload && Object.keys(log.payload).length > 0 && (
+                              <div>
+                                <div className="text-xs text-gray-400 mb-1">Payload</div>
+                                <pre className="text-xs font-mono bg-gray-900 text-green-400 p-3 rounded-lg overflow-x-auto max-h-48">
+                                  {JSON.stringify(log.payload, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+
+                            {log.metadata && Object.keys(log.metadata).length > 0 && (
+                              <div className="mt-3">
+                                <div className="text-xs text-gray-400 mb-1">Metadata</div>
+                                <pre className="text-xs font-mono bg-gray-900 text-blue-400 p-3 rounded-lg overflow-x-auto max-h-48">
+                                  {JSON.stringify(log.metadata, null, 2)}
+                                </pre>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
