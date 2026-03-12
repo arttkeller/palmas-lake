@@ -422,7 +422,7 @@ Mensagem atual do Cliente [{timestamp}]:
                     content = followup_response.content
                     if not content or not content.strip():
                         logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
-                        return "Oi! Como posso te ajudar? 😊"
+                        return "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
 
                 # Output guardrail: bloquear respostas que parecem erros internos
                 if content and _is_error_response(content):
@@ -574,7 +574,7 @@ Mensagem atual do Cliente [{timestamp}]:
         # Guard: ensure we always have a response to send (unless tool already sent)
         if not messages_already_sent and (not response_text or not response_text.strip()):
             logger.warning(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
-            response_text = "Oi! Como posso te ajudar? 😊"
+            response_text = "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
 
         end_time = time.time()
         logger.info(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")

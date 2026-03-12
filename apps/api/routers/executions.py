@@ -24,7 +24,7 @@ async def get_executions(
     query = (
         sb.table("execution_logs")
         .select("*")
-        .order("timestamp", desc=True)
+        .order("timestamp", "desc")
         .limit(limit)
         .offset(offset)
     )
@@ -45,7 +45,8 @@ async def get_execution_detail(execution_id: str):
         sb.table("execution_logs")
         .select("*")
         .eq("id", execution_id)
-        .single()
+        .limit(1)
         .execute()
     )
-    return result.data
+    rows = result.data or []
+    return rows[0] if rows else None
