@@ -23,24 +23,28 @@ interface ModelMetrics {
   tokens_in: number;
   tokens_out: number;
   cached_tokens: number;
-  cost_usd: number;
+  cost_usd_est: number;
 }
 
 interface MetricsSummary {
   ai: {
     calls_total: number;
+    calls_success: number;
     avg_latency_ms: number;
+    p50_latency_ms: number;
     p95_latency_ms: number;
-    tokens_total: number;
+    tokens_in_total: number;
+    tokens_out_total: number;
+    cached_tokens_total: number;
     cost_usd_est: number;
     by_model: Record<string, ModelMetrics>;
   };
   http: {
     requests_total: number;
-    by_endpoint: Record<string, { count: number; avg_latency_ms: number }>;
+    by_endpoint: Record<string, { count: number; latency_sum_ms: number; avg_latency_ms: number }>;
   };
   business: {
-    transfers_today: number;
+    transfers: number;
     messages_sent: Record<string, number>;
   };
   routing: Record<string, number>;
@@ -54,18 +58,20 @@ interface MetricsSummary {
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function formatNumber(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toFixed(0);
+  const v = n ?? 0;
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toFixed(0);
 }
 
 function formatMs(ms: number): string {
-  if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.round(ms)}ms`;
+  const v = ms ?? 0;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}s`;
+  return `${Math.round(v)}ms`;
 }
 
 function formatCurrency(usd: number): string {
-  return `$${usd.toFixed(2)}`;
+  return `$${(usd ?? 0).toFixed(2)}`;
 }
 
 const COLORS = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#22c55e', '#ec4899'];
@@ -149,7 +155,7 @@ export default function MonitorPage() {
         tokens_in: m.tokens_in,
         tokens_out: m.tokens_out,
         cached: m.cached_tokens,
-        cost: m.cost_usd,
+        cost: m.cost_usd_est,
       }))
     : [];
 
@@ -300,7 +306,7 @@ function OverviewTab({ data, reqPerHour }: { data: MetricsSummary | null; reqPer
         <KpiCard
           icon={<TrendingUp className="w-5 h-5" />}
           iconColor="text-violet-500"
-          value={data ? formatNumber(data.ai.tokens_total) : '—'}
+          value={data ? formatNumber((data.ai.tokens_in_total ?? 0) + (data.ai.tokens_out_total ?? 0)) : '—'}
           label="Tokens (24h)"
         />
         <KpiCard
@@ -332,14 +338,14 @@ function OverviewTab({ data, reqPerHour }: { data: MetricsSummary | null; reqPer
         <GlassmorphismCard className="p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Transferências Hoje</h3>
           <div className="text-3xl font-bold text-violet-600">
-            {data?.business.transfers_today ?? 0}
+            {data?.business.transfers ?? 0}
           </div>
         </GlassmorphismCard>
         <GlassmorphismCard className="p-5">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">Cache Semântico</h3>
           <div className="flex items-baseline gap-3">
             <div className="text-3xl font-bold text-emerald-600">
-              {data ? `${(data.cache.hit_rate * 100).toFixed(0)}%` : '—'}
+              {data ? `${((data.cache?.hit_rate ?? 0) * 100).toFixed(0)}%` : '—'}
             </div>
             <span className="text-sm text-gray-500">
               hit rate ({data?.cache.hits ?? 0} hits / {data?.cache.misses ?? 0} misses)
@@ -405,7 +411,7 @@ function TokensTab({
               <BarChart data={modelChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="name" fontSize={12} />
-                <YAxis fontSize={12} tickFormatter={(v: number) => `$${v.toFixed(2)}`} />
+                <YAxis fontSize={12} tickFormatter={(v) => `$${(Number(v) || 0).toFixed(2)}`} />
                 <Tooltip formatter={(v) => formatCurrency(Number(v ?? 0))} />
                 <Bar dataKey="cost" name="Custo USD" fill="#f59e0b" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -437,7 +443,7 @@ function TokensTab({
                   <td className="py-2.5 text-right">{formatNumber(m.tokens_in)}</td>
                   <td className="py-2.5 text-right">{formatNumber(m.tokens_out)}</td>
                   <td className="py-2.5 text-right text-emerald-600">{formatNumber(m.cached_tokens)}</td>
-                  <td className="py-2.5 text-right font-medium">{formatCurrency(m.cost_usd)}</td>
+                  <td className="py-2.5 text-right font-medium">{formatCurrency(m.cost_usd_est)}</td>
                 </tr>
               ))}
             </tbody>
@@ -446,7 +452,7 @@ function TokensTab({
                 <tr className="font-semibold border-t border-gray-200">
                   <td className="pt-2">Total</td>
                   <td className="pt-2 text-right">{formatNumber(data.ai.calls_total)}</td>
-                  <td className="pt-2 text-right">{formatNumber(data.ai.tokens_total)}</td>
+                  <td className="pt-2 text-right">{formatNumber((data.ai.tokens_in_total ?? 0) + (data.ai.tokens_out_total ?? 0))}</td>
                   <td className="pt-2 text-right">—</td>
                   <td className="pt-2 text-right">—</td>
                   <td className="pt-2 text-right">{formatCurrency(data.ai.cost_usd_est)}</td>
@@ -488,7 +494,7 @@ function RoutingTab({
         <KpiCard
           icon={<Zap className="w-5 h-5" />}
           iconColor="text-emerald-500"
-          value={data ? `${(data.cache.hit_rate * 100).toFixed(1)}%` : '—'}
+          value={data ? `${((data.cache?.hit_rate ?? 0) * 100).toFixed(1)}%` : '—'}
           label="Cache hit rate"
         />
         <KpiCard
