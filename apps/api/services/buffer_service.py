@@ -327,8 +327,9 @@ async def _process_buffer(lead_id: str):
             response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
             logger.info(f"Agent Response for {lead_id}: {response}")
 
-            # Enrich Sentry trace with AI metadata from agent
+            # Read AI metadata (set by generate_response via process_message_buffer)
             ai_meta = getattr(agent, '_last_run_metadata', {})
+            logger.info(f"[Meta Read] {lead_id}: ai_meta={ai_meta}")
             if ai_meta:
                 txn.set_data("gen_ai.model", ai_meta.get("model", "unknown"))
                 txn.set_data("gen_ai.tokens_in", ai_meta.get("tokens_in", 0))

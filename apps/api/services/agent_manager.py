@@ -241,7 +241,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
             return "Erro crítico ao carregar personalidade da IA."
 
     async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp",
-                                qualification_step: str = "", status: str = "", temperature: str = "", history_length: int = 0) -> str:
+                                qualification_step: str = "", status: str = "", temperature: str = "", history_length: int = 0) -> tuple[str | None, dict]:
         async with _agent_semaphore:
             try:
                 # 1. Preparar Tools com contexto do lead
@@ -357,12 +357,13 @@ Mensagem atual do Cliente [{timestamp}]:
                     )
                     if cached_answer:
                         cache_hit = True
-                        self._last_run_metadata = {
+                        _meta = {
                             "model": "cache", "routing": "cache_hit",
                             "tokens_in": 0, "tokens_out": 0,
                             "cached_tokens": 0, "duration_ms": 0,
                         }
-                        return cached_answer
+                        self._last_run_metadata = _meta
+                        return cached_answer, _meta
 
                 # 5. Executar Agente (em thread separada para não bloquear o event loop)
                 logger.info(f"[Maria] Running Agno Agent with {model_id} for {lead_id}...")
@@ -376,14 +377,14 @@ Mensagem atual do Cliente [{timestamp}]:
 
                 content = run_response.content
 
-                # Extract token usage and record metrics (fire-and-forget)
+                # Extract token usage from Agno Metrics dataclass (fire-and-forget)
                 tokens_in = tokens_out = cached_tokens = 0
                 if hasattr(run_response, 'metrics') and run_response.metrics:
                     usage = run_response.metrics
-                    tokens_in = usage.get('input_tokens', 0) or 0
-                    tokens_out = usage.get('output_tokens', 0) or 0
-                    cached_details = usage.get('input_tokens_details', {}) or {}
-                    cached_tokens = cached_details.get('cached_tokens', 0) or 0
+                    # Agno 2.3.x: Metrics is a dataclass with direct attributes, not a dict
+                    tokens_in = getattr(usage, 'input_tokens', 0) or 0
+                    tokens_out = getattr(usage, 'output_tokens', 0) or 0
+                    cached_tokens = getattr(usage, 'cache_read_tokens', 0) or 0
 
                 asyncio.create_task(metrics.record_ai_call(
                     model=model_id, duration_ms=ai_duration_ms,
@@ -392,13 +393,15 @@ Mensagem atual do Cliente [{timestamp}]:
                     lead_id=lead_id or "",
                 ))
 
-                # Store metadata for Sentry enrichment in buffer_service
-                self._last_run_metadata = {
+                # Build metadata dict (always, before any early return)
+                _meta = {
                     "model": model_id, "routing": routing_decision,
                     "tokens_in": tokens_in, "tokens_out": tokens_out,
                     "cached_tokens": cached_tokens,
                     "duration_ms": round(ai_duration_ms, 2),
                 }
+                self._last_run_metadata = _meta
+                logger.info(f"[Meta] {lead_id}: model={model_id}, routing={routing_decision}, tokens_in={tokens_in}, tokens_out={tokens_out}")
 
                 # Track if agent sent messages directly via enviar_mensagem tool
                 tool_sent = isinstance(maria_tools, MariaTools) and maria_tools._messages_sent_via_tool
@@ -406,8 +409,7 @@ Mensagem atual do Cliente [{timestamp}]:
 
                 if tool_sent:
                     logger.info(f"[Maria] Messages already sent via enviar_mensagem tool for {lead_id}, buffer will skip re-send")
-                    # Return content (even if empty) — buffer_service uses __TOOL_SENT__ marker
-                    return content or ""
+                    return content or "", _meta
 
                 if not content or not content.strip():
                     # Agent made tool calls but didn't generate text — re-run WITH FULL CONTEXT
@@ -422,12 +424,12 @@ Mensagem atual do Cliente [{timestamp}]:
                     content = followup_response.content
                     if not content or not content.strip():
                         logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
-                        return "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
+                        return "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?", _meta
 
                 # Output guardrail: bloquear respostas que parecem erros internos
                 if content and _is_error_response(content):
                     logger.warning(f"[Guardrail] Blocked error response for {lead_id}: {content[:200]}")
-                    return None
+                    return None, _meta
 
                 # Cache store: save successful non-tool response for future cache hits
                 if not tool_sent and content and content.strip():
@@ -435,7 +437,7 @@ Mensagem atual do Cliente [{timestamp}]:
                         last_user_msg, content, qualification_step, channel,
                     ))
 
-                return content
+                return content, _meta
 
             except Exception as e:
                 import traceback
@@ -443,7 +445,7 @@ Mensagem atual do Cliente [{timestamp}]:
                 error_msg = f"Error generating AI response with Agno: {e}\n{traceback.format_exc()}"
                 logger.error(error_msg)
                 sentry_sdk.capture_exception(e)
-                return None
+                return None, {}
 
     async def process_message_buffer(self, lead_id: str, messages: List[tuple], pushname: str = "") -> str:
         """Processa um buffer de mensagens acumuladas"""
@@ -564,12 +566,15 @@ Mensagem atual do Cliente [{timestamp}]:
         channel = "instagram" if source == "instagram" else "whatsapp"
         
         # 5. Gerar resposta com regras específicas do canal + roteamento dinâmico
-        response_text = await self.generate_response(
+        response_text, ai_meta = await self.generate_response(
             history, lead_id=lead_id, channel=channel,
             qualification_step=current_step, status=status,
             temperature=temperature, history_length=max(0, len(history) - 2),
         )
         messages_already_sent = self._last_messages_sent_via_tool
+
+        # Store metadata for buffer_service to read (explicit copy, not shared state)
+        self._last_run_metadata = ai_meta
 
         # Guard: ensure we always have a response to send (unless tool already sent)
         if not messages_already_sent and (not response_text or not response_text.strip()):
