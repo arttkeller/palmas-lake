@@ -32,10 +32,14 @@ sentry_sdk.init(
     ],
 )
 
-from fastapi import FastAPI, Depends
+import time as _time
+
+from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from routers import leads, webhook, analytics, chat, events, ai_specialist, debug, follow_ups, users, sellers
+from routers import metrics as metrics_router
 from auth import verify_jwt
+from services.observability import init_metrics, metrics
 
 # Startup validation: fail fast if critical env vars are missing
 REQUIRED_ENV_VARS = [
@@ -68,8 +72,10 @@ async def lifespan(app: FastAPI):
 
     from services import buffer_service
     buffer_service.init_redis(redis_client)
+    init_metrics(redis_client)
     timer_task = asyncio.create_task(buffer_service.run_timer_loop())
     print(f"[Startup] Redis conectado: {redis_url}")
+    print("[Startup] MetricsCollector inicializado")
 
     print("[Startup] Follow-ups + lembretes de visita gerenciados pelo cron job do Supabase")
     print("[Startup] Endpoint: POST /api/webhook/follow-up-cron")
@@ -113,9 +119,23 @@ app.include_router(sellers.router, prefix="/api", tags=["sellers"], dependencies
 app.include_router(webhook.router, prefix="/api", tags=["webhook"])
 app.include_router(follow_ups.router, prefix="/api", tags=["follow-ups"])
 app.include_router(ai_specialist.router, tags=["AI Specialist"])
+app.include_router(metrics_router.router, tags=["metrics"])
 
 if os.getenv("ENVIRONMENT") == "development":
     app.include_router(debug.router, prefix="/api", tags=["debug"])
+
+
+# ── HTTP Metrics Middleware ──────────────────────────────────────────────
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    t0 = _time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (_time.perf_counter() - t0) * 1000
+    asyncio.create_task(metrics.record_http_request(
+        path=request.url.path, method=request.method,
+        status_code=response.status_code, duration_ms=duration_ms,
+    ))
+    return response
 
 @app.get("/")
 def read_root():

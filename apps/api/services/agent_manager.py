@@ -17,6 +17,9 @@ from agno.models.openai import OpenAIChat, OpenAIResponses
 
 from services.maria_tools import MariaTools
 from services.temperature_service import TemperatureService, classify_lead_temperature
+from services.observability import metrics
+from services.routing_service import MessageRouter
+from services.semantic_cache import semantic_cache
 
 # Instruções estáticas do sentiment analysis — constante de módulo para prompt caching.
 # Vai como system message (instructions) do agente, mantendo prefixo idêntico entre requests.
@@ -129,6 +132,7 @@ class AgentManager:
         self.reasoning_effort_main = "medium"
         self.reasoning_effort_analysis = "medium"
         self._last_messages_sent_via_tool = False
+        self._last_run_metadata: dict = {}  # Populated by generate_response for Sentry enrichment
 
     @staticmethod
     def _extract_name_from_response(ai_response: str, user_message: str) -> str:
@@ -215,7 +219,8 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
             logger.error(f"Error loading system prompt: {e}")
             return "Erro crítico ao carregar personalidade da IA."
 
-    async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp") -> str:
+    async def generate_response(self, conversation_history: List[Dict[str, str]], lead_id: str = None, channel: str = "whatsapp",
+                                qualification_step: str = "", status: str = "", temperature: str = "", history_length: int = 0) -> str:
         async with _agent_semaphore:
             try:
                 # 1. Preparar Tools com contexto do lead
@@ -225,11 +230,37 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                 # 2. Carregar Prompt com regras específicas do canal
                 system_prompt = self._load_system_prompt(channel=channel)
 
-                # 3. Configurar Agente Agno (Maria) com prompt caching
-                agent_maria = Agent(
-                    model=OpenAIResponses(
+                # 3. Roteamento dinâmico de modelo
+                last_user_msg_for_routing = ""
+                if conversation_history and conversation_history[-1]['role'] == 'user':
+                    last_user_msg_for_routing = conversation_history[-1]['content']
+
+                model_id, reasoning, use_tools = MessageRouter.decide(
+                    message=last_user_msg_for_routing,
+                    qualification_step=qualification_step,
+                    status=status,
+                    temperature=temperature,
+                    history_length=history_length,
+                )
+                routing_decision = "light" if model_id == "gpt-5-mini" else "heavy"
+                logger.info(f"[Routing] {lead_id}: decision={routing_decision}, model={model_id}")
+                asyncio.create_task(metrics.record_routing_decision(routing_decision))
+
+                if not use_tools:
+                    tools_list = []
+
+                # 4. Configurar Agente Agno (Maria) com modelo roteado
+                if model_id == "gpt-5-mini":
+                    ai_model = OpenAIChat(
+                        id="gpt-5-mini",
+                        reasoning_effort=reasoning,
+                        max_completion_tokens=512,
+                        timeout=30,
+                    )
+                else:
+                    ai_model = OpenAIResponses(
                         id="gpt-5.4",
-                        reasoning_effort=self.reasoning_effort_main,
+                        reasoning_effort=reasoning,
                         max_output_tokens=2048,
                         store=False,
                         timeout=60,
@@ -237,7 +268,10 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                             "prompt_cache_retention": "24h",
                             "prompt_cache_key": f"maria-{channel}",
                         }
-                    ),
+                    )
+
+                agent_maria = Agent(
+                    model=ai_model,
                     description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
                     instructions=system_prompt,
                     tools=tools_list,
@@ -259,30 +293,71 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                         role_display = "Cliente" if msg['role'] == 'user' else "Maria"
                         chat_context += f"{role_display}: {msg['content']}\n"
 
-                # Timestamp no user message (não no system prompt) para manter prefixo estável e habilitar cache
+                # Timestamp no FINAL do user message para maximizar prefix caching
+                # (o histórico estável fica no início → cache hit no OpenAI)
                 timestamp = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%d/%m/%Y %H:%M')
 
                 if chat_context:
-                    prompt_input = f"""DATA ATUAL (Horário de Brasília): {timestamp}
-
-Histórico da conversa:
+                    prompt_input = f"""Histórico da conversa:
 {chat_context}
 
-Mensagem atual do Cliente:
+Mensagem atual do Cliente [{timestamp}]:
 {last_user_msg}
 """
                 else:
-                    prompt_input = f"DATA ATUAL (Horário de Brasília): {timestamp}\n\n{last_user_msg}"
+                    prompt_input = f"{last_user_msg}\n\n[{timestamp}]"
+
+                # 4b. Semantic cache lookup (before calling the model)
+                # Only for non-tool routes — tool calls produce side effects that can't be cached
+                cache_hit = False
+                if use_tools is False and last_user_msg and len(last_user_msg.strip()) > 3:
+                    cached_answer = await semantic_cache.lookup(
+                        last_user_msg, qualification_step, channel,
+                    )
+                    if cached_answer:
+                        cache_hit = True
+                        self._last_run_metadata = {
+                            "model": "cache", "routing": "cache_hit",
+                            "tokens_in": 0, "tokens_out": 0,
+                            "cached_tokens": 0, "duration_ms": 0,
+                        }
+                        return cached_answer
 
                 # 5. Executar Agente (em thread separada para não bloquear o event loop)
-                logger.info(f"[Maria] Running Agno Agent with GPT-5.4 for {lead_id}...")
+                logger.info(f"[Maria] Running Agno Agent with {model_id} for {lead_id}...")
 
+                ai_start = time.perf_counter()
                 run_response = await asyncio.wait_for(
                     asyncio.to_thread(agent_maria.run, prompt_input),
                     timeout=90
                 )
+                ai_duration_ms = (time.perf_counter() - ai_start) * 1000
 
                 content = run_response.content
+
+                # Extract token usage and record metrics (fire-and-forget)
+                tokens_in = tokens_out = cached_tokens = 0
+                if hasattr(run_response, 'metrics') and run_response.metrics:
+                    usage = run_response.metrics
+                    tokens_in = usage.get('input_tokens', 0) or 0
+                    tokens_out = usage.get('output_tokens', 0) or 0
+                    cached_details = usage.get('input_tokens_details', {}) or {}
+                    cached_tokens = cached_details.get('cached_tokens', 0) or 0
+
+                asyncio.create_task(metrics.record_ai_call(
+                    model=model_id, duration_ms=ai_duration_ms,
+                    tokens_in=tokens_in, tokens_out=tokens_out,
+                    cached_tokens=cached_tokens, success=True,
+                    lead_id=lead_id or "",
+                ))
+
+                # Store metadata for Sentry enrichment in buffer_service
+                self._last_run_metadata = {
+                    "model": model_id, "routing": routing_decision,
+                    "tokens_in": tokens_in, "tokens_out": tokens_out,
+                    "cached_tokens": cached_tokens,
+                    "duration_ms": round(ai_duration_ms, 2),
+                }
 
                 # Track if agent sent messages directly via enviar_mensagem tool
                 tool_sent = isinstance(maria_tools, MariaTools) and maria_tools._messages_sent_via_tool
@@ -313,6 +388,12 @@ Mensagem atual do Cliente:
                     logger.warning(f"[Guardrail] Blocked error response for {lead_id}: {content[:200]}")
                     return None
 
+                # Cache store: save successful non-tool response for future cache hits
+                if not tool_sent and content and content.strip():
+                    asyncio.create_task(semantic_cache.store(
+                        last_user_msg, content, qualification_step, channel,
+                    ))
+
                 return content
 
             except Exception as e:
@@ -326,68 +407,28 @@ Mensagem atual do Cliente:
     async def process_message_buffer(self, lead_id: str, messages: List[tuple], pushname: str = "") -> str:
         """Processa um buffer de mensagens acumuladas"""
         
-        # --- VERIFICAÇÃO DE DUPLICIDADE (DEBOUNCE) ---
-        # Verificar se a última mensagem no banco para este lead é do tipo 'assistant' e foi criada há menos de 15 segundos.
-        try:
-            from services.supabase_client import create_client
-            supabase_client = create_client()
-            
-            # Buscar o lead pelo phone ou instagram_id para obter o conversation_id
-            lead_res = await asyncio.to_thread(_lookup_lead, supabase_client, lead_id, "id")
-
-            if lead_res.data:
-                db_lead_id = lead_res.data[0]["id"]
-                conv_res = await asyncio.to_thread(
-                    supabase_client.table("conversations").select("id").eq("lead_id", db_lead_id).execute
-                )
-
-                if conv_res.data:
-                    all_conv_ids = [c["id"] for c in conv_res.data]
-                    # Buscar última mensagem de todas as conversas do lead
-                    last_msgs = await asyncio.to_thread(
-                        supabase_client.table("messages")
-                        .select("*")
-                        .in_("conversation_id", all_conv_ids)
-                        .order("created_at", direction="desc")
-                        .limit(1)
-                        .execute
-                    )
-                    
-                    if last_msgs.data:
-                        last_msg = last_msgs.data[0]
-                        # Se a ultima msg for assistant (enviada pela IA)
-                        if last_msg.get("sender_type") == "ai":
-                            # Checar tempo. created_at vem como string ISO.
-                            from datetime import timezone
-                            created_at = datetime.fromisoformat(last_msg["created_at"].replace("Z", "+00:00"))
-                            now = datetime.now(timezone.utc)
-                            diff = (now - created_at).total_seconds()
-                            
-                            if diff < 15: # Janela de 15s para evitar duplicatas (webhook retries)
-                                logger.warning(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
-                                return "IGNORED_DUPLICATE"
-        except Exception as e:
-            logger.error(f"⚠️ [Anti-Duplicate Error] Falha ao verificar duplicidade: {e}")
-        # -----------------------------------------------
-
         import time
         start_time = time.time()
-        start_timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        logger.info(f"--- AI Processing Start: {start_timestamp} for Lead: {lead_id} ---")
-        
+        logger.info(f"--- AI Processing Start: {datetime.now().strftime('%H:%M:%S')} for Lead: {lead_id} ---")
+
         from services.supabase_client import create_client
         supabase = create_client()
-        
+
         # Consolida mensagens recebidas
         current_message_content = ""
         for content, msg_id in messages:
             current_message_content += f"[ID: {msg_id}] {content}\n"
-            
+
         history = []
         lead_context_str = ""
-        
-        # 1. Recuperar contexto do Lead e Histórico
+        lead_data = None
+        db_lead_id = None
+        source = "whatsapp"
+        current_step = "name"
+        status = "novo"
+        temperature = "frio"
+
+        # ── SINGLE lead lookup (reused in context, name fallback, sentiment) ──
         try:
             lead_res = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "*")
 
@@ -400,11 +441,10 @@ Mensagem atual do Cliente:
                 source = lead_data.get("source", "whatsapp")
                 qualification_state = lead_data.get("qualification_state", {})
                 current_step = qualification_state.get("step", "name") if qualification_state else "name"
-                
+
                 # Build source-specific context
                 source_info = ""
                 if source == "instagram":
-                    # If name is still the generic IGSID fallback, don't let the AI use it
                     if full_name.startswith("Instagram ") and full_name[10:].isdigit():
                         full_name = "Visitante"
                         source_info = """
@@ -418,7 +458,7 @@ Mensagem atual do Cliente:
                     source_info = f"""
     <channel>WhatsApp</channel>
     <channel_rule>O nome deste lead ({full_name}) foi obtido automaticamente do perfil do WhatsApp. NAO pergunte o nome novamente. Cumprimente pelo nome, se apresente como Maria consultora do Palmas Lake Towers, e comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
-                
+
                 lead_context_str = f"""
 <lead_context>
     <name>{full_name}</name>
@@ -428,27 +468,37 @@ Mensagem atual do Cliente:
     <qualification_step>{current_step}</qualification_step>{source_info}
 </lead_context>
 """
-                
+
+                # ── SINGLE conversations query ──
                 conv_res = await asyncio.to_thread(
                     supabase.table("conversations").select("id").eq("lead_id", db_lead_id).execute
                 )
 
                 if conv_res.data:
-                    # Load messages from ALL conversations (WhatsApp + Instagram after merge)
                     all_conv_ids = [c["id"] for c in conv_res.data]
+                    # ── SINGLE messages query (serves both anti-dup AND history) ──
                     msgs_res = await asyncio.to_thread(
                         supabase.table("messages").select("content, sender_type, created_at").in_("conversation_id", all_conv_ids).order('created_at', direction="desc").limit(50).execute
                     )
-                    
+
                     if msgs_res.data:
-                        # Reordenar cronologicamente
+                        # Anti-duplicate: check if last message is AI within 15s
+                        last_msg = msgs_res.data[0]
+                        if last_msg.get("sender_type") == "ai":
+                            from datetime import timezone
+                            created_at = datetime.fromisoformat(last_msg["created_at"].replace("Z", "+00:00"))
+                            now = datetime.now(timezone.utc)
+                            diff = (now - created_at).total_seconds()
+                            if diff < 15:
+                                logger.warning(f"⚠️ [Anti-Duplicate] Mensagem ignorada. IA respondeu há {diff:.1f}s.")
+                                return "IGNORED_DUPLICATE"
+
+                        # Build history (chronological order)
                         past_msgs = sorted(msgs_res.data, key=lambda x: x['created_at'])
-                        
                         for m in past_msgs:
                             role = "assistant" if m["sender_type"] == "ai" else "user"
-                            content = m["content"]
-                            history.append({"role": role, "content": content})
-                            
+                            history.append({"role": role, "content": m["content"]})
+
         except Exception as e:
             logger.error(f"Error fetching history: {e}")
 
@@ -466,8 +516,12 @@ Mensagem atual do Cliente:
         # 4. Determinar canal baseado no source do lead
         channel = "instagram" if source == "instagram" else "whatsapp"
         
-        # 5. Gerar resposta com regras específicas do canal
-        response_text = await self.generate_response(history, lead_id=lead_id, channel=channel)
+        # 5. Gerar resposta com regras específicas do canal + roteamento dinâmico
+        response_text = await self.generate_response(
+            history, lead_id=lead_id, channel=channel,
+            qualification_step=current_step, status=status,
+            temperature=temperature, history_length=max(0, len(history) - 2),
+        )
         messages_already_sent = self._last_messages_sent_via_tool
 
         # Guard: ensure we always have a response to send (unless tool already sent)
@@ -479,19 +533,18 @@ Mensagem atual do Cliente:
         logger.info(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
 
         # 5b. Fallback: detect name from AI response if atualizar_nome tool wasn't called
+        # Uses pre-loaded lead_data — no re-query needed
         try:
-            # Re-check current name in DB (if tool was called, name is already updated)
-            _fb_lead = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "id, full_name")
-            if _fb_lead.data:
-                _fb_name = _fb_lead.data[0].get("full_name", "")
+            if lead_data and db_lead_id:
+                _fb_name = lead_data.get("full_name", "")
                 if _fb_name.startswith("Lead ") or _fb_name == "Visitante":
                     _extracted = self._extract_name_from_response(response_text, current_message_content)
                     if _extracted:
                         logger.info(f"[Fallback] AI didn't call atualizar_nome. Extracting name: '{_extracted}'")
                         await asyncio.to_thread(
-                            supabase.table("leads").update({"full_name": _extracted}).eq("id", _fb_lead.data[0]["id"]).execute
+                            supabase.table("leads").update({"full_name": _extracted}).eq("id", db_lead_id).execute
                         )
-                        logger.info(f"[Fallback] Name updated to '{_extracted}' for lead {_fb_lead.data[0]['id']}")
+                        logger.info(f"[Fallback] Name updated to '{_extracted}' for lead {db_lead_id}")
         except Exception as name_fallback_err:
             logger.error(f"[Fallback] Name extraction error (non-blocking): {name_fallback_err}")
 
@@ -499,7 +552,7 @@ Mensagem atual do Cliente:
         try:
              lead_msgs = [m['content'] for m in history if m['role'] == 'user']
              msgs_text = "\n".join(lead_msgs[-5:])
-             asyncio.create_task(self._safe_analyze_sentiment(lead_id, msgs_text))
+             asyncio.create_task(self._safe_analyze_sentiment(lead_id, msgs_text, lead_data=lead_data))
         except Exception as sentiment_err:
              logger.error(f"Sentiment analysis scheduling error: {sentiment_err}")
 
@@ -510,31 +563,35 @@ Mensagem atual do Cliente:
 
         return response_text
 
-    async def _safe_analyze_sentiment(self, lead_id: str, msgs_text: str):
+    async def _safe_analyze_sentiment(self, lead_id: str, msgs_text: str, lead_data: dict = None):
         """Wrapper seguro para análise de sentimento em background."""
         try:
-            await self._analyze_and_update_sentiment(lead_id, msgs_text)
+            await self._analyze_and_update_sentiment(lead_id, msgs_text, lead_data=lead_data)
         except Exception as e:
             import traceback
             logger.error(f"[Sentiment] Background error for {lead_id}: {e}")
             traceback.print_exc()
 
-    async def _analyze_and_update_sentiment(self, lead_id: str, messages_text: str):
+    async def _analyze_and_update_sentiment(self, lead_id: str, messages_text: str, lead_data: dict = None):
         """Analisa sentimento usando Agent Agno com GPT-5-mini"""
-        
+
         logger.info(f"[Sentiment] Starting analysis for {lead_id}")
-        
-        # Fetch current lead status before running sentiment analysis (Requirements 8.1, 8.2)
+
+        # Use pre-loaded lead_data if available, otherwise fetch (backward compat)
         lead_status = None
-        try:
-            from services.supabase_client import create_client
-            supabase_status = create_client()
-            lead_status_res = await asyncio.to_thread(_lookup_lead, supabase_status, lead_id, "status")
-            if lead_status_res.data:
-                lead_status = lead_status_res.data[0].get("status")
-                logger.info(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
-        except Exception as e:
-            logger.error(f"[Sentiment] Error fetching lead status: {e}")
+        if lead_data:
+            lead_status = lead_data.get("status")
+            logger.info(f"[Sentiment] Lead {lead_id} current status (cached): {lead_status}")
+        else:
+            try:
+                from services.supabase_client import create_client
+                supabase_status = create_client()
+                lead_status_res = await asyncio.to_thread(_lookup_lead, supabase_status, lead_id, "status")
+                if lead_status_res.data:
+                    lead_status = lead_status_res.data[0].get("status")
+                    logger.info(f"[Sentiment] Lead {lead_id} current status: {lead_status}")
+            except Exception as e:
+                logger.error(f"[Sentiment] Error fetching lead status: {e}")
         
         # Build status context for the prompt
         status_context = ""
@@ -626,15 +683,18 @@ Responda APENAS o JSON válido, sem texto adicional."""
             
             from services.supabase_client import create_client
             supabase = create_client()
-            
-            # Buscar o lead pelo phone ou instagram_id para obter o ID do lead no DB e last_interaction
-            lead_res = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "id, last_interaction")
-            if not lead_res.data:
-                logger.warning(f"[Sentiment] Lead {lead_id} not found in DB.")
-                return
 
-            db_lead_id = lead_res.data[0]["id"]
-            last_interaction_str = lead_res.data[0].get("last_interaction")
+            # Use pre-loaded lead_data if available, otherwise fetch
+            if lead_data:
+                db_lead_id = lead_data["id"]
+                last_interaction_str = lead_data.get("last_interaction")
+            else:
+                lead_res = await asyncio.to_thread(_lookup_lead, supabase, lead_id, "id, last_interaction")
+                if not lead_res.data:
+                    logger.warning(f"[Sentiment] Lead {lead_id} not found in DB.")
+                    return
+                db_lead_id = lead_res.data[0]["id"]
+                last_interaction_str = lead_res.data[0].get("last_interaction")
             
             # Parse last_interaction for temperature classification
             last_interaction = None

@@ -315,6 +315,16 @@ async def _process_buffer(lead_id: str):
             response = await agent.process_message_buffer(lead_id, messages_with_ids, pushname=lead_pushname)
             logger.info(f"Agent Response for {lead_id}: {response}")
 
+            # Enrich Sentry trace with AI metadata from agent
+            meta = getattr(agent, '_last_run_metadata', {})
+            if meta:
+                txn.set_data("gen_ai.model", meta.get("model", "unknown"))
+                txn.set_data("gen_ai.tokens_in", meta.get("tokens_in", 0))
+                txn.set_data("gen_ai.tokens_out", meta.get("tokens_out", 0))
+                txn.set_data("gen_ai.cached_tokens", meta.get("cached_tokens", 0))
+                txn.set_data("gen_ai.duration_ms", meta.get("duration_ms", 0))
+                txn.set_data("routing.decision", meta.get("routing", "unknown"))
+
             if not response:
                 logger.warning(f"[Buffer] WARNING: Agent returned None/empty response for {lead_id}, skipping send")
             elif response == "IGNORED_DUPLICATE":
