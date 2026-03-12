@@ -54,6 +54,7 @@ class MariaTools(Toolkit):
         self.register(self.enviar_carrossel)
         self.register(self.atualizar_status_lead)
         self.register(self.transferir_para_humano)
+        self.register(self.registrar_corretor_parceiro)
         self.register(self.consultar_documentos_tecnicos)
 
     def _lead_query(self, query):
@@ -757,26 +758,49 @@ class MariaTools(Toolkit):
                 target_phone = FALLBACK_PHONE
                 seller_label = "Gerente Comercial"
 
-            # 3. Montar mensagem para o vendedor/gerente
+            # 3. Montar variáveis para o template de transferência
             frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-            crm_link = f"{frontend_url}/dashboard/quadro?leadId={lead_id}" if lead_id else ""
+            crm_link = f"{frontend_url}/dashboard/quadro?leadId={lead_id}" if lead_id else frontend_url
 
-            msg = (
-                f"*Transferência de Lead*\n\n"
-                f"*Nome:* {lead_name}\n"
-                f"*Canal:* {lead_source}\n"
-                f"*Interesse:* {interest_val}\n"
-                f"*Objetivo:* {objective_val}\n"
-                f"*Motivo:* {motivo}\n\n"
-                f"*Resumo:*\n{resumo_conversa}"
-            )
-            if crm_link:
-                msg += f"\n\n*Abrir no CRM:*\n{crm_link}"
-
-            # 4. Enviar via WhatsApp para o vendedor atribuido
+            # 4. Enviar template 'transferencia_de_lead' via WhatsApp Cloud API
             m_service = MetaService()
-            m_service.send_whatsapp_text(target_phone, msg)
-            print(f"[Tool] Resumo enviado para {seller_label} ({target_phone})")
+            template_components = [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {"type": "text", "text": lead_name},           # {{1}} Nome
+                        {"type": "text", "text": lead_source},         # {{2}} Canal de Origem
+                        {"type": "text", "text": interest_val},        # {{3}} Interesse
+                        {"type": "text", "text": objective_val},       # {{4}} Objetivo
+                        {"type": "text", "text": motivo},              # {{5}} Classificação e Motivo
+                        {"type": "text", "text": resumo_conversa},     # {{6}} Resumo do Atendimento
+                        {"type": "text", "text": crm_link},            # {{7}} Link CRM
+                    ],
+                }
+            ]
+            result = m_service.send_whatsapp_template(
+                target_phone,
+                template_name="transferencia_de_lead",
+                language="pt_BR",
+                components=template_components,
+            )
+            if result:
+                print(f"[Tool] Template 'transferencia_de_lead' enviado para {seller_label} ({target_phone})")
+            else:
+                # Fallback: enviar como texto simples se template falhar
+                print(f"[Tool] Template falhou, enviando como texto simples para {seller_label}")
+                msg = (
+                    f"*Transferência de Lead*\n\n"
+                    f"*Nome:* {lead_name}\n"
+                    f"*Canal:* {lead_source}\n"
+                    f"*Interesse:* {interest_val}\n"
+                    f"*Objetivo:* {objective_val}\n"
+                    f"*Motivo:* {motivo}\n\n"
+                    f"*Resumo:*\n{resumo_conversa}"
+                )
+                if crm_link:
+                    msg += f"\n\n*Abrir no CRM:*\n{crm_link}"
+                m_service.send_whatsapp_text(target_phone, msg)
 
             # 5. Criar notificação no CRM para o vendedor
             if assignment and assignment.seller and lead_id:
@@ -839,6 +863,82 @@ class MariaTools(Toolkit):
             return f"Erro ao transferir: {e}"
 
         return f"Lead transferido com sucesso para o corretor {seller_label}. Use o nome '{seller_label}' ao avisar o lead sobre a transferência."
+
+    def registrar_corretor_parceiro(self, nome: str, empresa: Optional[str] = None, resumo_conversa: str = "", tipo: str = "corretor"):
+        """
+        Registra um lead que é corretor de imóveis ou dono de imobiliária interessado em revender unidades.
+        NÃO transfere para nenhum vendedor. Apenas tagueia no CRM, pausa a IA e informa que a gerência entrará em contato.
+        Use quando: o lead se identificar como corretor, imobiliária, ou quiser revender/indicar clientes.
+
+        Args:
+            nome: Nome do corretor ou responsável pela imobiliária.
+            empresa: Nome da imobiliária ou empresa (opcional).
+            resumo_conversa: Resumo breve da conversa até o momento.
+            tipo: Tipo do contato - 'corretor' ou 'imobiliaria'.
+        """
+        print(f"[Tool] Registrar corretor/parceiro: {nome}, empresa={empresa}, tipo={tipo}")
+
+        supabase = create_client()
+        try:
+            # 1. Buscar lead no banco
+            lead_res = self._lead_query(
+                supabase.table("leads").select("id, full_name, tags")
+            ).execute()
+
+            lead_info = lead_res.data[0] if lead_res.data else {}
+            lead_id = lead_info.get("id")
+
+            if not lead_id:
+                return "Erro: lead não encontrado no banco."
+
+            # 2. Atualizar tags e dados do lead
+            existing_tags = lead_info.get("tags") or []
+            new_tags = list(set(existing_tags + [tipo]))
+            if empresa:
+                new_tags = list(set(new_tags + ["parceiro"]))
+
+            update_data = {
+                "tags": new_tags,
+                "ai_paused": True,
+                "status": "transferido",
+            }
+            if nome and not lead_info.get("full_name"):
+                update_data["full_name"] = nome
+
+            supabase.table("leads").update(update_data).eq("id", lead_id).execute()
+            print(f"[Tool] Lead {lead_id} tagueado como {tipo}, tags={new_tags}, IA pausada")
+
+            # 3. Criar notificação para admin/gerência
+            try:
+                admin_lookup = supabase.table("users").select("id").eq("role", "admin").limit(1).execute()
+                if admin_lookup.data:
+                    admin_id = admin_lookup.data[0]["id"]
+                    title = f"Corretor/Imobiliária: {nome}"
+                    if empresa:
+                        title += f" ({empresa})"
+                    supabase.table("notifications").insert({
+                        "seller_id": admin_id,
+                        "lead_id": lead_id,
+                        "type": "transfer",
+                        "title": title,
+                        "body": resumo_conversa,
+                        "metadata": {
+                            "tipo_contato": tipo,
+                            "empresa": empresa or "",
+                            "tags": new_tags,
+                        }
+                    }).execute()
+                    print(f"[Tool] Notificação criada para admin sobre corretor/parceiro")
+            except Exception as notif_err:
+                print(f"[Tool] Erro ao criar notificação (não fatal): {notif_err}")
+
+        except Exception as e:
+            print(f"[Tool] Erro ao registrar corretor parceiro: {e}")
+            import traceback
+            traceback.print_exc()
+            return f"Erro ao registrar: {e}"
+
+        return f"Corretor/imobiliária '{nome}' registrado com sucesso. Tags: {new_tags}. IA pausada. Informe ao lead que a gerência entrará em contato."
 
     def consultar_documentos_tecnicos(self, pergunta: str) -> str:
         """Consulta os documentos técnicos do empreendimento (Memorial Descritivo e Quadro de Áreas).
