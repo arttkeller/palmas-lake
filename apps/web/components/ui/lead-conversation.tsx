@@ -235,6 +235,21 @@ interface MessageBubbleProps {
 /**
  * Individual message bubble component
  */
+/**
+ * Extracts image URL from content with format "caption [Imagem: URL]"
+ */
+function extractImageUrl(content: string): string | null {
+  const match = content.match(/\[Imagem:\s*(https?:\/\/[^\]]+)\]/);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Strips the [Imagem: URL] tag from content, returning only the caption
+ */
+function stripImageTag(content: string): string {
+  return content.replace(/\s*\[Imagem:[^\]]*\]\s*/g, '').trim();
+}
+
 function MessageBubble({ message }: MessageBubbleProps) {
   const isOutgoing = message.sender_type === 'user' || message.sender_type === 'ai';
   const isAI = message.sender_type === 'ai';
@@ -242,6 +257,9 @@ function MessageBubble({ message }: MessageBubbleProps) {
   const platform = (message as any).platform as string | undefined;
 
   const parsedContent = parseMessageContent(message.content);
+  const isImage = (message as any).message_type === 'image';
+  const imageUrl = isImage ? extractImageUrl(message.content) : null;
+  const captionText = isImage && imageUrl ? stripImageTag(message.content) : null;
 
   // Check for reaction in metadata
   const msgAny = message as any;
@@ -301,15 +319,36 @@ function MessageBubble({ message }: MessageBubbleProps) {
               </p>
             )}
 
-            {/* Message Text */}
-            <p
-              className={cn(
-                'text-sm whitespace-pre-wrap break-words',
-                isOutgoing && !isAI ? 'text-white' : 'text-foreground'
-              )}
-            >
-              {parsedContent}
-            </p>
+            {/* Image rendering */}
+            {isImage && imageUrl ? (
+              <div className="space-y-2">
+                <img
+                  src={imageUrl}
+                  alt={captionText || 'Imagem do empreendimento'}
+                  className="rounded-lg max-h-64 max-w-full object-contain border border-white/20 cursor-pointer"
+                  loading="lazy"
+                  onClick={() => window.open(imageUrl, '_blank')}
+                />
+                {captionText && (
+                  <p className={cn(
+                    'text-sm whitespace-pre-wrap break-words',
+                    isOutgoing && !isAI ? 'text-white' : 'text-foreground'
+                  )}>
+                    {parseMessageContent(captionText)}
+                  </p>
+                )}
+              </div>
+            ) : (
+              /* Message Text */
+              <p
+                className={cn(
+                  'text-sm whitespace-pre-wrap break-words',
+                  isOutgoing && !isAI ? 'text-white' : 'text-foreground'
+                )}
+              >
+                {parsedContent}
+              </p>
+            )}
 
             {/* Timestamp + Platform */}
             <span

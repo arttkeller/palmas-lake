@@ -523,7 +523,11 @@ export default function ChatPage() {
                                             {isAi && <p className="mb-1 text-[10px] uppercase font-bold text-purple-700">AI Assistant</p>}
 
                                             {/* Render Logic based on Type */}
-                                            {msg.message_type === 'image' || (msg.message_type as string) === 'carousel' ? (
+                                            {msg.message_type === 'image' || (msg.message_type as string) === 'carousel' ? (() => {
+                                                const imageUrlMatch = msg.content.match(/\[Imagem:\s*(https?:\/\/[^\]]+)\]/);
+                                                const extractedUrl = imageUrlMatch ? imageUrlMatch[1].trim() : null;
+                                                const caption = msg.content.replace(/\s*\[Imagem:[^\]]*\]\s*/g, '').replace(/\[Imagem recebida\]\s*/g, '').trim();
+                                                return (
                                                 <div className="space-y-2">
                                                     {/* Imagem do lead via proxy (metadata.wa_media_id) */}
                                                     {metadata?.wa_media_id && (
@@ -535,10 +539,18 @@ export default function ChatPage() {
                                                             onClick={() => window.open(`${API_BASE_URL}/api/chat/media/${metadata.wa_media_id}`, '_blank')}
                                                         />
                                                     )}
-                                                    {/* Caption ou descrição da imagem */}
-                                                    <p className="whitespace-pre-wrap break-words">{parseMessageContent(
-                                                        msg.content.replace(/\[Imagem:.*?\]\s*/g, '').replace(/\[Imagem recebida\]\s*/g, '').trim() || msg.content
-                                                    )}</p>
+                                                    {/* Imagem da IA via URL direta (Supabase) */}
+                                                    {!metadata?.wa_media_id && extractedUrl && (
+                                                        <img
+                                                            src={extractedUrl}
+                                                            alt={caption || 'Imagem do empreendimento'}
+                                                            className="rounded-lg max-h-64 max-w-full object-contain mt-1 border border-white/20 cursor-pointer"
+                                                            loading="lazy"
+                                                            onClick={() => window.open(extractedUrl, '_blank')}
+                                                        />
+                                                    )}
+                                                    {/* Caption */}
+                                                    {caption && <p className="whitespace-pre-wrap break-words">{parseMessageContent(caption)}</p>}
                                                     {/* Fallback for carousel indication */}
                                                     {(msg.message_type as string) === 'carousel' && (
                                                         <div className="mt-2 p-3 bg-white/80 rounded-xl border border-white/30 shadow-sm backdrop-blur-sm">
@@ -554,7 +566,8 @@ export default function ChatPage() {
                                                         </div>
                                                     )}
                                                 </div>
-                                            ) : (
+                                                );
+                                            })() : (
                                                 <p className="whitespace-pre-wrap break-words">{parseMessageContent(msg.content)}</p>
                                             )}
 
