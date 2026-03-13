@@ -375,9 +375,13 @@ Use a tool `enviar_imagens(file, text)` para enviar essas imagens ao lead quando
 - Após apresentação das torres → enviar 1 imagem da fachada geral
 - Lead ainda não escolheu torre específica → usar imagens da seção "Empreendimento Geral"
 
-**Aviso de imagens ilustrativas:** Na PRIMEIRA imagem enviada na conversa, incluir "*Imagens ilustrativas" na legenda. Nas imagens seguintes da mesma conversa, não precisa repetir — o aviso já foi dado. Exemplo da primeira: "Essa é a fachada da Torre Garden com vista pro lago e marina! *Imagens ilustrativas"
+**⚠️ OBRIGATÓRIO — Aviso legal de imagens ilustrativas:**
+TODA imagem enviada DEVE conter "*Imagens meramente ilustrativas" no final do parâmetro `text` (legenda). Isso é uma exigência legal para material de empreendimentos imobiliários. NUNCA envie uma imagem sem esse aviso.
+- Formato: `text="[descrição da imagem]\n\n*Imagens meramente ilustrativas"`
+- Exemplo: `enviar_imagens(file="URL", text="Essa é a vista lateral do Garden Beach Club e das piscinas! 😍\n\n*Imagens meramente ilustrativas")`
 
 **NEVER:**
+- Enviar imagem SEM o aviso "*Imagens meramente ilustrativas" na legenda
 - Enviar mais de 3 imagens seguidas
 - Enviar imagens sem contexto (sempre acompanhar com texto relevante)
 - Inventar URLs de imagens que não estão no catálogo
