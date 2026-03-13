@@ -29,6 +29,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -57,10 +58,16 @@ class SemanticCache:
     EMBEDDING_MODEL = "gemini-embedding-2-preview"
     EMBEDDING_DIMS = 768  # Truncated via MRL — IVFFlat max is 2000
 
+    # Circuit breaker: disable embeddings temporarily after repeated quota failures
+    _CB_FAILURE_THRESHOLD = 3
+    _CB_COOLDOWN_SECONDS = 300  # 5 minutes
+
     def __init__(self):
         self._genai_client = None
         self._prompt_hash: str = ""
         self._initialized = False
+        self._cb_failures = 0
+        self._cb_open_until = 0.0  # timestamp when circuit breaker resets
 
     def _ensure_init(self):
         """Lazy init — called on first lookup/store to avoid import-time side effects."""
@@ -83,9 +90,37 @@ class SemanticCache:
             logger.error(f"[SemanticCache] Init error: {e}")
             self._initialized = True
 
+    def _cb_is_open(self) -> bool:
+        """Check if circuit breaker is open (should skip embeddings)."""
+        if self._cb_open_until and time.monotonic() < self._cb_open_until:
+            return True
+        if self._cb_open_until and time.monotonic() >= self._cb_open_until:
+            # Cooldown expired — reset
+            self._cb_failures = 0
+            self._cb_open_until = 0.0
+        return False
+
+    def _cb_record_failure(self):
+        """Record an embedding failure; open circuit breaker if threshold reached."""
+        self._cb_failures += 1
+        if self._cb_failures >= self._CB_FAILURE_THRESHOLD:
+            self._cb_open_until = time.monotonic() + self._CB_COOLDOWN_SECONDS
+            logger.warning(
+                f"[SemanticCache] Circuit breaker OPEN — disabling embeddings for "
+                f"{self._CB_COOLDOWN_SECONDS}s after {self._cb_failures} consecutive failures"
+            )
+
+    def _cb_record_success(self):
+        """Reset failure counter on success."""
+        self._cb_failures = 0
+        self._cb_open_until = 0.0
+
     async def _embed(self, text: str) -> Optional[list[float]]:
         """Generate embedding for text using Gemini."""
         if not self._genai_client:
+            return None
+
+        if self._cb_is_open():
             return None
 
         try:
@@ -100,10 +135,16 @@ class SemanticCache:
                 ),
             )
             if result and result.embeddings:
+                self._cb_record_success()
                 return result.embeddings[0].values
             return None
         except Exception as e:
-            logger.error(f"[SemanticCache] Embedding error: {e}")
+            err_str = str(e)
+            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower():
+                self._cb_record_failure()
+                logger.warning(f"[SemanticCache] Quota exceeded (non-fatal, cache skipped): {err_str[:150]}")
+            else:
+                logger.error(f"[SemanticCache] Embedding error: {e}")
             return None
 
     async def lookup(
