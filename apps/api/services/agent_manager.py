@@ -285,10 +285,6 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                         max_output_tokens=2048,
                         store=False,
                         timeout=60,
-                        extra_body={
-                            "prompt_cache_retention": "24h",
-                            "prompt_cache_key": f"maria-{channel}",
-                        }
                     )
 
                 agent_maria = Agent(
@@ -369,10 +365,35 @@ Mensagem atual do Cliente [{timestamp}]:
                 logger.info(f"[Maria] Running Agno Agent with {model_id} for {lead_id}...")
 
                 ai_start = time.perf_counter()
-                run_response = await asyncio.wait_for(
-                    asyncio.to_thread(agent_maria.run, prompt_input),
-                    timeout=90
-                )
+                try:
+                    run_response = await asyncio.wait_for(
+                        asyncio.to_thread(agent_maria.run, prompt_input),
+                        timeout=90
+                    )
+                except Exception as api_err:
+                    err_str = str(api_err)
+                    if "parse the JSON body" in err_str or "BadRequestError" in type(api_err).__name__:
+                        logger.warning(f"[Maria] Responses API failed for {lead_id}, retrying with OpenAIChat fallback: {err_str[:200]}")
+                        fallback_model = OpenAIChat(
+                            id="gpt-5.4",
+                            reasoning_effort=reasoning,
+                            max_completion_tokens=2048,
+                            timeout=60,
+                        )
+                        agent_maria = Agent(
+                            model=fallback_model,
+                            description="Você é Maria, a assistente virtual do Palmas Lake Towers.",
+                            instructions=system_prompt,
+                            tools=tools_list,
+                            markdown=True,
+                        )
+                        model_id = "gpt-5.4-chat-fallback"
+                        run_response = await asyncio.wait_for(
+                            asyncio.to_thread(agent_maria.run, prompt_input),
+                            timeout=90
+                        )
+                    else:
+                        raise
                 ai_duration_ms = (time.perf_counter() - ai_start) * 1000
 
                 content = run_response.content
