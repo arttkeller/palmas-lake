@@ -336,6 +336,9 @@ class MetaService:
             print(f"[MetaService] Invalid WA number for image: {to}")
             return None
 
+        # Sanitize URL (LLM may pass backticks or whitespace from markdown)
+        image_url = image_url.strip().strip('`').strip('"').strip("'").strip()
+
         url = f"{self.base_url}/{self.phone_number_id}/messages"
         payload: Dict[str, Any] = {
             "messaging_product": "whatsapp",
@@ -352,7 +355,13 @@ class MetaService:
             if resp.status_code != 200:
                 print(f"[MetaService] WA image failed: {resp.status_code} - {resp.text[:200]}")
                 return None
-            return resp.json()
+            result = resp.json()
+            msg_ids = result.get("messages", [])
+            if msg_ids:
+                mid = msg_ids[0]["id"]
+                self._sent_message_ids[mid] = time.time()
+                print(f"[MetaService] WA image queued: msg_id={mid}, url={image_url[:80]}...")
+            return result
         except Exception as e:
             print(f"[MetaService] Error sending WA image: {e}")
             return None

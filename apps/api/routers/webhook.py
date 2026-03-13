@@ -902,12 +902,20 @@ async def handle_whatsapp_cloud_webhook(request: Request):
 
                 value = change.get("value", {})
 
-                # Process status updates (delivered / read / sent) — just log them
+                # Process status updates (delivered / read / sent / failed) — log them
                 for status in value.get("statuses", []):
-                    logger.info(
+                    status_val = status.get('status')
+                    log_msg = (
                         f"[WA Cloud Webhook] Status update: msg={status.get('id')} "
-                        f"status={status.get('status')} recipient={status.get('recipient_id')}"
+                        f"status={status_val} recipient={status.get('recipient_id')}"
                     )
+                    if status_val == "failed":
+                        errors = status.get("errors", [])
+                        if errors:
+                            log_msg += f" errors={errors}"
+                        logger.warning(log_msg)
+                    else:
+                        logger.info(log_msg)
 
                 # Build contact map: {wa_id -> profile_name}
                 contact_map: Dict[str, str] = {}

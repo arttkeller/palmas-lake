@@ -615,17 +615,21 @@ class MariaTools(Toolkit):
 
     def enviar_imagens(self, file: str, text: str):
         """
-        Envia UMA imagem do empreendimento Palmas Lake Towers via WhatsApp. 
-        
+        Envia UMA imagem do empreendimento Palmas Lake Towers via WhatsApp.
+
         Args:
             file: Link da imagem.
             text: Legenda descritiva.
         """
-        print(f"[Tool] Enviar Imagem")
+        # Sanitize URL: LLM may include backticks/whitespace from markdown catalog
+        file = file.strip().strip('`').strip('"').strip("'").strip()
+        print(f"[Tool] Enviar Imagem: {file[:80]}...")
         m_service = MetaService()
         msg_service = MessageService()
 
-        m_service.send_whatsapp_image(self.lead_id, file, caption=text)
+        result = m_service.send_whatsapp_image(self.lead_id, file, caption=text)
+        if result is None:
+            print(f"[Tool] Enviar Imagem FAILED for {self.lead_id}, url={file[:100]}")
         
         try:
             content_str = f"{text} [Imagem: {file}]"
