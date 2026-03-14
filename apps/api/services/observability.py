@@ -31,6 +31,7 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 # ---------------------------------------------------------------------------
@@ -359,6 +360,205 @@ class MetricsCollector:
     # ------------------------------------------------------------------
     # Read / aggregation
     # ------------------------------------------------------------------
+
+    async def get_summary_from_logs(self, period: str = "7d") -> dict:
+        """
+        Reconstruct metrics summary from execution_logs in Supabase.
+        Used for periods beyond the 24h Redis window.
+
+        period: "7d", "30d", "90d", "all"
+        """
+        cache_key = f"metrics:summary_logs:{period}"
+        try:
+            cached = await self._redis.get(cache_key) if self._redis else None
+            if cached:
+                return json.loads(cached)
+        except Exception:
+            pass
+
+        try:
+            from services.supabase_client import create_client
+            sb = create_client()
+
+            # Calculate start_date from period
+            now = datetime.now(timezone.utc)
+            if period == "7d":
+                start_date = now - timedelta(days=7)
+            elif period == "30d":
+                start_date = now - timedelta(days=30)
+            elif period == "90d":
+                start_date = now - timedelta(days=90)
+            else:
+                start_date = None  # "all" — no filter
+
+            # ---- Query AI/PROCESS rows ----------------------------------
+            def _query_process_rows():
+                q = sb.table("execution_logs").select(
+                    "model, tokens_in, tokens_out, duration_ms, routing_decision, path, channel, metadata"
+                ).eq("type", "PROCESS")
+                if start_date:
+                    q = q.gte("timestamp", start_date.isoformat())
+                return q.execute()
+
+            process_result = await asyncio.to_thread(_query_process_rows)
+            process_rows = process_result.data or []
+
+            # ---- Query TOOL rows (for transfers) -------------------------
+            def _query_tool_rows():
+                q = sb.table("execution_logs").select("path").eq("type", "TOOL")
+                if start_date:
+                    q = q.gte("timestamp", start_date.isoformat())
+                return q.execute()
+
+            tool_result = await asyncio.to_thread(_query_tool_rows)
+            tool_rows = tool_result.data or []
+
+            # ---- Query HTTP/IN/OUT rows ----------------------------------
+            def _query_http_rows():
+                q = sb.table("execution_logs").select(
+                    "type, path, method, duration_ms, status_code"
+                ).in_("type", ["IN", "OUT", "ERROR"])
+                if start_date:
+                    q = q.gte("timestamp", start_date.isoformat())
+                return q.execute()
+
+            http_result = await asyncio.to_thread(_query_http_rows)
+            http_rows = http_result.data or []
+
+            # ---- Aggregate AI/PROCESS metrics ---------------------------
+            by_model: dict[str, dict] = {}
+            tokens_in_total = 0
+            tokens_out_total = 0
+            cached_tokens_total = 0
+            cost_usd_est = 0.0
+            durations: list[float] = []
+            routing: dict[str, int] = {"heavy": 0, "medium": 0, "light": 0}
+            messages_sent: dict[str, int] = {"whatsapp": 0, "instagram": 0}
+
+            for row in process_rows:
+                model = row.get("model") or "unknown"
+                t_in = int(row.get("tokens_in") or 0)
+                t_out = int(row.get("tokens_out") or 0)
+                dur = float(row.get("duration_ms") or 0)
+                routing_dec = (row.get("routing_decision") or "").lower()
+                channel = (row.get("channel") or "").lower()
+
+                # cached_tokens not stored in execution_logs inserts — use 0
+                t_cached = 0
+
+                tokens_in_total += t_in
+                tokens_out_total += t_out
+                if dur > 0:
+                    durations.append(dur)
+
+                if routing_dec in routing:
+                    routing[routing_dec] += 1
+                elif routing_dec:
+                    routing[routing_dec] = routing.get(routing_dec, 0) + 1
+
+                if channel in ("whatsapp", "instagram"):
+                    messages_sent[channel] = messages_sent.get(channel, 0) + 1
+                elif channel:
+                    messages_sent[channel] = messages_sent.get(channel, 0) + 1
+
+                # Per-model aggregation
+                if model not in by_model:
+                    by_model[model] = {
+                        "count": 0, "tokens_in": 0, "tokens_out": 0,
+                        "cached_tokens": 0, "cost_usd_est": 0.0,
+                    }
+                by_model[model]["count"] += 1
+                by_model[model]["tokens_in"] += t_in
+                by_model[model]["tokens_out"] += t_out
+                by_model[model]["cached_tokens"] += t_cached
+
+            # Compute per-model cost
+            for model_name, mdata in by_model.items():
+                pricing = COST_PER_1M_TOKENS.get(model_name, _DEFAULT_COST)
+                model_cost = (
+                    mdata["tokens_in"] / 1_000_000 * pricing["input"]
+                    + mdata["tokens_out"] / 1_000_000 * pricing["output"]
+                    + mdata["cached_tokens"] / 1_000_000 * pricing["cached"]
+                )
+                mdata["cost_usd_est"] = round(model_cost, 6)
+                cost_usd_est += model_cost
+
+            calls_total = len(process_rows)
+            calls_success = calls_total  # PROCESS rows are successful completions
+
+            avg_latency_ms = 0.0
+            p50_latency_ms = 0.0
+            p95_latency_ms = 0.0
+            if durations:
+                durations_sorted = sorted(durations)
+                n = len(durations_sorted)
+                avg_latency_ms = sum(durations_sorted) / n
+                p50_latency_ms = _percentile(durations_sorted, 50)
+                p95_latency_ms = _percentile(durations_sorted, 95)
+
+            # ---- Transfers (TOOL rows with transfer path) ---------------
+            transfers = sum(
+                1 for r in tool_rows
+                if "transferir" in (r.get("path") or "")
+            )
+
+            # ---- HTTP endpoint aggregation ------------------------------
+            requests_total = 0
+            by_endpoint: dict[str, dict] = {}
+
+            for row in http_rows:
+                path = (row.get("path") or "").strip("/").replace("/", "_") or "root"
+                method = (row.get("method") or "GET").upper()
+                dur = float(row.get("duration_ms") or 0)
+                ep_key = f"{method}:{path}"
+
+                if ep_key not in by_endpoint:
+                    by_endpoint[ep_key] = {"count": 0, "latency_sum_ms": 0, "avg_latency_ms": 0.0}
+                by_endpoint[ep_key]["count"] += 1
+                by_endpoint[ep_key]["latency_sum_ms"] += int(dur)
+                requests_total += 1
+
+            for ep_key, ep_data in by_endpoint.items():
+                cnt = ep_data["count"]
+                ep_data["avg_latency_ms"] = round(ep_data["latency_sum_ms"] / cnt, 2) if cnt > 0 else 0.0
+
+            # Cache hits/misses not available in execution_logs
+            result = {
+                "ai": {
+                    "calls_total": calls_total,
+                    "calls_success": calls_success,
+                    "avg_latency_ms": round(avg_latency_ms, 2),
+                    "p50_latency_ms": round(p50_latency_ms, 2),
+                    "p95_latency_ms": round(p95_latency_ms, 2),
+                    "tokens_in_total": tokens_in_total,
+                    "tokens_out_total": tokens_out_total,
+                    "cached_tokens_total": cached_tokens_total,
+                    "cost_usd_est": round(cost_usd_est, 6),
+                    "by_model": by_model,
+                },
+                "http": {
+                    "requests_total": requests_total,
+                    "by_endpoint": by_endpoint,
+                },
+                "business": {
+                    "transfers": transfers,
+                    "messages_sent": messages_sent,
+                },
+                "routing": routing,
+                "cache": {"hits": 0, "misses": 0, "hit_rate": 0.0},
+            }
+
+            # Cache result for 5 minutes
+            try:
+                if self._redis:
+                    await self._redis.set(cache_key, json.dumps(result), ex=300)
+            except Exception:
+                pass
+
+            return result
+
+        except Exception:
+            return _empty_summary()
 
     async def get_summary(self) -> dict:
         """

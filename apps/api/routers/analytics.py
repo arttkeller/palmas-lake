@@ -10,25 +10,31 @@ router = APIRouter()
 service = AnalyticsService()
 
 @router.get("/analytics/dashboard")
-def get_dashboard_metrics():
-    return service.get_dashboard_metrics()
+def get_dashboard_metrics(
+    period: str = Query(default="30d", description="Period: 7d, 30d, 90d, all"),
+):
+    return service.get_dashboard_metrics(period=period)
 
 
 @router.get("/analytics/cached")
-async def get_cached_analytics(metric_type: str = Query(default="dashboard", description="Type of metrics to retrieve")):
+async def get_cached_analytics(
+    metric_type: str = Query(default="dashboard", description="Type of metrics to retrieve"),
+    period: str = Query(default="30d", description="Period: 7d, 30d, 90d, all"),
+):
     """
     Returns cached analytics metrics instantly from the analytics_cache table.
-    
+
     This endpoint provides pre-calculated metrics without waiting for computation,
     enabling instant dashboard loading. Includes an is_stale flag to indicate
     if the data is older than 5 minutes.
-    
+
     If the cache is empty, triggers a background calculation automatically
     and returns is_calculating: true so the frontend knows to poll again.
-    
+
     Args:
         metric_type: Type of metrics to retrieve (default: 'dashboard')
-        
+        period: Date period filter (default: '30d')
+
     Returns:
         Cached metrics with metadata including:
         - data: The cached metrics
@@ -37,18 +43,18 @@ async def get_cached_analytics(metric_type: str = Query(default="dashboard", des
         - is_stale: True if data is older than 5 minutes
         - trigger_source: What triggered the last calculation
         - is_calculating: True if a background calculation was just triggered
-        
+
     Requirements: 1.1 - Provide cached metrics within 100ms
     Requirements: 3.3 - Trigger background calculation when cache is empty
     """
-    cached = cache_service.get_cached_metrics(metric_type=metric_type)
+    cached = cache_service.get_cached_metrics(metric_type=f"{metric_type}_{period}")
     
     if cached is None:
         # Trigger background calculation when cache is empty (Requirement 3.3)
         asyncio.create_task(
             cache_service.process_analytics_background(
                 trigger_source='auto_empty_cache',
-                metric_type=metric_type
+                metric_type=f"{metric_type}_{period}"
             )
         )
         return {
@@ -122,15 +128,17 @@ def analyze_lead_sentiment(lead_id: str):
     return service.analyze_lead_sentiment(lead_id=lead_id)
 
 @router.get("/analytics/export")
-def export_analytics_excel():
+def export_analytics_excel(
+    period: str = Query(default="30d", description="Period: 7d, 30d, 90d, all"),
+):
     """
     Exporta relatório de analytics em formato Excel.
     Retorna arquivo .xlsx com todas as métricas.
     """
     import pandas as pd
     from datetime import datetime
-    
-    data = service.get_dashboard_metrics()
+
+    data = service.get_dashboard_metrics(period=period)
     
     # Criar arquivo Excel em memória
     output = io.BytesIO()

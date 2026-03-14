@@ -1,5 +1,6 @@
 
 import logging
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 from services.supabase_client import create_client
 from services.analytics_computations import (
@@ -18,14 +19,30 @@ class AnalyticsService:
     def __init__(self):
         self.supabase = create_client()
 
-    def get_dashboard_metrics(self):
+    def get_dashboard_metrics(self, period: str = "30d"):
         """
         Generates key metrics for the dashboard using Real Data from Supabase.
+
+        period: "7d", "30d", "90d", "all"
         """
+        # Calculate start_date from period
+        now = datetime.now(timezone.utc)
+        if period == "7d":
+            start_date = now - timedelta(days=7)
+        elif period == "30d":
+            start_date = now - timedelta(days=30)
+        elif period == "90d":
+            start_date = now - timedelta(days=90)
+        else:
+            start_date = None  # "all" — no date filter
+
         # 1. Fetch Data from Supabase
         try:
             # Fetch leads
-            leads_res = self.supabase.table("leads").select("*").execute()
+            leads_query = self.supabase.table("leads").select("*")
+            if start_date:
+                leads_query = leads_query.gte("created_at", start_date.isoformat())
+            leads_res = leads_query.execute()
             leads_data = leads_res.data if leads_res.data else []
             
             logger.info(f"[get_dashboard_metrics] Fetched {len(leads_data)} leads from database")
@@ -67,7 +84,10 @@ class AnalyticsService:
             # Contar leads em atendimento (distinct lead_ids from conversations)
             em_atendimento = 0
             try:
-                convs_res = self.supabase.table("conversations").select("lead_id").execute()
+                convs_query = self.supabase.table("conversations").select("lead_id")
+                if start_date:
+                    convs_query = convs_query.gte("created_at", start_date.isoformat())
+                convs_res = convs_query.execute()
                 if convs_res.data:
                     df_convs_em = pd.DataFrame(convs_res.data)
                     em_atendimento = compute_em_atendimento(df_leads, df_convs_em)
@@ -88,11 +108,21 @@ class AnalyticsService:
                 f"status_distribution={status_counts}"
             )
 
-            # 4. History (Leads per Day - Last 30 days)
+            # 4. History (Leads per Day — respects period)
             daily_counts = df_leads.groupby('date_str').size().reset_index(name='leads')
             daily_counts = daily_counts.sort_values('date_str')
             history = daily_counts.to_dict('records')
             history_formatted = [{"date": r["date_str"], "leads": r["leads"]} for r in history]
+
+            # Determine how many history days to show based on period
+            if period == "7d":
+                _history_days = 7
+            elif period == "30d":
+                _history_days = 30
+            elif period == "90d":
+                _history_days = 90
+            else:
+                _history_days = None  # show all
 
             # 5. Appointment Heatmap (Day x Hour)
             # Filter for leads that reached 'visita_agendada' or 'visit_scheduled'
@@ -117,7 +147,10 @@ class AnalyticsService:
             # 6. Response Time Analysis (REAL DATA)
             response_times = {"ai_avg_seconds": 0, "lead_avg_minutes": 0, "history": []}
             try:
-                msgs_res = self.supabase.table("messages").select("sender_type, created_at, conversation_id").order("created_at", direction="desc").limit(500).execute()
+                msgs_query = self.supabase.table("messages").select("sender_type, created_at, conversation_id").order("created_at", direction="desc").limit(500)
+                if start_date:
+                    msgs_query = msgs_query.gte("created_at", start_date.isoformat())
+                msgs_res = msgs_query.execute()
                 if msgs_res.data:
                     df_msgs_rt = pd.DataFrame(msgs_res.data)
                     response_times = compute_response_times(df_msgs_rt)
@@ -141,7 +174,10 @@ class AnalyticsService:
             # B) Scan recent messages for "Active Objections" (Sentiment Scan)
             try:
                 # Fetch last 100 messages from 'lead' to detect live friction
-                live_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(100).execute()
+                live_msgs_query = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(100)
+                if start_date:
+                    live_msgs_query = live_msgs_query.gte("created_at", start_date.isoformat())
+                live_msgs = live_msgs_query.execute()
                 if live_msgs.data:
                     for m in live_msgs.data:
                         content = str(m['content']).lower()
@@ -163,7 +199,10 @@ class AnalyticsService:
                 objections = [] 
 
             # 8. Channel Distribution (REAL DATA)
-            conv_res = self.supabase.table("conversations").select("platform").execute()
+            conv_dist_query = self.supabase.table("conversations").select("platform")
+            if start_date:
+                conv_dist_query = conv_dist_query.gte("created_at", start_date.isoformat())
+            conv_res = conv_dist_query.execute()
             if conv_res.data:
                 df_conv = pd.DataFrame(conv_res.data)
                 # Map platform names to display names if needed
@@ -189,7 +228,10 @@ class AnalyticsService:
             faq_list = []
             try:
                 # Buscar mensagens dos leads para identificar perguntas frequentes
-                faq_msgs = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(500).execute()
+                faq_msgs_query = self.supabase.table("messages").select("content").eq("sender_type", "lead").order("created_at", direction="desc").limit(500)
+                if start_date:
+                    faq_msgs_query = faq_msgs_query.gte("created_at", start_date.isoformat())
+                faq_msgs = faq_msgs_query.execute()
                 if faq_msgs.data:
                     faq_keywords = {
                         'Localização': ['onde fica', 'localização', 'endereço', 'qual o endereço', 'fica onde', 'região'],
@@ -261,9 +303,12 @@ class AnalyticsService:
 
             # 15. Time-Based Metrics (REAL DATA)
             try:
-                msgs_for_time = self.supabase.table("messages").select(
+                msgs_time_query = self.supabase.table("messages").select(
                     "conversation_id, sender_type, created_at"
-                ).order("created_at", direction="desc").limit(1000).execute()
+                ).order("created_at", direction="desc").limit(1000)
+                if start_date:
+                    msgs_time_query = msgs_time_query.gte("created_at", start_date.isoformat())
+                msgs_for_time = msgs_time_query.execute()
                 df_msgs_time = pd.DataFrame(msgs_for_time.data) if msgs_for_time.data else pd.DataFrame()
 
                 # If messages have no lead_id, try joining via conversations
@@ -285,7 +330,7 @@ class AnalyticsService:
                 "conversion_rate": round(conversion_rate, 2),
                 "em_atendimento": em_atendimento,
                 "status_distribution": status_counts,
-                "history": history_formatted[-30:], # Last 30 days
+                "history": history_formatted[-_history_days:] if _history_days else history_formatted,
                 "heatmap": heatmap_data,
                 "response_times": response_times,
                 "objections": objections,

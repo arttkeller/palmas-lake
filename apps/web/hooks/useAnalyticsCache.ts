@@ -30,6 +30,7 @@ export interface UseAnalyticsCacheOptions {
   onUpdate?: (data: DashboardMetrics) => void;
   maxStaleMinutes?: number;
   enabled?: boolean;
+  period?: string;
 }
 
 // Configuration constants
@@ -76,6 +77,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
     onUpdate,
     maxStaleMinutes = 5,
     enabled = true,
+    period = 'today',
   } = options;
 
   // State
@@ -163,7 +165,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       setHasTimedOut(false);
 
       const response = await apiFetch(
-        `/api/analytics/cached?metric_type=${metricType}`,
+        `/api/analytics/cached?metric_type=${metricType}&period=${period}`,
         { signal: controller.signal }
       );
 
@@ -229,7 +231,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       // This guarantees loading state terminates regardless of outcome
       setIsLoading(false);
     }
-  }, [enabled, metricType, updateFromCacheEntry]);
+  }, [enabled, metricType, period, updateFromCacheEntry]);
 
   /**
    * Stops the polling mechanism and clears all timers
@@ -264,7 +266,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
         const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
         const response = await apiFetch(
-          `/api/analytics/cached?metric_type=${metricType}`,
+          `/api/analytics/cached?metric_type=${metricType}&period=${period}`,
           { signal: controller.signal }
         );
         clearTimeout(timeoutId);
@@ -312,7 +314,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       setIsCalculating(false);
       stopPolling();
     }, POLL_TIMEOUT_MS);
-  }, [metricType, updateFromCacheEntry, stopPolling]);
+  }, [metricType, period, updateFromCacheEntry, stopPolling]);
 
   // Requirements: 1.2, 1.3 - Auto-start polling when backend is calculating
   // This ensures we pick up the computed data once the background task finishes,
@@ -352,7 +354,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       setError(null);
 
       const response = await apiFetch(
-        `/api/analytics/refresh?metric_type=${metricType}`,
+        `/api/analytics/refresh?metric_type=${metricType}&period=${period}`,
         { method: 'POST' }
       );
 
@@ -378,7 +380,7 @@ export function useAnalyticsCache(options: UseAnalyticsCacheOptions = {}): UseAn
       isRefreshingRef.current = false;
       setIsRefreshing(false);
     }
-  }, [metricType, fetchInitialData]);
+  }, [metricType, period, fetchInitialData]);
 
   /**
    * Handles realtime updates from Supabase

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2, Download, RefreshCw, Wifi, WifiOff, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { apiFetch } from '@/lib/api-fetch';
 import TransferRateCard from '@/components/charts/TransferRateCard';
 import { useAnalyticsCache } from '@/hooks/useAnalyticsCache';
 import type { DashboardMetrics } from '@/types/analytics-cache';
+import { PeriodSelector, usePeriod } from '@/components/ui/period-selector';
 
 // Lazy-loaded heavy charts (below the fold)
 const AppointmentHeatmap = dynamic(() => import('@/components/charts/AppointmentHeatmap'), { ssr: false });
@@ -85,14 +86,30 @@ export function shouldShowCalculatingBanner(lastUpdate: Date | null, isRefreshin
 
 /**
  * Analytics Dashboard Page
- * 
+ *
  * Uses the useAnalyticsCache hook to subscribe to real-time analytics updates
  * via Supabase Realtime. The page never shows a loading spinner after initial
  * load - it always displays cached data and updates seamlessly.
- * 
+ *
  * Requirements: 1.1, 1.3, 1.4, 4.1, 4.2, 4.4
  */
 export default function AnalyticsPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex flex-col h-96 items-center justify-center gap-4">
+                <div className="text-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-emerald-600 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Carregando análises...</p>
+                </div>
+            </div>
+        }>
+            <AnalyticsPageContent />
+        </Suspense>
+    );
+}
+
+function AnalyticsPageContent() {
+    const period = usePeriod();
     const [exporting, setExporting] = useState(false);
     const [highlightUpdate, setHighlightUpdate] = useState(false);
     const previousDataRef = useRef<DashboardMetrics | null>(null);
@@ -125,6 +142,7 @@ export default function AnalyticsPage() {
     } = useAnalyticsCache({
         metricType: 'dashboard',
         onUpdate: handleDataUpdate,
+        period,
     });
 
     // Requirements: 4.1 - Trigger refresh on mount when cache is empty or stale
@@ -245,7 +263,8 @@ export default function AnalyticsPage() {
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <PeriodSelector />
                     <Button
                         variant="outline"
                         size="sm"

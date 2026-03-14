@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef, Fragment } from 'react';
+import { useState, useCallback, useEffect, useRef, Fragment, Suspense } from 'react';
 import {
   Activity, RefreshCw, Zap, Clock, AlertTriangle,
   DollarSign, Cpu, Database, CircleDot,
@@ -15,6 +15,7 @@ import { GlassmorphismCard } from '@/components/ui/glassmorphism-card';
 import { apiFetch } from '@/lib/api-fetch';
 import { useAuth } from '@/lib/auth-context';
 import { useRouter } from 'next/navigation';
+import { PeriodSelector, usePeriod } from '@/components/ui/period-selector';
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -108,8 +109,21 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
 // ── Main component ────────────────────────────────────────────────────
 
 export default function MonitorPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+      </div>
+    }>
+      <MonitorPageContent />
+    </Suspense>
+  );
+}
+
+function MonitorPageContent() {
   const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
+  const period = usePeriod();
   const [data, setData] = useState<MetricsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +141,7 @@ export default function MonitorPage() {
 
   const fetchMetrics = useCallback(async () => {
     try {
-      const res = await apiFetch('/api/metrics/summary');
+      const res = await apiFetch(`/api/metrics/summary?period=${period}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -138,7 +152,7 @@ export default function MonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [period]);
 
   // Initial load + auto-refresh every 30s
   useEffect(() => {
@@ -163,6 +177,8 @@ export default function MonitorPage() {
   }
 
   // ── Derived data ──────────────────────────────────────────────────
+
+  const periodLabel = period === 'today' ? '24h' : period === '7d' ? '7 dias' : period === '30d' ? '30 dias' : period === '90d' ? '90 dias' : 'Total';
 
   const reqPerHour = data ? Math.round(data.http.requests_total / 24) : 0;
 
@@ -193,7 +209,7 @@ export default function MonitorPage() {
   return (
     <div className="space-y-6 p-4 sm:p-6 pb-24">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Monitoramento</h1>
           <p className="text-sm text-gray-500">
@@ -205,7 +221,8 @@ export default function MonitorPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <PeriodSelector />
           <button
             onClick={() => setAutoRefresh(!autoRefresh)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
@@ -255,9 +272,9 @@ export default function MonitorPage() {
       )}
 
       {/* Tab Content */}
-      {tab === 'overview' && <OverviewTab data={data} reqPerHour={reqPerHour} />}
-      {tab === 'tokens' && <TokensTab data={data} modelChartData={modelChartData} />}
-      {tab === 'routing' && <RoutingTab data={data} routingChartData={routingChartData} cacheChartData={cacheChartData} />}
+      {tab === 'overview' && <OverviewTab data={data} reqPerHour={reqPerHour} periodLabel={periodLabel} />}
+      {tab === 'tokens' && <TokensTab data={data} modelChartData={modelChartData} periodLabel={periodLabel} />}
+      {tab === 'routing' && <RoutingTab data={data} routingChartData={routingChartData} cacheChartData={cacheChartData} periodLabel={periodLabel} />}
       {tab === 'executions' && <ExecutionsTab data={data} />}
     </div>
   );
@@ -287,7 +304,7 @@ function KpiCard({
 
 // ── Overview Tab ────────────────────────────────────────────────────
 
-function OverviewTab({ data, reqPerHour }: { data: MetricsSummary | null; reqPerHour: number }) {
+function OverviewTab({ data, reqPerHour, periodLabel }: { data: MetricsSummary | null; reqPerHour: number; periodLabel: string }) {
   return (
     <div className="space-y-6">
       {/* KPI Cards */}
@@ -296,7 +313,7 @@ function OverviewTab({ data, reqPerHour }: { data: MetricsSummary | null; reqPer
           icon={<Zap className="w-5 h-5" />}
           iconColor="text-blue-500"
           value={data ? formatNumber(data.http.requests_total) : '—'}
-          label="Requests (24h)"
+          label={`Requests (${periodLabel})`}
         />
         <KpiCard
           icon={<Clock className="w-5 h-5" />}
@@ -308,19 +325,19 @@ function OverviewTab({ data, reqPerHour }: { data: MetricsSummary | null; reqPer
           icon={<AlertTriangle className="w-5 h-5" />}
           iconColor="text-red-500"
           value="0"
-          label="Erros (24h)"
+          label={`Erros (${periodLabel})`}
         />
         <KpiCard
           icon={<TrendingUp className="w-5 h-5" />}
           iconColor="text-violet-500"
           value={data ? formatNumber((data.ai.tokens_in_total ?? 0) + (data.ai.tokens_out_total ?? 0)) : '—'}
-          label="Tokens (24h)"
+          label={`Tokens (${periodLabel})`}
         />
         <KpiCard
           icon={<DollarSign className="w-5 h-5" />}
           iconColor="text-emerald-500"
           value={data ? formatCurrency(data.ai.cost_usd_est) : '—'}
-          label="Custo (24h)"
+          label={`Custo (${periodLabel})`}
         />
         <KpiCard
           icon={<Cpu className="w-5 h-5" />}
@@ -385,9 +402,11 @@ function ServiceStatus({ name, icon }: { name: string; icon: React.ReactNode }) 
 function TokensTab({
   data,
   modelChartData,
+  periodLabel,
 }: {
   data: MetricsSummary | null;
   modelChartData: any[];
+  periodLabel: string;
 }) {
   return (
     <div className="space-y-6">
@@ -479,10 +498,12 @@ function RoutingTab({
   data,
   routingChartData,
   cacheChartData,
+  periodLabel,
 }: {
   data: MetricsSummary | null;
   routingChartData: any[];
   cacheChartData: any[];
+  periodLabel: string;
 }) {
   const totalRouted = routingChartData.reduce((a, b) => a + b.value, 0);
   const miniPct = totalRouted > 0
@@ -508,7 +529,7 @@ function RoutingTab({
           icon={<DollarSign className="w-5 h-5" />}
           iconColor="text-amber-500"
           value={data ? formatCurrency(data.ai.cost_usd_est) : '—'}
-          label="Custo total (24h)"
+          label={`Custo total (${periodLabel})`}
         />
       </div>
 
