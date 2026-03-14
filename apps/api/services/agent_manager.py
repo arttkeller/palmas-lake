@@ -684,11 +684,25 @@ Mensagem atual do Cliente [{timestamp}]:
                 markdown=False,
             )
 
+            summary_start = time.perf_counter()
             response = await asyncio.wait_for(
                 asyncio.to_thread(agent_summary.run, prompt),
                 timeout=30,
             )
+            summary_ms = (time.perf_counter() - summary_start) * 1000
             summary = response.content
+
+            # Record gpt-5-mini token usage for monitoring
+            s_in = s_out = s_cached = 0
+            if hasattr(response, 'metrics') and response.metrics:
+                s_in = getattr(response.metrics, 'input_tokens', 0) or 0
+                s_out = getattr(response.metrics, 'output_tokens', 0) or 0
+                s_cached = getattr(response.metrics, 'cache_read_tokens', 0) or 0
+            asyncio.create_task(metrics.record_ai_call(
+                model="gpt-5-mini", duration_ms=summary_ms,
+                tokens_in=s_in, tokens_out=s_out,
+                cached_tokens=s_cached, success=True, lead_id=lead_id,
+            ))
 
             if summary and summary.strip():
                 await metrics._redis.set(
@@ -780,11 +794,25 @@ Responda APENAS o JSON válido, sem texto adicional."""
             )
             
             logger.info(f"[Sentiment] Running Agno Agent (GPT-5-mini)...")
+            sentiment_start = time.perf_counter()
             response = await asyncio.wait_for(
                 asyncio.to_thread(agent_sentiment.run, prompt),
                 timeout=45
             )
+            sentiment_ms = (time.perf_counter() - sentiment_start) * 1000
             content = response.content
+
+            # Record gpt-5-mini token usage for monitoring
+            st_in = st_out = st_cached = 0
+            if hasattr(response, 'metrics') and response.metrics:
+                st_in = getattr(response.metrics, 'input_tokens', 0) or 0
+                st_out = getattr(response.metrics, 'output_tokens', 0) or 0
+                st_cached = getattr(response.metrics, 'cache_read_tokens', 0) or 0
+            asyncio.create_task(metrics.record_ai_call(
+                model="gpt-5-mini", duration_ms=sentiment_ms,
+                tokens_in=st_in, tokens_out=st_out,
+                cached_tokens=st_cached, success=True, lead_id=lead_id,
+            ))
 
             # Guard against empty/None response from model
             if not content or not content.strip():
