@@ -453,8 +453,8 @@ Mensagem atual do Cliente [{timestamp}]:
                     )
                     content = followup_response.content
                     if not content or not content.strip():
-                        logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, using fallback")
-                        return "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?", _meta
+                        logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, returning None for retry")
+                        return None, _meta
 
                 # Output guardrail: bloquear respostas que parecem erros internos
                 if content and _is_error_response(content):
