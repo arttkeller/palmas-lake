@@ -546,7 +546,7 @@ model=OpenAIChat(
 )
 ```
 
-**Opcoes de modelo**: `gpt-4o`, `gpt-4o-mini`, `gpt-5.2`, `gpt-5-mini`, etc.
+**Opcoes de modelo**: `gpt-5.4`, `gpt-5-mini`, etc.
 Modelos mais baratos = menos custo por lead, mas respostas potencialmente piores.
 
 ### 7.6 Templates de follow-up — `apps/api/services/follow_up_templates.py`

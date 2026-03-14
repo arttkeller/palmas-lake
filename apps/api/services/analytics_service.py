@@ -406,7 +406,7 @@ Responda APENAS o JSON, nada mais:"""
 
                 try:
                     response = client.chat.completions.create(
-                        model="gpt-4o-mini",  # Modelo mais barato para análise em batch
+                        model="gpt-5-mini",
                         messages=[
                             {"role": "system", "content": "Você é um analisador de sentimentos. Retorne apenas JSON válido."},
                             {"role": "user", "content": prompt}
