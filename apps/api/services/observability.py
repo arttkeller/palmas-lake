@@ -527,6 +527,7 @@ class MetricsCollector:
                 pass
 
             routing.setdefault("heavy", 0)
+            routing.setdefault("medium", 0)
             routing.setdefault("light", 0)
 
             # ---- Cache counters -------------------------------------
@@ -602,7 +603,7 @@ def _empty_summary() -> dict:
             "transfers": 0,
             "messages_sent": {"whatsapp": 0, "instagram": 0},
         },
-        "routing": {"heavy": 0, "light": 0},
+        "routing": {"heavy": 0, "medium": 0, "light": 0},
         "cache": {"hits": 0, "misses": 0, "hit_rate": 0.0},
     }
 

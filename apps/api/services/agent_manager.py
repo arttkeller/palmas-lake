@@ -263,8 +263,14 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                     temperature=temperature,
                     history_length=history_length,
                 )
-                routing_decision = "light" if model_id == "gpt-5-mini" else "heavy"
-                logger.info(f"[Routing] {lead_id}: decision={routing_decision}, model={model_id}")
+                # Determine routing tier for logging/metrics
+                if not use_tools:
+                    routing_decision = "light"
+                elif model_id == "gpt-5-mini":
+                    routing_decision = "medium"
+                else:
+                    routing_decision = "heavy"
+                logger.info(f"[Routing] {lead_id}: decision={routing_decision}, model={model_id}, tools={use_tools}")
                 asyncio.create_task(metrics.record_routing_decision(routing_decision))
 
                 if not use_tools:
@@ -275,7 +281,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                     ai_model = OpenAIChat(
                         id="gpt-5-mini",
                         reasoning_effort=reasoning,
-                        max_completion_tokens=512,
+                        max_completion_tokens=1024,
                         timeout=30,
                     )
                 else:

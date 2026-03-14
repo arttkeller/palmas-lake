@@ -485,8 +485,8 @@ function RoutingTab({
   cacheChartData: any[];
 }) {
   const totalRouted = routingChartData.reduce((a, b) => a + b.value, 0);
-  const lightPct = totalRouted > 0
-    ? ((data?.routing.light || 0) / totalRouted * 100).toFixed(0)
+  const miniPct = totalRouted > 0
+    ? (((data?.routing.light || 0) + (data?.routing.medium || 0)) / totalRouted * 100).toFixed(0)
     : '0';
 
   return (
@@ -495,7 +495,7 @@ function RoutingTab({
         <KpiCard
           icon={<Route className="w-5 h-5" />}
           iconColor="text-violet-500"
-          value={`${lightPct}%`}
+          value={`${miniPct}%`}
           label="Roteado para gpt-5-mini"
         />
         <KpiCard
