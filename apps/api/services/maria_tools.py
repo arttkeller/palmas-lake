@@ -41,6 +41,7 @@ class MariaTools(Toolkit):
         
         # Flag to track if enviar_mensagem was called (prevents buffer_service from re-sending)
         self._messages_sent_via_tool = False
+        self._text_already_sent = False  # prevents duplicate enviar_mensagem calls
 
         # Registrar tools explicitamente
         self.register(self.enviar_mensagem)
@@ -76,13 +77,18 @@ class MariaTools(Toolkit):
 
     def enviar_mensagem(self, texto: str, reply_id: Optional[str] = None):
         """
-        Envia uma mensagem de texto ao cliente. 
+        Envia uma mensagem de texto ao cliente.
         Use este campo obrigatoriamente quando quiser RESPONDER diretamente a uma PERGUNTA específica do lead.
-        
+        Chame apenas UMA VEZ por resposta. Consolide todo o texto em uma única chamada.
+
         Args:
             texto: O conteúdo da mensagem de resposta.
             reply_id: O ID da mensagem à qual você está respondendo (opcional).
         """
+        if self._text_already_sent:
+            print(f"[Tool] enviar_mensagem BLOCKED — already sent text this turn, ignoring duplicate: {texto[:50]}...")
+            return
+        self._text_already_sent = True
         self._messages_sent_via_tool = True
         print(f"[Tool] Enviar Mensagem: {texto[:50]}...")
         m_service = MetaService()
