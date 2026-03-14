@@ -135,6 +135,9 @@ _ERROR_PATTERNS = [
     re.compile(r"(?:Erro interno|dificuldades técnicas).*registrado", re.IGNORECASE),
     re.compile(r"HTTPStatusError|status_code[=:]\s*[45]\d{2}", re.IGNORECASE),
     re.compile(r"Function tools with reasoning_effort are not supported", re.IGNORECASE),
+    re.compile(r"(?:max_tokens|model output limit).*reached", re.IGNORECASE),
+    re.compile(r"Could not finish the message", re.IGNORECASE),
+    re.compile(r"Please try again with higher max_tokens", re.IGNORECASE),
 ]
 
 def _is_error_response(text: str) -> bool:
@@ -281,7 +284,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                     ai_model = OpenAIChat(
                         id="gpt-5-mini",
                         reasoning_effort=reasoning,
-                        max_completion_tokens=1024,
+                        max_completion_tokens=2048,
                         timeout=30,
                     )
                 else:
