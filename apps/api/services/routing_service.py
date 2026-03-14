@@ -92,19 +92,25 @@ class MessageRouter:
         if history_length == 0:
             return MessageRouter.HEAVY
 
-        # Rule 7: Name step + short answer without question → light
-        if qualification_step == "name" and len(words) <= 4 and "?" not in msg_lower:
-            return MessageRouter.LIGHT
-
-        # Rule 8: Pure greeting → light
+        # Rule 7: Pure greeting (not first message) → light
         if len(msg_lower) < 25 and any(
             g == msg_lower or msg_lower.startswith(g + " ") or msg_lower.startswith(g + ",")
             for g in MessageRouter.GREETING_PATTERNS
         ):
             return MessageRouter.LIGHT
 
-        # Rule 9: Cold lead, short message, no question → light
-        if temperature == "frio" and len(msg_lower) < 30 and "?" not in msg_lower:
+        # Rule 8: Pure acknowledgment — no tool needed
+        # Examples: "ok", "entendi", "sim", "não", "obrigado", "tá bom"
+        ACK_PATTERNS = frozenset({
+            "ok", "sim", "não", "nao", "entendi", "entendido",
+            "obrigado", "obrigada", "valeu", "beleza", "blz",
+            "tá bom", "ta bom", "certo", "perfeito", "show",
+            "legal", "massa", "top", "pode ser",
+        })
+        if len(msg_lower) < 20 and any(
+            msg_lower == ack or msg_lower.startswith(ack + " ") or msg_lower.startswith(ack + ",")
+            for ack in ACK_PATTERNS
+        ):
             return MessageRouter.LIGHT
 
         # Default: heavy (safe — never downgrade when uncertain)

@@ -860,18 +860,22 @@ class MariaTools(Toolkit):
                 }).eq("id", lead_info["id"]).execute()
                 print(f"[Tool] IA pausada e lead {lead_info['id']} marcado como transferido")
 
-            # 7. Record transfer metric + execution log
+            # 7. Record transfer metric + execution log (thread-safe)
             try:
                 import asyncio
                 from services.observability import metrics
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
-                    loop.create_task(metrics.record_transfer(self.lead_id or ""))
-                    loop.create_task(metrics.log_execution(
-                        type="TOOL", path="tool/transferir_para_humano", method="TOOL",
-                        lead_id=self.lead_id or "",
-                        payload={"motivo": motivo, "seller": seller_label, "resumo": resumo_conversa[:200]},
-                    ))
+                    asyncio.run_coroutine_threadsafe(
+                        metrics.record_transfer(self.lead_id or ""), loop
+                    )
+                    asyncio.run_coroutine_threadsafe(
+                        metrics.log_execution(
+                            type="TOOL", path="tool/transferir_para_humano", method="TOOL",
+                            lead_id=self.lead_id or "",
+                            payload={"motivo": motivo, "seller": seller_label, "resumo": resumo_conversa[:200]},
+                        ), loop
+                    )
             except Exception:
                 pass
 
