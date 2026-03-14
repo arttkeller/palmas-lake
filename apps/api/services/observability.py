@@ -39,7 +39,7 @@ from typing import Optional
 
 COST_PER_1M_TOKENS: dict[str, dict[str, float]] = {
     "gpt-5.4": {"input": 5.00, "output": 15.00, "cached": 1.25},
-    "gpt-5-mini": {"input": 0.15, "output": 0.60, "cached": 0.075},
+    "gpt-5-mini": {"input": 0.25, "output": 2.00, "cached": 0.03},
     "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached": 0.075},
 }
 
