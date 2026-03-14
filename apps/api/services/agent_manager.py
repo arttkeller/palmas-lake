@@ -528,6 +528,11 @@ Mensagem atual do Cliente [{timestamp}]:
                     source_info = f"""
     <channel>WhatsApp</channel>
     <channel_rule>O nome deste lead ({full_name}) foi obtido automaticamente do perfil do WhatsApp. NAO pergunte o nome novamente. Cumprimente pelo nome, se apresente como Maria consultora do Palmas Lake Towers, e comece pela proxima etapa da qualificacao (tipo de interesse).</channel_rule>"""
+                else:
+                    # WhatsApp lead without pushname — name is generic (Lead XXXXX)
+                    source_info = """
+    <channel>WhatsApp</channel>
+    <channel_rule>O nome deste lead NAO foi obtido do perfil do WhatsApp (o campo mostra um ID generico). Voce DEVE perguntar o nome na sua PRIMEIRA resposta, mesmo que o lead faca outras perguntas. Responda a pergunta brevemente E pergunte o nome na mesma mensagem. Exemplo: "Bom dia! [resposta breve]. Sou a Maria, consultora do Palmas Lake Towers. Como posso te chamar?"</channel_rule>"""
 
                 lead_context_str = f"""
 <lead_context>
