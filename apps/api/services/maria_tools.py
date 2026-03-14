@@ -621,6 +621,7 @@ class MariaTools(Toolkit):
             file: Link da imagem.
             text: Legenda descritiva.
         """
+        self._messages_sent_via_tool = True
         # Sanitize URL: LLM may include backticks/whitespace from markdown catalog
         file = file.strip().strip('`').strip('"').strip("'").strip()
         print(f"[Tool] Enviar Imagem: {file[:80]}...")
