@@ -285,7 +285,7 @@ IMPORTANTE DE FORMATAÇÃO WHATSAPP:
                         id="gpt-5-mini",
                         reasoning_effort=reasoning,
                         max_completion_tokens=2048,
-                        timeout=30,
+                        timeout=60,
                     )
                 else:
                     ai_model = OpenAIResponses(
@@ -613,8 +613,19 @@ Mensagem atual do Cliente [{timestamp}]:
 
         # Guard: ensure we always have a response to send (unless tool already sent)
         if not messages_already_sent and (not response_text or not response_text.strip()):
-            logger.warning(f"[Maria] WARNING: generate_response returned empty for {lead_id}")
-            response_text = "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
+            logger.warning(f"[Maria] WARNING: generate_response returned empty for {lead_id}, retrying with gpt-5.4")
+            # Retry with GPT-5.4 as fallback before using generic message
+            try:
+                response_text, ai_meta = await self.generate_response(
+                    history, lead_id=lead_id, channel=channel,
+                    qualification_step=current_step, status=status,
+                    temperature="quente", history_length=max(0, len(history) - 2),
+                )
+                self._last_run_metadata = ai_meta
+            except Exception as retry_err:
+                logger.error(f"[Maria] Retry with gpt-5.4 also failed for {lead_id}: {retry_err}")
+            if not response_text or not response_text.strip():
+                response_text = "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
 
         end_time = time.time()
         logger.info(f"--- AI Processing End (Duration: {end_time - start_time:.2f}s) ---")
