@@ -358,6 +358,13 @@ async def _process_buffer(lead_id: str):
             elif response == "__TOOL_SENT__":
                 logger.info(f"[Buffer] Messages already sent via tool for {lead_id}, skipping re-send")
 
+            # Final safety: if agent sent messages via tools but process_message_buffer
+            # still returned text (race condition / stale state), treat as __TOOL_SENT__
+            if response and response not in ("IGNORED_DUPLICATE", "__TOOL_SENT__"):
+                if hasattr(agent, '_last_messages_sent_via_tool') and agent._last_messages_sent_via_tool:
+                    logger.warning(f"[Buffer] Safety net: agent returned text but tools already sent for {lead_id}, skipping re-send")
+                    response = "__TOOL_SENT__"
+
             skip_responses = ("IGNORED_DUPLICATE", "__TOOL_SENT__")
             if response and response not in skip_responses:
                 # Output guardrail camada 2: bloquear erros internos antes de enviar ao lead

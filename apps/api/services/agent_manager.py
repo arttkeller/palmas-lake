@@ -680,7 +680,8 @@ Mensagem atual do Cliente [{timestamp}]:
              logger.error(f"Sentiment analysis scheduling error: {sentiment_err}")
 
         # If messages were already sent via enviar_mensagem tool, tell buffer_service to skip re-send
-        if messages_already_sent:
+        # Use self._last_messages_sent_via_tool directly (not local var) as final safety net
+        if self._last_messages_sent_via_tool:
             logger.info(f"[Maria] Returning __TOOL_SENT__ for {lead_id} — buffer will skip re-sending")
             return "__TOOL_SENT__"
 
