@@ -630,9 +630,11 @@ Mensagem atual do Cliente [{timestamp}]:
                     temperature="quente", history_length=max(0, len(history) - 2),
                 )
                 self._last_run_metadata = ai_meta
+                # Re-read flag — retry may have sent messages via tools
+                messages_already_sent = self._last_messages_sent_via_tool
             except Exception as retry_err:
                 logger.error(f"[Maria] Retry with gpt-5.4 also failed for {lead_id}: {retry_err}")
-            if not response_text or not response_text.strip():
+            if not messages_already_sent and (not response_text or not response_text.strip()):
                 response_text = "Estou aqui para te ajudar com o Palmas Lake Towers! O que gostaria de saber?"
 
         end_time = time.time()
