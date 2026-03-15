@@ -452,6 +452,14 @@ Mensagem atual do Cliente [{timestamp}]:
                         timeout=60
                     )
                     content = followup_response.content
+
+                    # Re-check if tools were called during the re-run
+                    tool_sent_after_rerun = isinstance(maria_tools, MariaTools) and maria_tools._messages_sent_via_tool
+                    if tool_sent_after_rerun:
+                        self._last_messages_sent_via_tool = True
+                        logger.info(f"[Maria] Re-run sent messages via tool for {lead_id}, buffer will skip re-send")
+                        return content or "", _meta
+
                     if not content or not content.strip():
                         logger.warning(f"[Maria] WARNING: Agent still empty after re-run for {lead_id}, returning None for retry")
                         return None, _meta
